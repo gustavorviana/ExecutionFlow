@@ -1,0 +1,64 @@
+using ExecutionFlow.Abstractions;
+using ExecutionFlow.Examples.Producer.Components;
+using ExecutionFlow.Examples.Shared.Events;
+using ExecutionFlow.Hangfire;
+using Hangfire;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
+
+var connectionString = builder.Configuration.GetConnectionString("hangfire")!;
+
+builder.Services.AddHangfire(config => config.UseSqlServerStorage(connectionString));
+
+builder.Services.AddSingleton<HangfireSetup>();
+
+builder.Services.AddTransient(x =>
+{
+    var setup = x.GetRequiredService<HangfireSetup>();
+    var jobStorage = x.GetRequiredService<JobStorage>();
+    var jobClient = x.GetRequiredService<IBackgroundJobClient>();
+
+    return setup.Build(jobClient, jobStorage);
+});
+
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
+
+var app = builder.Build();
+app.UseHangfireDashboard();
+
+app.MapDefaultEndpoints();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+app.UseAntiforgery();
+
+// API endpoint to enqueue messages
+app.MapPost("/api/messages", (MessageRequest request, IDispatcher dispatcher) =>
+{
+    var @event = new SendMessageEvent
+    {
+        From = request.From,
+        Content = request.Content,
+        SentAt = DateTime.UtcNow
+    };
+
+    var jobId = dispatcher.Enqueue(@event);
+
+    return Results.Ok(new { jobId, message = "Message enqueued successfully." });
+});
+
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
+
+app.Run();
+
+record MessageRequest(string From, string Content);

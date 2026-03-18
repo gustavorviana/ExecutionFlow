@@ -9,10 +9,18 @@ namespace ExecutionFlow.Hangfire.Infrastructure
     public class HangfireExecutionManager : IExecutionManager
     {
         private const int PageSize = 100;
+        private readonly IBackgroundJobClient _jobClient;
+        private readonly JobStorage _jobStorage;
+
+        public HangfireExecutionManager(IBackgroundJobClient jobClient, JobStorage jobStorage)
+        {
+            _jobClient = jobClient ?? throw new ArgumentNullException(nameof(jobClient));
+            _jobStorage = jobStorage ?? throw new ArgumentNullException(nameof(jobStorage));
+        }
 
         public bool IsRunning(string customId)
         {
-            var monitoringApi = JobStorage.Current.GetMonitoringApi();
+            var monitoringApi = _jobStorage.GetMonitoringApi();
             var from = 0;
 
             while (true)
@@ -39,7 +47,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public bool IsPending(string customId)
         {
-            var monitoringApi = JobStorage.Current.GetMonitoringApi();
+            var monitoringApi = _jobStorage.GetMonitoringApi();
             var queues = monitoringApi.Queues();
 
             foreach (var queue in queues)
@@ -74,13 +82,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             var jobId = FindJobId(customId);
             if (jobId != null)
             {
-                BackgroundJob.Delete(jobId);
+                _jobClient.Delete(jobId);
             }
         }
 
         private string FindJobId(string customId)
         {
-            var monitoringApi = JobStorage.Current.GetMonitoringApi();
+            var monitoringApi = _jobStorage.GetMonitoringApi();
 
             // Check processing jobs
             var from = 0;
@@ -133,7 +141,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public IEnumerable<JobInfo> GetJobs(JobState state)
         {
-            var monitoringApi = JobStorage.Current.GetMonitoringApi();
+            var monitoringApi = _jobStorage.GetMonitoringApi();
             var results = new List<JobInfo>();
 
             switch (state)
@@ -241,12 +249,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return new JobInfo(jobId, customId, eventTypeName, eventType, state, stateChangedAt);
         }
 
-        private static string GetCustomId(string jobId)
+        private string GetCustomId(string jobId)
         {
-            using (var connection = JobStorage.Current.GetConnection())
-            {
-                return connection.GetJobParameter(jobId, "customId");
-            }
+            using (var connection = _jobStorage.GetConnection())
+                return connection.GetJobParameter(jobId, HangfireDispatcher.EventId);
         }
     }
 }

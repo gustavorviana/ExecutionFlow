@@ -9,7 +9,7 @@ public class ContextTests
     public void ExecutionContext_Exposes_Log_Property()
     {
         var logger = Substitute.For<IExecutionLogger>();
-        var context = new Abstractions.ExecutionContext(logger);
+        var context = new Abstractions.FlowContext(logger);
 
         Assert.Same(logger, context.Log);
     }
@@ -19,7 +19,7 @@ public class ContextTests
     {
         var logger = Substitute.For<IExecutionLogger>();
         var evt = new TestEvent { Name = "test" };
-        var context = new ExecutionContext<TestEvent>(logger, evt);
+        var context = new FlowContext<TestEvent>(logger, evt);
 
         Assert.Same(evt, context.Event);
     }
@@ -28,7 +28,7 @@ public class ContextTests
     public void SetCustomId_Stores_Value_Readable_Via_CustomId()
     {
         var logger = Substitute.For<IExecutionLogger>();
-        var context = new ExecutionContext<TestEvent>(logger, new TestEvent());
+        var context = new FlowContext<TestEvent>(logger, new TestEvent());
 
         context.SetCustomId("my-custom-name");
 
@@ -39,7 +39,7 @@ public class ContextTests
     public void SetCustomId_Overwrites_Previous_Value()
     {
         var logger = Substitute.For<IExecutionLogger>();
-        var context = new ExecutionContext<TestEvent>(logger, new TestEvent());
+        var context = new FlowContext<TestEvent>(logger, new TestEvent());
 
         context.SetCustomId("first");
         context.SetCustomId("second");
@@ -51,7 +51,7 @@ public class ContextTests
     public void CustomId_Is_Null_By_Default()
     {
         var logger = Substitute.For<IExecutionLogger>();
-        var context = new ExecutionContext<TestEvent>(logger, new TestEvent());
+        var context = new FlowContext<TestEvent>(logger, new TestEvent());
 
         Assert.Null(context.CustomId);
     }

@@ -32,7 +32,6 @@ namespace ExecutionFlow.Scanner
                 var recurringAttr = type.GetCustomAttribute<RecurringAttribute>();
                 var displayNameAttr = type.GetCustomAttribute<DisplayNameAttribute>();
                 var displayName = displayNameAttr?.DisplayName ?? type.Name;
-                var isRecurring = recurringAttr != null;
                 var cron = recurringAttr?.Cron;
 
                 // Check for IHandler (non-generic, recurring)
@@ -40,9 +39,7 @@ namespace ExecutionFlow.Scanner
                 {
                     registrations.Add(new HandlerRegistration(
                         handlerType: type,
-                        jobType: null,
-                        serviceType: typeof(IHandler),
-                        isRecurring: isRecurring,
+                        eventType: null,
                         displayName: displayName,
                         cron: cron
                     ));
@@ -58,9 +55,7 @@ namespace ExecutionFlow.Scanner
                     var eventType = handlerInterface.GetGenericArguments()[0];
                     registrations.Add(new HandlerRegistration(
                         handlerType: type,
-                        jobType: eventType,
-                        serviceType: handlerInterface,
-                        isRecurring: isRecurring,
+                        eventType: eventType,
                         displayName: displayName,
                         cron: cron
                     ));

@@ -1,9 +1,9 @@
-using System.ComponentModel;
-using System.Reflection;
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
 using ExecutionFlow.Scanner;
 using NSubstitute;
+using System.ComponentModel;
+using System.Reflection;
 
 namespace ExecutionFlow.Tests;
 
@@ -16,8 +16,7 @@ public class ScannerTests
 
         var reg = registrations.FirstOrDefault(r => r.HandlerType == typeof(SimpleRecurringHandler));
         Assert.NotNull(reg);
-        Assert.Equal(typeof(IHandler), reg.ServiceType);
-        Assert.Null(reg.JobType);
+        Assert.Null(reg.EventType);
     }
 
     [Fact]
@@ -27,8 +26,7 @@ public class ScannerTests
 
         var reg = registrations.FirstOrDefault(r => r.HandlerType == typeof(EventHandler));
         Assert.NotNull(reg);
-        Assert.Equal(typeof(IHandler<SampleEvent>), reg.ServiceType);
-        Assert.Equal(typeof(SampleEvent), reg.JobType);
+        Assert.Equal(typeof(SampleEvent), reg.EventType);
     }
 
     [Fact]
@@ -110,16 +108,16 @@ public class ScannerTests
     [DisplayName("My Recurring Job")]
     public class SimpleRecurringHandler : IHandler
     {
-        public Task HandleAsync(Abstractions.ExecutionContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task HandleAsync(Abstractions.FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     public class EventHandler : IHandler<SampleEvent>
     {
-        public Task HandleAsync(ExecutionContext<SampleEvent> context, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task HandleAsync(FlowContext<SampleEvent> context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     public abstract class AbstractHandler : IHandler
     {
-        public abstract Task HandleAsync(Abstractions.ExecutionContext context, CancellationToken cancellationToken);
+        public abstract Task HandleAsync(Abstractions.FlowContext context, CancellationToken cancellationToken);
     }
 }

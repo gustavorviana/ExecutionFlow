@@ -5,11 +5,11 @@ namespace ExecutionFlow.Abstractions
 {
     public interface IHandler<TEvent>
     {
-        Task HandleAsync(ExecutionContext<TEvent> context, CancellationToken cancellationToken);
+        Task HandleAsync(FlowContext<TEvent> context, CancellationToken cancellationToken);
     }
 
     public interface IHandler
     {
-        Task HandleAsync(ExecutionContext context, CancellationToken cancellationToken);
+        Task HandleAsync(FlowContext context, CancellationToken cancellationToken);
     }
 }

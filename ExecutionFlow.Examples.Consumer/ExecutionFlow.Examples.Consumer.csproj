@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>dotnet-ExecutionFlow.Examples.Consumer-ea44a637-f558-4822-983c-4ee20e550951</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire.SqlServer" Version="1.8.23" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Examples\ExecutionFlow.Examples.Aspire\ExecutionFlow.Examples.Aspire.ServiceDefaults\ExecutionFlow.Examples.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\Examples\ExecutionFlow.Examples.Handlers\ExecutionFlow.Examples.Handlers.csproj" />
+    <ProjectReference Include="..\Examples\ExecutionFlow.Examples.Shared\ExecutionFlow.Examples.Shared.csproj" />
+  </ItemGroup>
+</Project>

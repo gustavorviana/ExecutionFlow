@@ -17,7 +17,6 @@ namespace ExecutionFlow.Hangfire.Filters
             _perJobAutoRun = perJobAutoRun ?? new Dictionary<Type, bool>();
         }
 
-        // Primary block: cancels job creation entirely — zero noise no dashboard
         public void OnCreating(CreatingContext context)
         {
             if (!IsAutoScheduledRecurringJob(context.Parameters))
@@ -52,7 +51,6 @@ namespace ExecutionFlow.Hangfire.Filters
                 && !autoRun;
         }
 
-        // "Triggered" = "1" é setado pelo Hangfire quando o trigger vem do dashboard
         private static bool IsAutoScheduledRecurringJob(IDictionary<string, object> parameters)
         {
             if (!parameters.TryGetValue("RecurringJobId", out var id) || string.IsNullOrEmpty(id?.ToString()))
@@ -86,12 +84,15 @@ namespace ExecutionFlow.Hangfire.Filters
 
             foreach (var arg in job.Args)
             {
+                if (arg is Type type)
+                    return type;
+
                 if (arg is string typeName && !string.IsNullOrEmpty(typeName))
                 {
                     try
                     {
-                        var type = Type.GetType(typeName);
-                        if (type != null) return type;
+                        var resolved = Type.GetType(typeName);
+                        if (resolved != null) return resolved;
                     }
                     catch { }
                 }

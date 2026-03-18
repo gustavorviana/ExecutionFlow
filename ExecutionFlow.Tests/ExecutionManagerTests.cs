@@ -13,38 +13,25 @@ using NSubstitute;
 
 namespace ExecutionFlow.Tests;
 
-public class ExecutionManagerTests : IDisposable
+public class ExecutionManagerTests
 {
     private readonly JobStorage _storage;
     private readonly IMonitoringApi _monitoringApi;
     private readonly IStorageConnection _connection;
+    private readonly IBackgroundJobClient _jobClient;
     private readonly HangfireExecutionManager _manager;
-    private readonly JobStorage? _previousStorage;
 
     public ExecutionManagerTests()
     {
-        _previousStorage = TryGetCurrentStorage();
         _storage = Substitute.For<JobStorage>();
         _monitoringApi = Substitute.For<IMonitoringApi>();
         _connection = Substitute.For<IStorageConnection>();
+        _jobClient = Substitute.For<IBackgroundJobClient>();
 
         _storage.GetMonitoringApi().Returns(_monitoringApi);
         _storage.GetConnection().Returns(_connection);
 
-        JobStorage.Current = _storage;
-
-        _manager = new HangfireExecutionManager();
-    }
-
-    public void Dispose()
-    {
-        if (_previousStorage != null)
-            JobStorage.Current = _previousStorage;
-    }
-
-    private static JobStorage? TryGetCurrentStorage()
-    {
-        try { return JobStorage.Current; } catch { return null; }
+        _manager = new HangfireExecutionManager(_jobClient, _storage);
     }
 
     private static JobList<ProcessingJobDto> ProcessingJobList(params KeyValuePair<string, ProcessingJobDto>[] items)
@@ -62,10 +49,10 @@ public class ExecutionManagerTests : IDisposable
     private static JobList<DeletedJobDto> DeletedJobList(params KeyValuePair<string, DeletedJobDto>[] items)
         => new JobList<DeletedJobDto>(items);
 
-    private static global::Hangfire.Common.Job CreateGenericJob<TEvent>()
+    private static Job CreateGenericJob<TEvent>()
     {
-        return global::Hangfire.Common.Job.FromExpression<HangfireJobDispatcher>(
-            x => x.DispatchEventAsync<TEvent>(default, null, null, default));
+        return Job.FromExpression<HangfireJobDispatcher>(
+            x => x.DispatchEventAsync<TEvent>(default!, null, default));
     }
 
     [Fact]
@@ -73,7 +60,7 @@ public class ExecutionManagerTests : IDisposable
     {
         _monitoringApi.ProcessingJobs(0, 100).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
-        _connection.GetJobParameter("job-1", "customId").Returns("my-job");
+        _connection.GetJobParameter("job-1", HangfireDispatcher.EventId).Returns("my-job");
 
         var result = _manager.IsRunning("my-job");
 
@@ -85,7 +72,7 @@ public class ExecutionManagerTests : IDisposable
     {
         _monitoringApi.ProcessingJobs(0, 100).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
-        _connection.GetJobParameter("job-1", "customId").Returns("other-job");
+        _connection.GetJobParameter("job-1", HangfireDispatcher.EventId).Returns("other-job");
 
         var result = _manager.IsRunning("my-job");
 
@@ -109,7 +96,7 @@ public class ExecutionManagerTests : IDisposable
         _monitoringApi.Queues().Returns(queues);
         _monitoringApi.EnqueuedJobs("default", 0, 100).Returns(
             EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("job-2", new EnqueuedJobDto())));
-        _connection.GetJobParameter("job-2", "customId").Returns("pending-job");
+        _connection.GetJobParameter("job-2", HangfireDispatcher.EventId).Returns("pending-job");
 
         var result = _manager.IsPending("pending-job");
 
@@ -123,7 +110,7 @@ public class ExecutionManagerTests : IDisposable
         _monitoringApi.Queues().Returns(queues);
         _monitoringApi.EnqueuedJobs("default", 0, 100).Returns(
             EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("job-2", new EnqueuedJobDto())));
-        _connection.GetJobParameter("job-2", "customId").Returns("other-job");
+        _connection.GetJobParameter("job-2", HangfireDispatcher.EventId).Returns("other-job");
 
         var result = _manager.IsPending("pending-job");
 
@@ -135,7 +122,7 @@ public class ExecutionManagerTests : IDisposable
     {
         _monitoringApi.ProcessingJobs(0, 100).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-3", new ProcessingJobDto())));
-        _connection.GetJobParameter("job-3", "customId").Returns("cancel-me");
+        _connection.GetJobParameter("job-3", HangfireDispatcher.EventId).Returns("cancel-me");
         _monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
 
         _manager.Cancel("cancel-me");
@@ -153,7 +140,7 @@ public class ExecutionManagerTests : IDisposable
         var dto = new ProcessingJobDto { Job = job, StartedAt = startedAt };
         _monitoringApi.ProcessingJobs(0, 100).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-10", dto)));
-        _connection.GetJobParameter("job-10", "customId").Returns("my-custom-id");
+        _connection.GetJobParameter("job-10", HangfireDispatcher.EventId).Returns("my-custom-id");
 
         var results = _manager.GetJobs(JobState.Processing).ToList();
 
@@ -172,7 +159,7 @@ public class ExecutionManagerTests : IDisposable
         var dto = new ProcessingJobDto { Job = CreateGenericJob<TestEvent>() };
         _monitoringApi.ProcessingJobs(0, 100).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-11", dto)));
-        _connection.GetJobParameter("job-11", "customId").Returns((string)null);
+        _connection.GetJobParameter("job-11", HangfireDispatcher.EventId).Returns((string)null);
 
         var results = _manager.GetJobs(JobState.Processing).ToList();
 
@@ -190,7 +177,7 @@ public class ExecutionManagerTests : IDisposable
         };
         _monitoringApi.ProcessingJobs(0, 100).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-12", dto)));
-        _connection.GetJobParameter("job-12", "customId").Returns((string)null);
+        _connection.GetJobParameter("job-12", HangfireDispatcher.EventId).Returns((string)null);
 
         var results = _manager.GetJobs(JobState.Processing).ToList();
 
@@ -206,7 +193,7 @@ public class ExecutionManagerTests : IDisposable
         var dto = new SucceededJobDto { Job = CreateGenericJob<TestEvent>(), SucceededAt = succeededAt };
         _monitoringApi.SucceededJobs(0, 100).Returns(
             SucceededJobList(new KeyValuePair<string, SucceededJobDto>("job-13", dto)));
-        _connection.GetJobParameter("job-13", "customId").Returns((string)null);
+        _connection.GetJobParameter("job-13", HangfireDispatcher.EventId).Returns((string)null);
 
         var results = _manager.GetJobs(JobState.Succeeded).ToList();
 
@@ -233,7 +220,7 @@ public class ExecutionManagerTests : IDisposable
         _monitoringApi.Queues().Returns(queues);
         _monitoringApi.EnqueuedJobs("default", 0, 100).Returns(
             EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("job-14", dto)));
-        _connection.GetJobParameter("job-14", "customId").Returns("enqueued-id");
+        _connection.GetJobParameter("job-14", HangfireDispatcher.EventId).Returns("enqueued-id");
 
         var results = _manager.GetJobs(JobState.Enqueued).ToList();
 
@@ -250,7 +237,7 @@ public class ExecutionManagerTests : IDisposable
         var dto = new FailedJobDto { Job = CreateGenericJob<TestEvent>(), FailedAt = failedAt };
         _monitoringApi.FailedJobs(0, 100).Returns(
             FailedJobList(new KeyValuePair<string, FailedJobDto>("job-15", dto)));
-        _connection.GetJobParameter("job-15", "customId").Returns((string)null);
+        _connection.GetJobParameter("job-15", HangfireDispatcher.EventId).Returns((string)null);
 
         var results = _manager.GetJobs(JobState.Failed).ToList();
 
@@ -266,7 +253,7 @@ public class ExecutionManagerTests : IDisposable
         var dto = new DeletedJobDto { Job = CreateGenericJob<TestEvent>(), DeletedAt = deletedAt };
         _monitoringApi.DeletedJobs(0, 100).Returns(
             DeletedJobList(new KeyValuePair<string, DeletedJobDto>("job-16", dto)));
-        _connection.GetJobParameter("job-16", "customId").Returns((string)null);
+        _connection.GetJobParameter("job-16", HangfireDispatcher.EventId).Returns((string)null);
 
         var results = _manager.GetJobs(JobState.Cancelled).ToList();
 
@@ -282,7 +269,7 @@ public class ExecutionManagerTests : IDisposable
         var dto = new SucceededJobDto { Job = CreateGenericJob<TestEvent>(), SucceededAt = succeededAt };
         _monitoringApi.SucceededJobs(0, 100).Returns(
             SucceededJobList(new KeyValuePair<string, SucceededJobDto>("job-17", dto)));
-        _connection.GetJobParameter("job-17", "customId").Returns("succeeded-id");
+        _connection.GetJobParameter("job-17", HangfireDispatcher.EventId).Returns("succeeded-id");
 
         var results = _manager.GetJobs(JobState.Succeeded).ToList();
 

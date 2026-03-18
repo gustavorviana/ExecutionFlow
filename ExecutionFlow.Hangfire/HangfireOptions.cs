@@ -3,11 +3,10 @@ using System.Collections.Generic;
 
 namespace ExecutionFlow.Hangfire
 {
-    public class HangfireOptions
+    public class HangfireOptions : ExecutionFlowOptions
     {
         private readonly List<Type> _stateHandlerTypes = new List<Type>();
         private readonly Dictionary<Type, bool> _jobAutoRun = new Dictionary<Type, bool>();
-        private bool _locked;
 
         public bool AutoRunRecurring { get; set; } = true;
 
@@ -35,17 +34,6 @@ namespace ExecutionFlow.Hangfire
         {
             ThrowIfLocked();
             _stateHandlerTypes.Add(stateHandlerType);
-        }
-
-        internal void Lock()
-        {
-            _locked = true;
-        }
-
-        private void ThrowIfLocked()
-        {
-            if (_locked)
-                throw new InvalidOperationException("HangfireOptions cannot be modified after Configure has completed.");
         }
     }
 }

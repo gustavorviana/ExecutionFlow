@@ -6,7 +6,7 @@ using ExecutionFlow.Scanner;
 
 namespace ExecutionFlow
 {
-    public class ExecutionFlowOptions
+    public abstract class ExecutionFlowOptions
     {
         private readonly List<HandlerRegistration> _registrations = new List<HandlerRegistration>();
         private bool _locked;
@@ -23,11 +23,9 @@ namespace ExecutionFlow
         public void Add(Type handlerType)
         {
             ThrowIfLocked();
-            // Scan a single type by checking what interfaces it implements
             var recurringAttr = handlerType.GetCustomAttribute<Attributes.RecurringAttribute>();
             var displayNameAttr = handlerType.GetCustomAttribute<System.ComponentModel.DisplayNameAttribute>();
             var displayName = displayNameAttr?.DisplayName ?? handlerType.Name;
-            var isRecurring = recurringAttr != null;
             var cron = recurringAttr?.Cron;
 
             // Check for IHandler (non-generic)
@@ -35,9 +33,7 @@ namespace ExecutionFlow
             {
                 _registrations.Add(new HandlerRegistration(
                     handlerType: handlerType,
-                    jobType: null,
-                    serviceType: typeof(IHandler),
-                    isRecurring: isRecurring,
+                    eventType: null,
                     displayName: displayName,
                     cron: cron
                 ));
@@ -52,9 +48,7 @@ namespace ExecutionFlow
                     var eventType = iface.GetGenericArguments()[0];
                     _registrations.Add(new HandlerRegistration(
                         handlerType: handlerType,
-                        jobType: eventType,
-                        serviceType: iface,
-                        isRecurring: isRecurring,
+                        eventType: eventType,
                         displayName: displayName,
                         cron: cron
                     ));
@@ -68,10 +62,10 @@ namespace ExecutionFlow
             _locked = true;
         }
 
-        private void ThrowIfLocked()
+        protected void ThrowIfLocked()
         {
             if (_locked)
-                throw new InvalidOperationException("ExecutionFlowOptions cannot be modified after Configure has completed.");
+                throw new InvalidOperationException("Options cannot be modified after Configure has completed.");
         }
     }
 }

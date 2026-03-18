@@ -5,18 +5,16 @@ namespace ExecutionFlow.Abstractions
     public class HandlerRegistration
     {
         public Type HandlerType { get; }
-        public Type JobType { get; }
-        public Type ServiceType { get; }
+        public Type EventType { get; }
         public bool IsRecurring { get; }
         public string DisplayName { get; }
         public string Cron { get; }
 
-        public HandlerRegistration(Type handlerType, Type jobType, Type serviceType, bool isRecurring, string displayName, string cron)
+        public HandlerRegistration(Type handlerType, Type eventType, string displayName, string cron)
         {
             HandlerType = handlerType;
-            JobType = jobType;
-            ServiceType = serviceType;
-            IsRecurring = isRecurring;
+            EventType = eventType;
+            IsRecurring = eventType == null;
             DisplayName = displayName;
             Cron = cron;
         }

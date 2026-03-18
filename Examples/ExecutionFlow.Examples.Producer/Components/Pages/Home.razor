@@ -1,0 +1,94 @@
+@page "/"
+@rendermode InteractiveServer
+@using ExecutionFlow.Abstractions
+@using ExecutionFlow.Examples.Shared.Events
+@inject IDispatcher Dispatcher
+
+<PageTitle>ExecutionFlow - Send Messages</PageTitle>
+
+<h1>Send Message</h1>
+<p>Dispatch messages to the queue. The consumer will process them.</p>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="mb-3">
+            <label for="from" class="form-label">From</label>
+            <input type="text" class="form-control" id="from" @bind="from" placeholder="Your name" />
+        </div>
+
+        <div class="mb-3">
+            <label for="content" class="form-label">Message</label>
+            <textarea class="form-control" id="content" @bind="content" rows="3" placeholder="Type your message..."></textarea>
+        </div>
+
+        <button class="btn btn-primary" @onclick="SendMessage" disabled="@sending">
+            @if (sending)
+            {
+                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                <span>Sending...</span>
+            }
+            else
+            {
+                <span>Send Message</span>
+            }
+        </button>
+    </div>
+</div>
+
+@if (sentMessages.Count > 0)
+{
+    <h3 class="mt-4">Sent Messages</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Job ID</th>
+                <th>From</th>
+                <th>Content</th>
+                <th>Sent At</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var msg in sentMessages)
+            {
+                <tr>
+                    <td><code>@msg.JobId</code></td>
+                    <td>@msg.From</td>
+                    <td>@msg.Content</td>
+                    <td>@msg.SentAt.ToString("HH:mm:ss")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private string from = string.Empty;
+    private string content = string.Empty;
+    private bool sending;
+    private readonly List<SentMessage> sentMessages = new();
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(content))
+            return;
+
+        sending = true;
+
+        var sentAt = DateTime.UtcNow;
+        var jobId = Dispatcher.Enqueue(new SendMessageEvent
+        {
+            From = from,
+            Content = content,
+            SentAt = sentAt
+        });
+
+        sentMessages.Insert(0, new SentMessage(jobId, from, content, sentAt));
+
+        content = string.Empty;
+        sending = false;
+
+        await Task.CompletedTask;
+    }
+
+    private record SentMessage(string JobId, string From, string Content, DateTime SentAt);
+}

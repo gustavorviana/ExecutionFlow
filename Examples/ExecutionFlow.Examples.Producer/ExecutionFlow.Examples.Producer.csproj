@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ExecutionFlow.Examples.Aspire\ExecutionFlow.Examples.Aspire.ServiceDefaults\ExecutionFlow.Examples.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\ExecutionFlow.Examples.Shared\ExecutionFlow.Examples.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Hangfire.SqlServer" Version="1.8.23" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>

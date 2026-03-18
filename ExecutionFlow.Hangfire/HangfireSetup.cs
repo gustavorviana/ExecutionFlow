@@ -1,86 +1,62 @@
+using ExecutionFlow.Abstractions;
+using ExecutionFlow.Hangfire.Dispatcher;
+using ExecutionFlow.Hangfire.Filters;
+using ExecutionFlow.Hangfire.Infrastructure;
+using Hangfire;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using ExecutionFlow.Abstractions.Events;
-using ExecutionFlow.Hangfire.Dispatcher;
-using ExecutionFlow.Hangfire.Filters;
-using Hangfire;
 
 namespace ExecutionFlow.Hangfire
 {
-    public static class HangfireSetup
+    public class HangfireSetup : ExecutionFlowSetup<HangfireOptions>
     {
-        public static void Configure(Action<HangfireOptions> configure)
+        private IDispatcher _dispatcher;
+        public IReadOnlyList<Type> StateHandlerTypes => Options?.StateHandlerTypes;
+
+        protected override void OnConfigured(HangfireOptions options)
         {
-            var options = new HangfireOptions();
-            configure(options);
-            options.Lock();
-
-            var registrations = ExecutionFlowSetup.Registrations;
-
-            // Validate SetJobAutoRun references
             foreach (var kvp in options.JobAutoRunSettings)
             {
                 var handlerType = kvp.Key;
-                var isRegistered = registrations.Any(r => r.IsRecurring && r.HandlerType == handlerType);
+                var isRegistered = Registrations.Any(r => r.IsRecurring && r.HandlerType == handlerType);
                 if (!isRegistered)
                     throw new InvalidOperationException(
                         $"SetJobAutoRun references type '{handlerType.FullName}' which is not registered as a recurring handler.");
             }
+        }
 
-            // Instantiate state handlers via JobActivator
-            var activator = JobActivator.Current;
-            var stateHandlerInstances = new List<object>();
+        public HangfireSetup ConfigureActivator()
+        {
+            JobActivator.Current = new FlowEngineJobActivator(this);
+            return this;
+        }
 
-            foreach (var type in options.StateHandlerTypes)
+        public IDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null)
+        {
+            if (_dispatcher != null)
+                return _dispatcher;
+
+            if (jobStorage == null)
+                jobStorage = JobStorage.Current;
+
+            if (jobClient == null)
+                jobClient = new BackgroundJobClient(jobStorage);
+
+            GlobalJobFilters.Filters.Add(new HangfireStateFilter(StateHandlerTypes.Select(Activator.CreateInstance).ToArray()));
+            GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(Options.AutoRunRecurring, Options.JobAutoRunSettings));
+            RegisterRecurring(new RecurringJobManager(jobStorage));
+            return _dispatcher = new HangfireDispatcher(jobClient, jobStorage);
+        }
+
+        private void RegisterRecurring(IRecurringJobManager recurringJobManager)
+        {
+            foreach (var registration in Registrations.Where(r => r.IsRecurring))
             {
-                object instance;
-                try
-                {
-                    instance = activator.ActivateJob(type);
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException(
-                        $"Failed to activate state handler type '{type.FullName}' via JobActivator.", ex);
-                }
-
-                if (instance == null)
-                    throw new InvalidOperationException(
-                        $"Failed to activate state handler type '{type.FullName}' via JobActivator.");
-
-                stateHandlerInstances.Add(instance);
-            }
-
-            // Group state handlers by interface
-            var onEnqueued = stateHandlerInstances.OfType<IOnEnqueued>().ToList();
-            var onProcessing = stateHandlerInstances.OfType<IOnProcessing>().ToList();
-            var onSucceeded = stateHandlerInstances.OfType<IOnSucceeded>().ToList();
-            var onFailed = stateHandlerInstances.OfType<IOnFailed>().ToList();
-            var onCancelled = stateHandlerInstances.OfType<IOnCancelled>().ToList();
-            var onRetrying = stateHandlerInstances.OfType<IOnRetrying>().ToList();
-
-            // Register HangfireStateFilter
-            var stateFilter = new HangfireStateFilter(
-                onEnqueued, onProcessing, onSucceeded, onFailed, onCancelled, onRetrying);
-            GlobalJobFilters.Filters.Add(stateFilter);
-
-            // Register HangfireAutoRunFilter
-            var autoRunFilter = new HangfireAutoRunFilter(
-                options.AutoRunRecurring, options.JobAutoRunSettings);
-            GlobalJobFilters.Filters.Add(autoRunFilter);
-
-            // Register recurring jobs
-            foreach (var registration in registrations.Where(r => r.IsRecurring))
-            {
-                var handlerTypeName = registration.HandlerType.AssemblyQualifiedName;
-                var displayName = registration.DisplayName;
-
-                RecurringJob.AddOrUpdate<HangfireJobDispatcher>(
-                    registration.DisplayName,
-                    dispatcher => dispatcher.DispatchRecurringAsync(
-                        displayName, null, handlerTypeName, CancellationToken.None),
+                recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(
+                    registration.HandlerType.FullName,
+                    dispatcher => dispatcher.DispatchRecurringAsync(null, registration.HandlerType, CancellationToken.None),
                     registration.Cron);
             }
         }

@@ -7,21 +7,21 @@ namespace ExecutionFlow.Hangfire.Console
 {
     public static class ExecutionContextExtensions
     {
-        public static ExecutionProgressBar CreateProgressBar(this ExecutionContext context)
+        public static ExecutionProgressBar CreateProgressBar(this FlowContext context)
         {
             var performContext = GetPerformContext(context);
             var progressBar = performContext.WriteProgressBar();
             return new ExecutionProgressBar(progressBar);
         }
 
-        public static ExecutionProgressBar CreateProgressBar(this ExecutionContext context, string title)
+        public static ExecutionProgressBar CreateProgressBar(this FlowContext context, string title)
         {
             var performContext = GetPerformContext(context);
             var progressBar = performContext.WriteProgressBar(title);
             return new ExecutionProgressBar(progressBar);
         }
 
-        private static PerformContext GetPerformContext(ExecutionContext context)
+        private static PerformContext GetPerformContext(FlowContext context)
         {
             if (context.Items.TryGetValue("PerformContext", out var value) && value is PerformContext performContext)
                 return performContext;

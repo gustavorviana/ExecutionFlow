@@ -1,4 +1,5 @@
 using ExecutionFlow.Abstractions.Events;
+using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.Common;
 using Hangfire.States;
 using System;
@@ -16,20 +17,14 @@ namespace ExecutionFlow.Hangfire.Filters
         private readonly IReadOnlyList<IOnCancelled> _onCancelled;
         private readonly IReadOnlyList<IOnRetrying> _onRetrying;
 
-        public HangfireStateFilter(
-            IReadOnlyList<IOnEnqueued> onEnqueued,
-            IReadOnlyList<IOnProcessing> onProcessing,
-            IReadOnlyList<IOnSucceeded> onSucceeded,
-            IReadOnlyList<IOnFailed> onFailed,
-            IReadOnlyList<IOnCancelled> onCancelled,
-            IReadOnlyList<IOnRetrying> onRetrying)
+        public HangfireStateFilter(IReadOnlyList<object> stateHandlers)
         {
-            _onEnqueued = onEnqueued ?? Array.Empty<IOnEnqueued>();
-            _onProcessing = onProcessing ?? Array.Empty<IOnProcessing>();
-            _onSucceeded = onSucceeded ?? Array.Empty<IOnSucceeded>();
-            _onFailed = onFailed ?? Array.Empty<IOnFailed>();
-            _onCancelled = onCancelled ?? Array.Empty<IOnCancelled>();
-            _onRetrying = onRetrying ?? Array.Empty<IOnRetrying>();
+            _onEnqueued = stateHandlers.OfType<IOnEnqueued>().ToList();
+            _onProcessing = stateHandlers.OfType<IOnProcessing>().ToList();
+            _onSucceeded = stateHandlers.OfType<IOnSucceeded>().ToList();
+            _onFailed = stateHandlers.OfType<IOnFailed>().ToList();
+            _onCancelled = stateHandlers.OfType<IOnCancelled>().ToList();
+            _onRetrying = stateHandlers.OfType<IOnRetrying>().ToList();
         }
 
         public void OnStateElection(ElectStateContext context)
@@ -100,7 +95,7 @@ namespace ExecutionFlow.Hangfire.Filters
         {
             try
             {
-                return context.Connection.GetJobParameter(jobId, "customId");
+                return context.Connection.GetJobParameter(jobId, HangfireDispatcher.EventId);
             }
             catch
             {
@@ -111,6 +106,12 @@ namespace ExecutionFlow.Hangfire.Filters
         private static Type GetHandlerType(Job job)
         {
             if (job?.Args == null) return null;
+
+            foreach (var arg in job.Args)
+            {
+                if (arg is Type type)
+                    return type;
+            }
 
             var handlerTypeName = job.Args
                 .OfType<string>()

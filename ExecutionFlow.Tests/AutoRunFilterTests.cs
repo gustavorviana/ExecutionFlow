@@ -1,3 +1,4 @@
+using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Filters;
 using Hangfire;
 using Hangfire.Common;
@@ -42,13 +43,13 @@ public class AutoRunFilterTests
 
     private static Job CreateJobWithHandlerArg(Type? handlerType = null)
     {
-        var method = typeof(ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher)
-            .GetMethod(nameof(ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher.DispatchRecurringAsync))!;
+        var method = typeof(Hangfire.Dispatcher.HangfireJobDispatcher)
+            .GetMethod(nameof(Hangfire.Dispatcher.HangfireJobDispatcher.DispatchRecurringAsync))!;
 
         return new Job(
-            typeof(ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher),
+            typeof(Hangfire.Dispatcher.HangfireJobDispatcher),
             method,
-            new object[] { "DisplayName", null!, handlerType?.AssemblyQualifiedName ?? "Unknown", CancellationToken.None });
+            new object[] { null!, handlerType!, CancellationToken.None });
     }
 
     [Fact]
@@ -135,9 +136,9 @@ public class AutoRunFilterTests
         Assert.IsType<EnqueuedState>(context.CandidateState);
     }
 
-    public class TestRecurringHandler : ExecutionFlow.Abstractions.IHandler
+    public class TestRecurringHandler : IHandler
     {
-        public Task HandleAsync(Abstractions.ExecutionContext context, CancellationToken cancellationToken) =>
+        public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 }
