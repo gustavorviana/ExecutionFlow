@@ -2,7 +2,10 @@ using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ExecutionFlow.Hangfire.DependencyInjection
 {
@@ -10,14 +13,19 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
     {
         public static IServiceCollection AddHangfireToExecutionFlow(
             this IServiceCollection services,
-            Action<HangfireOptions> configure)
+            Action<HangfireOptions> configure = null)
         {
             var setup = new HangfireSetup();
-            setup.Configure(configure);
+            if (configure != null)
+                setup.Configure(configure);
 
-            foreach (var registration in setup.Registrations)
+            foreach (var registration in setup.RecurringHandlers)
                 services.AddTransient(registration.HandlerType);
 
+            foreach (var registration in setup.EventHandlers.Values)
+                services.AddTransient(registration.HandlerType);
+
+            services.AddSingleton<IHangfireJobName>(setup);
             services.AddSingleton<IExecutionFlowRegistry>(setup);
 
             services.AddSingleton(sp =>
@@ -36,7 +44,27 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
                 return new HangfireExecutionManager(jobClient, jobStorage);
             });
 
+            services.AddHostedService<HostedDi>();
+
             return services;
+        }
+
+        private class HostedDi : IHostedService
+        {
+            public HostedDi(IDispatcher dispatcher)
+            {
+
+            }
+
+            public Task StartAsync(CancellationToken cancellationToken)
+            {
+                return Task.CompletedTask;
+            }
+
+            public Task StopAsync(CancellationToken cancellationToken)
+            {
+                return Task.CompletedTask;
+            }
         }
     }
 }

@@ -3,7 +3,6 @@ using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using Hangfire.Server;
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,6 +19,7 @@ namespace ExecutionFlow.Hangfire.Dispatcher
             _executionRegistry = executionRegistry ?? throw new ArgumentNullException(nameof(executionRegistry));
         }
 
+        [AutomaticRetry(Attempts = 0)]
         public async Task DispatchRecurringAsync(PerformContext performContext, Type handlerType, CancellationToken ct)
         {
             var handler = (IHandler)_activator.ActivateJob(handlerType);
@@ -36,13 +36,12 @@ namespace ExecutionFlow.Hangfire.Dispatcher
         public async Task DispatchEventAsync<TEvent>(TEvent @event, PerformContext performContext, CancellationToken ct)
         {
             var eventType = typeof(TEvent);
-            var handlerType = _executionRegistry.Registrations.FirstOrDefault(x => x.EventType == eventType)?.HandlerType;
-            if (handlerType == null)
-                throw new InvalidOperationException($"Could not resolve handler type '{handlerType}'.");
+            if (!_executionRegistry.EventHandlers.TryGetValue(eventType, out var handlerInfo))
+                throw new InvalidOperationException($"Could not resolve handler type '{handlerInfo.HandlerType}'.");
 
-            var handler = (IHandler<TEvent>)_activator.ActivateJob(handlerType);
+            var handler = (IHandler<TEvent>)_activator.ActivateJob(handlerInfo.HandlerType);
             if (handler == null)
-                throw new InvalidOperationException($"Could not activate handler instance for type '{handlerType}'.");
+                throw new InvalidOperationException($"Could not activate handler instance for type '{handlerInfo.HandlerType}'.");
 
             var logger = new HangfireExecutionLogger(performContext);
             using (var context = CreateEvent(@event, performContext, logger))

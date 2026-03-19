@@ -2,6 +2,7 @@ using ExecutionFlow.Abstractions;
 using ExecutionFlow.Examples.Producer.Components;
 using ExecutionFlow.Examples.Shared.Events;
 using ExecutionFlow.Hangfire;
+using ExecutionFlow.Hangfire.DependencyInjection;
 using Hangfire;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,22 +13,16 @@ var connectionString = builder.Configuration.GetConnectionString("hangfire")!;
 
 builder.Services.AddHangfire(config => config.UseSqlServerStorage(connectionString));
 
-builder.Services.AddSingleton<HangfireSetup>();
-
-builder.Services.AddTransient(x =>
-{
-    var setup = x.GetRequiredService<HangfireSetup>();
-    var jobStorage = x.GetRequiredService<JobStorage>();
-    var jobClient = x.GetRequiredService<IBackgroundJobClient>();
-
-    return setup.Build(jobClient, jobStorage);
-});
+builder.Services.AddHangfireToExecutionFlow();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
-app.UseHangfireDashboard();
+app.UseHangfireDashboard(options: new DashboardOptions
+{
+    DisplayNameFunc = (context, job) => app.Services.GetRequiredService<IHangfireJobName>().GetName(job),
+});
 
 app.MapDefaultEndpoints();
 

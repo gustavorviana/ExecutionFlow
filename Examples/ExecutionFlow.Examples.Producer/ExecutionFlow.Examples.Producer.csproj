@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Src\ExecutionFlow.Hangfire.DependencyInjection\ExecutionFlow.Hangfire.DependencyInjection.csproj" />
     <ProjectReference Include="..\ExecutionFlow.Examples.Aspire\ExecutionFlow.Examples.Aspire.ServiceDefaults\ExecutionFlow.Examples.ServiceDefaults.csproj" />
     <ProjectReference Include="..\ExecutionFlow.Examples.Shared\ExecutionFlow.Examples.Shared.csproj" />
   </ItemGroup>

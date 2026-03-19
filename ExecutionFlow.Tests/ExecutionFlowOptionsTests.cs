@@ -14,7 +14,7 @@ public class ExecutionFlowOptionsTests
 
         options.Scan(typeof(ExecutionFlowOptionsTests).Assembly);
 
-        Assert.NotEmpty(options.Registrations);
+        Assert.NotEmpty(options.HandlerTypes);
     }
 
     [Fact]
@@ -24,8 +24,8 @@ public class ExecutionFlowOptionsTests
 
         options.Add(typeof(TestHandler));
 
-        Assert.Single(options.Registrations);
-        Assert.Equal(typeof(TestHandler), options.Registrations[0].HandlerType);
+        Assert.Single(options.HandlerTypes);
+        Assert.Equal(typeof(TestHandler), options.HandlerTypes[0].HandlerType);
     }
 
     [Fact]
@@ -35,9 +35,9 @@ public class ExecutionFlowOptionsTests
 
         options.Add(typeof(TestEventHandler));
 
-        Assert.Single(options.Registrations);
-        Assert.Equal(typeof(TestEventHandler), options.Registrations[0].HandlerType);
-        Assert.Equal(typeof(TestEvent), options.Registrations[0].EventType);
+        Assert.Single(options.HandlerTypes);
+        Assert.Equal(typeof(TestEventHandler), options.HandlerTypes[0].HandlerType);
+        Assert.Equal(typeof(TestEvent), options.HandlerTypes[0].EventType);
     }
 
     [Fact]
@@ -76,8 +76,8 @@ public class ExecutionFlowOptionsTests
             opts.Add(typeof(TestHandler));
         });
 
-        Assert.NotEmpty(setup.Registrations);
-        Assert.Contains(setup.Registrations, r => r.HandlerType == typeof(TestHandler));
+        Assert.NotEmpty(setup.RecurringHandlers);
+        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(TestHandler));
     }
 
     // Test types

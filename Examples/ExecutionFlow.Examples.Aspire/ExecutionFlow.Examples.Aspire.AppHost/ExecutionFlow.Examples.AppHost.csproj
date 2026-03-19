@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\ExecutionFlow.Examples.Consumer\ExecutionFlow.Examples.Consumer.csproj" />
+    <ProjectReference Include="..\..\ExecutionFlow.Examples.Consumer\ExecutionFlow.Examples.Consumer.csproj" />
     <ProjectReference Include="..\..\ExecutionFlow.Examples.ConsumerWithoutDi\ExecutionFlow.Examples.ConsumerWithoutDi.csproj" />
     <ProjectReference Include="..\..\ExecutionFlow.Examples.Producer\ExecutionFlow.Examples.Producer.csproj" />
   </ItemGroup>

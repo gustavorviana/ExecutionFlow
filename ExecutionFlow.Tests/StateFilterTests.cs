@@ -1,3 +1,4 @@
+using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Filters;
 using ExecutionFlow.Hangfire.Infrastructure;
@@ -6,8 +7,6 @@ using Hangfire.Common;
 using Hangfire.States;
 using Hangfire.Storage;
 using NSubstitute;
-using System;
-using System.Collections.Generic;
 using System.Reflection;
 
 namespace ExecutionFlow.Tests;
@@ -23,10 +22,23 @@ public class StateFilterTests
 
     private HangfireStateFilter CreateFilter()
     {
-        return new HangfireStateFilter(new object[]
+        var registry = Substitute.For<IExecutionFlowRegistry>();
+        var activator = Substitute.For<JobActivator>();
+
+        activator.ActivateJob(typeof(IOnEnqueued)).Returns(_onEnqueued);
+        activator.ActivateJob(typeof(IOnProcessing)).Returns(_onProcessing);
+        activator.ActivateJob(typeof(IOnSucceeded)).Returns(_onSucceeded);
+        activator.ActivateJob(typeof(IOnFailed)).Returns(_onFailed);
+        activator.ActivateJob(typeof(IOnCancelled)).Returns(_onCancelled);
+        activator.ActivateJob(typeof(IOnRetrying)).Returns(_onRetrying);
+
+        var stateHandlerTypes = new List<Type>
         {
-            _onEnqueued, _onProcessing, _onSucceeded, _onFailed, _onCancelled, _onRetrying
-        });
+            typeof(IOnEnqueued), typeof(IOnProcessing), typeof(IOnSucceeded),
+            typeof(IOnFailed), typeof(IOnCancelled), typeof(IOnRetrying)
+        };
+
+        return new HangfireStateFilter(registry, activator, stateHandlerTypes);
     }
 
     private static ElectStateContext CreateContext(

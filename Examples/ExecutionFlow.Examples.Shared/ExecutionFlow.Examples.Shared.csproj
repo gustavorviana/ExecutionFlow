@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\ExecutionFlow\ExecutionFlow.csproj" />
-    <ProjectReference Include="..\..\ExecutionFlow.Hangfire\ExecutionFlow.Hangfire.csproj" />
+    <ProjectReference Include="..\..\src\ExecutionFlow\ExecutionFlow.csproj" />
+    <ProjectReference Include="..\..\src\ExecutionFlow.Hangfire\ExecutionFlow.Hangfire.csproj" />
   </ItemGroup>
 
 </Project>

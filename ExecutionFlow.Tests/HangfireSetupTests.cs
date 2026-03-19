@@ -17,7 +17,7 @@ public class HangfireSetupTests
             options.Add(typeof(OrderCreatedHandler));
         });
 
-        var registration = setup.Registrations.Single();
+        var registration = setup.EventHandlers.Values.Single();
         Assert.Equal(typeof(OrderCreatedHandler), registration.HandlerType);
         Assert.Equal(typeof(OrderCreatedEvent), registration.EventType);
         Assert.False(registration.IsRecurring);
@@ -33,7 +33,7 @@ public class HangfireSetupTests
             options.Add(typeof(CleanupHandler));
         });
 
-        var registration = setup.Registrations.Single();
+        var registration = setup.RecurringHandlers.Single();
         Assert.Equal(typeof(CleanupHandler), registration.HandlerType);
         Assert.True(registration.IsRecurring);
         Assert.Equal("0 * * * *", registration.Cron);
@@ -50,8 +50,8 @@ public class HangfireSetupTests
             options.Scan(typeof(HangfireSetupTests).Assembly);
         });
 
-        Assert.Contains(setup.Registrations, r => r.HandlerType == typeof(OrderCreatedHandler));
-        Assert.Contains(setup.Registrations, r => r.HandlerType == typeof(CleanupHandler));
+        Assert.Contains(setup.EventHandlers.Values, r => r.HandlerType == typeof(OrderCreatedHandler));
+        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(CleanupHandler));
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class HangfireSetupTests
             options.Add(typeof(InlineHandler));
         });
 
-        Assert.Contains(setup.Registrations, r => r.HandlerType == typeof(InlineHandler));
+        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(InlineHandler));
     }
 
     [Fact]
@@ -79,8 +79,8 @@ public class HangfireSetupTests
             options.Add(typeof(CleanupHandler));
         });
 
-        var eventHandlers = setup.Registrations.Where(r => !r.IsRecurring).ToList();
-        var recurringHandlers = setup.Registrations.Where(r => r.IsRecurring).ToList();
+        var eventHandlers = setup.EventHandlers.Values.ToList();
+        var recurringHandlers = setup.RecurringHandlers.Where(r => r.IsRecurring).ToList();
 
         Assert.Single(eventHandlers);
         Assert.Single(recurringHandlers);

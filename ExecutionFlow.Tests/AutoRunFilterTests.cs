@@ -11,6 +11,12 @@ namespace ExecutionFlow.Tests;
 
 public class AutoRunFilterTests
 {
+    private static HangfireAutoRunFilter CreateFilter(bool autoRun, Dictionary<Type, bool> perJob)
+    {
+        var registry = Substitute.For<IExecutionFlowRegistry>();
+        return new HangfireAutoRunFilter(registry, autoRun, perJob);
+    }
+
     private static ProcessingState CreateProcessingState()
     {
         return (ProcessingState)Activator.CreateInstance(
@@ -56,7 +62,7 @@ public class AutoRunFilterTests
     public void GlobalFalse_PerJobTrue_Blocks()
     {
         var perJob = new Dictionary<Type, bool> { { typeof(TestRecurringHandler), true } };
-        var filter = new HangfireAutoRunFilter(false, perJob);
+        var filter = CreateFilter(false, perJob);
         var context = CreateContext(CreateProcessingState(), "recurring-1", CreateJobWithHandlerArg(typeof(TestRecurringHandler)));
 
         filter.OnStateElection(context);
@@ -68,7 +74,7 @@ public class AutoRunFilterTests
     public void GlobalFalse_PerJobFalse_Blocks()
     {
         var perJob = new Dictionary<Type, bool> { { typeof(TestRecurringHandler), false } };
-        var filter = new HangfireAutoRunFilter(false, perJob);
+        var filter = CreateFilter(false, perJob);
         var context = CreateContext(CreateProcessingState(), "recurring-1", CreateJobWithHandlerArg(typeof(TestRecurringHandler)));
 
         filter.OnStateElection(context);
@@ -80,7 +86,7 @@ public class AutoRunFilterTests
     public void GlobalTrue_PerJobFalse_Blocks()
     {
         var perJob = new Dictionary<Type, bool> { { typeof(TestRecurringHandler), false } };
-        var filter = new HangfireAutoRunFilter(true, perJob);
+        var filter = CreateFilter(true, perJob);
         var context = CreateContext(CreateProcessingState(), "recurring-1", CreateJobWithHandlerArg(typeof(TestRecurringHandler)));
 
         filter.OnStateElection(context);
@@ -92,7 +98,7 @@ public class AutoRunFilterTests
     public void GlobalTrue_PerJobTrue_Allows()
     {
         var perJob = new Dictionary<Type, bool> { { typeof(TestRecurringHandler), true } };
-        var filter = new HangfireAutoRunFilter(true, perJob);
+        var filter = CreateFilter(true, perJob);
         var context = CreateContext(CreateProcessingState(), "recurring-1", CreateJobWithHandlerArg(typeof(TestRecurringHandler)));
 
         filter.OnStateElection(context);
@@ -104,7 +110,7 @@ public class AutoRunFilterTests
     public void GlobalTrue_NoPerJobSetting_Allows()
     {
         var perJob = new Dictionary<Type, bool>();
-        var filter = new HangfireAutoRunFilter(true, perJob);
+        var filter = CreateFilter(true, perJob);
         var context = CreateContext(CreateProcessingState(), "recurring-1", CreateJobWithHandlerArg(typeof(TestRecurringHandler)));
 
         filter.OnStateElection(context);
@@ -116,7 +122,7 @@ public class AutoRunFilterTests
     public void NonRecurringJob_NotBlocked_EvenWhenGlobalFalse()
     {
         var perJob = new Dictionary<Type, bool>();
-        var filter = new HangfireAutoRunFilter(false, perJob);
+        var filter = CreateFilter(false, perJob);
         var context = CreateContext(CreateProcessingState(), null, CreateJobWithHandlerArg(typeof(TestRecurringHandler)));
 
         filter.OnStateElection(context);
@@ -128,7 +134,7 @@ public class AutoRunFilterTests
     public void NonProcessingState_NotBlocked()
     {
         var perJob = new Dictionary<Type, bool>();
-        var filter = new HangfireAutoRunFilter(false, perJob);
+        var filter = CreateFilter(false, perJob);
         var context = CreateContext(new EnqueuedState(), "recurring-1", CreateJobWithHandlerArg(typeof(TestRecurringHandler)));
 
         filter.OnStateElection(context);

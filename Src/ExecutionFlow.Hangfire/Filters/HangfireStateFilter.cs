@@ -1,7 +1,7 @@
+using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
-using Hangfire.Common;
 using Hangfire.States;
 using System;
 using System.Collections.Generic;
@@ -12,12 +12,14 @@ namespace ExecutionFlow.Hangfire.Filters
     public class HangfireStateFilter : IElectStateFilter
     {
         private readonly IReadOnlyList<Type> _stateHandlers;
+        private readonly IExecutionFlowRegistry _handlerRegistry;
         private readonly JobActivator _activator;
 
-        public HangfireStateFilter(JobActivator activator, IReadOnlyList<Type> stateHandlers)
+        public HangfireStateFilter(IExecutionFlowRegistry handlerRegistry, JobActivator activator, IReadOnlyList<Type> stateHandlers)
         {
             _activator = activator;
             _stateHandlers = stateHandlers;
+            _handlerRegistry = handlerRegistry;
         }
 
         public void OnStateElection(ElectStateContext context)
@@ -25,7 +27,7 @@ namespace ExecutionFlow.Hangfire.Filters
             var candidateState = context.CandidateState;
             var jobId = context.BackgroundJob.Id;
             var customId = GetCustomId(context, jobId);
-            var handlerType = GetHandlerType(context.BackgroundJob.Job);
+            var handlerType = context.BackgroundJob.Job.GetHandlerType(_handlerRegistry);
 
             if (candidateState is EnqueuedState)
             {
@@ -91,32 +93,6 @@ namespace ExecutionFlow.Hangfire.Filters
             try
             {
                 return context.Connection.GetJobParameter(jobId, HangfireDispatcher.EventId);
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private static Type GetHandlerType(Job job)
-        {
-            if (job?.Args == null) return null;
-
-            foreach (var arg in job.Args)
-            {
-                if (arg is Type type)
-                    return type;
-            }
-
-            var handlerTypeName = job.Args
-                .OfType<string>()
-                .LastOrDefault();
-
-            if (string.IsNullOrEmpty(handlerTypeName)) return null;
-
-            try
-            {
-                return Type.GetType(handlerTypeName);
             }
             catch
             {

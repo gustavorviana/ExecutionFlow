@@ -1,3 +1,4 @@
+using ExecutionFlow.Abstractions;
 using Hangfire.Client;
 using Hangfire.Common;
 using Hangfire.States;
@@ -10,9 +11,11 @@ namespace ExecutionFlow.Hangfire.Filters
     {
         private readonly bool _autoRunRecurring;
         private readonly IReadOnlyDictionary<Type, bool> _perJobAutoRun;
+        private readonly IExecutionFlowRegistry _handlerRegistry;
 
-        public HangfireAutoRunFilter(bool autoRunRecurring, IReadOnlyDictionary<Type, bool> perJobAutoRun)
+        public HangfireAutoRunFilter(IExecutionFlowRegistry handlerRegistry, bool autoRunRecurring, IReadOnlyDictionary<Type, bool> perJobAutoRun)
         {
+            _handlerRegistry = handlerRegistry;
             _autoRunRecurring = autoRunRecurring;
             _perJobAutoRun = perJobAutoRun ?? new Dictionary<Type, bool>();
         }
@@ -22,7 +25,7 @@ namespace ExecutionFlow.Hangfire.Filters
             if (!IsAutoScheduledRecurringJob(context.Parameters))
                 return;
 
-            if (ShouldBlock(GetHandlerType(context.Job)))
+            if (ShouldBlock(context.Job.GetHandlerType(_handlerRegistry)))
                 context.Canceled = true;
         }
 
@@ -37,7 +40,7 @@ namespace ExecutionFlow.Hangfire.Filters
             if (!IsRecurringJob(context) || IsManuallyTriggered(context))
                 return;
 
-            if (ShouldBlock(GetHandlerType(context.BackgroundJob.Job)))
+            if (ShouldBlock(context.BackgroundJob.Job.GetHandlerType(_handlerRegistry)))
                 context.CandidateState = new DeletedState();
         }
 
@@ -76,29 +79,6 @@ namespace ExecutionFlow.Hangfire.Filters
                 return context.Connection.GetJobParameter(context.BackgroundJob.Id, "Triggered") == "1";
             }
             catch { return false; }
-        }
-
-        private static Type GetHandlerType(Job job)
-        {
-            if (job?.Args == null) return null;
-
-            foreach (var arg in job.Args)
-            {
-                if (arg is Type type)
-                    return type;
-
-                if (arg is string typeName && !string.IsNullOrEmpty(typeName))
-                {
-                    try
-                    {
-                        var resolved = Type.GetType(typeName);
-                        if (resolved != null) return resolved;
-                    }
-                    catch { }
-                }
-            }
-
-            return null;
         }
     }
 }

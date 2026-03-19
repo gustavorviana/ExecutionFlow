@@ -11,7 +11,7 @@ namespace ExecutionFlow
         private readonly List<HandlerRegistration> _registrations = new List<HandlerRegistration>();
         private bool _locked;
 
-        public IReadOnlyList<HandlerRegistration> Registrations => _registrations;
+        public IReadOnlyList<HandlerRegistration> HandlerTypes => _registrations;
 
         public void Scan(Assembly assembly)
         {
