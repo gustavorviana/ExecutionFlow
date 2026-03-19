@@ -11,11 +11,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.1.2" />
-    <PackageReference Include="Aspire.Hosting.SqlServer" Version="13.1.2" />
+    <PackageReference Include="Aspire.Hosting.AppHost" />
+    <PackageReference Include="Aspire.Hosting.SqlServer" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\Src\ExecutionFlow\ExecutionFlow.csproj" />
     <ProjectReference Include="..\..\ExecutionFlow.Examples.Consumer\ExecutionFlow.Examples.Consumer.csproj" />
     <ProjectReference Include="..\..\ExecutionFlow.Examples.ConsumerWithoutDi\ExecutionFlow.Examples.ConsumerWithoutDi.csproj" />
     <ProjectReference Include="..\..\ExecutionFlow.Examples.Producer\ExecutionFlow.Examples.Producer.csproj" />
