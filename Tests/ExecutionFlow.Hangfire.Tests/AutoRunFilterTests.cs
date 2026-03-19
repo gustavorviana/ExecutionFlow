@@ -6,8 +6,9 @@ using Hangfire.States;
 using Hangfire.Storage;
 using NSubstitute;
 using System.Reflection;
+using HangfireJobDispatcher = ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher;
 
-namespace ExecutionFlow.Tests;
+namespace ExecutionFlow.Hangfire.Tests;
 
 public class AutoRunFilterTests
 {
@@ -49,11 +50,11 @@ public class AutoRunFilterTests
 
     private static Job CreateJobWithHandlerArg(Type? handlerType = null)
     {
-        var method = typeof(Hangfire.Dispatcher.HangfireJobDispatcher)
-            .GetMethod(nameof(Hangfire.Dispatcher.HangfireJobDispatcher.DispatchRecurringAsync))!;
+        var method = typeof(HangfireJobDispatcher)
+            .GetMethod(nameof(HangfireJobDispatcher.DispatchRecurringAsync))!;
 
         return new Job(
-            typeof(Hangfire.Dispatcher.HangfireJobDispatcher),
+            typeof(HangfireJobDispatcher),
             method,
             new object[] { null!, handlerType!, CancellationToken.None });
     }

@@ -1,16 +1,23 @@
 using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire;
-using Hangfire;
+using ExecutionFlow.Attributes;
 using NSubstitute;
+using System.ComponentModel;
 
 namespace ExecutionFlow.Tests;
 
 public class ExecutionFlowOptionsTests
 {
+    private class TestOptions : ExecutionFlowOptions { }
+
+    private class TestSetup : ExecutionFlowSetup<TestOptions>
+    {
+        protected override void OnConfigured(TestOptions options) { }
+    }
+
     [Fact]
     public void Scan_Populates_Registrations()
     {
-        var options = new HangfireOptions();
+        var options = new TestOptions();
 
         options.Scan(typeof(ExecutionFlowOptionsTests).Assembly);
 
@@ -20,7 +27,7 @@ public class ExecutionFlowOptionsTests
     [Fact]
     public void Add_Populates_Registrations()
     {
-        var options = new HangfireOptions();
+        var options = new TestOptions();
 
         options.Add(typeof(TestHandler));
 
@@ -31,7 +38,7 @@ public class ExecutionFlowOptionsTests
     [Fact]
     public void Add_Event_Handler_Populates_Registrations()
     {
-        var options = new HangfireOptions();
+        var options = new TestOptions();
 
         options.Add(typeof(TestEventHandler));
 
@@ -43,7 +50,7 @@ public class ExecutionFlowOptionsTests
     [Fact]
     public void Scan_Throws_After_Lock()
     {
-        var options = new HangfireOptions();
+        var options = new TestOptions();
         options.Add(typeof(TestHandler));
 
         var lockMethod = typeof(ExecutionFlowOptions).GetMethod("Lock",
@@ -56,7 +63,7 @@ public class ExecutionFlowOptionsTests
     [Fact]
     public void Add_Throws_After_Lock()
     {
-        var options = new HangfireOptions();
+        var options = new TestOptions();
         options.Add(typeof(TestHandler));
 
         var lockMethod = typeof(ExecutionFlowOptions).GetMethod("Lock",
@@ -69,7 +76,7 @@ public class ExecutionFlowOptionsTests
     [Fact]
     public void Configure_Makes_Registrations_Available_Via_Setup()
     {
-        var setup = new HangfireSetup();
+        var setup = new TestSetup();
 
         setup.Configure(opts =>
         {
@@ -77,6 +84,22 @@ public class ExecutionFlowOptionsTests
         });
 
         Assert.NotEmpty(setup.RecurringHandlers);
+        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(TestHandler));
+    }
+
+    [Fact]
+    public void Configure_Separates_EventHandlers_From_RecurringHandlers()
+    {
+        var setup = new TestSetup();
+
+        setup.Configure(opts =>
+        {
+            opts.Add(typeof(TestHandler));
+            opts.Add(typeof(TestEventHandler));
+        });
+
+        Assert.Single(setup.EventHandlers);
+        Assert.Contains(setup.EventHandlers.Values, r => r.HandlerType == typeof(TestEventHandler));
         Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(TestHandler));
     }
 

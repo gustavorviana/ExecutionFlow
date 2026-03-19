@@ -15,5 +15,6 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="ExecutionFlow.Tests"/>
+		<InternalsVisibleTo Include="ExecutionFlow.Hangfire.Tests"/>
 	</ItemGroup>
 </Project>

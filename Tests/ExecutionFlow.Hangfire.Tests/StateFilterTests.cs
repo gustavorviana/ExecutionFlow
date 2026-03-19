@@ -2,6 +2,7 @@ using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Filters;
 using ExecutionFlow.Hangfire.Infrastructure;
+using HangfireJobDispatcher = ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
@@ -9,7 +10,7 @@ using Hangfire.Storage;
 using NSubstitute;
 using System.Reflection;
 
-namespace ExecutionFlow.Tests;
+namespace ExecutionFlow.Hangfire.Tests;
 
 public class StateFilterTests
 {
@@ -55,7 +56,7 @@ public class StateFilterTests
 
         if (customId != null)
         {
-            connection.GetJobParameter(backgroundJob.Id, HangfireDispatcher.EventId)
+            connection.GetJobParameter(backgroundJob.Id, Infrastructure.HangfireDispatcher.EventId)
                 .Returns(customId);
         }
 
@@ -70,11 +71,11 @@ public class StateFilterTests
 
     private static Job CreateTestJob()
     {
-        var method = typeof(Hangfire.Dispatcher.HangfireJobDispatcher)
-            .GetMethod(nameof(Hangfire.Dispatcher.HangfireJobDispatcher.DispatchRecurringAsync))!;
+        var method = typeof(HangfireJobDispatcher)
+            .GetMethod(nameof(HangfireJobDispatcher.DispatchRecurringAsync))!;
 
         return new Job(
-            typeof(Hangfire.Dispatcher.HangfireJobDispatcher),
+            typeof(HangfireJobDispatcher),
             method,
             new object[] { null!, typeof(TestHandler)!, CancellationToken.None });
     }
@@ -154,7 +155,7 @@ public class StateFilterTests
         var bgJob = CreateTestJob();
         var backgroundJob = new BackgroundJob("test-job-1", bgJob, DateTime.UtcNow);
 
-        connection.GetJobParameter(backgroundJob.Id, HangfireDispatcher.EventId).Returns((string?)null);
+        connection.GetJobParameter(backgroundJob.Id, Infrastructure.HangfireDispatcher.EventId).Returns((string?)null);
         connection.GetJobParameter(backgroundJob.Id, "RetryCount").Returns("2");
 
         var applyContext = new ApplyStateContext(
@@ -178,7 +179,7 @@ public class StateFilterTests
         var bgJob = CreateTestJob();
         var backgroundJob = new BackgroundJob("test-job-1", bgJob, DateTime.UtcNow);
 
-        connection.GetJobParameter(backgroundJob.Id, HangfireDispatcher.EventId).Returns((string?)null);
+        connection.GetJobParameter(backgroundJob.Id, Infrastructure.HangfireDispatcher.EventId).Returns((string?)null);
         connection.GetJobParameter(backgroundJob.Id, "RetryCount").Returns("1");
 
         var applyContext = new ApplyStateContext(
@@ -213,9 +214,9 @@ public class StateFilterTests
             null)!;
     }
 
-    public class TestHandler : Abstractions.IHandler
+    public class TestHandler : IHandler
     {
-        public Task HandleAsync(Abstractions.FlowContext context, CancellationToken cancellationToken) =>
+        public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) =>
             Task.CompletedTask;
     }
 }

@@ -21,5 +21,7 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="ExecutionFlow.Tests/ExecutionFlow.Tests.csproj" />
+    <Project Path="Tests/ExecutionFlow.Hangfire.DependencyInjection.Tests/ExecutionFlow.Hangfire.DependencyInjection.Tests.csproj" Id="1265ce58-3eba-493f-be0a-877b0bd680fa" />
+    <Project Path="Tests/ExecutionFlow.Hangfire.Tests/ExecutionFlow.Hangfire.Tests.csproj" Id="10804094-9766-4db6-ae28-f7bc5528cc83" />
   </Folder>
 </Solution>

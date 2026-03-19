@@ -1,9 +1,8 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
-using ExecutionFlow.Hangfire;
 using System.ComponentModel;
 
-namespace ExecutionFlow.Tests;
+namespace ExecutionFlow.Hangfire.Tests;
 
 public class HangfireSetupTests
 {

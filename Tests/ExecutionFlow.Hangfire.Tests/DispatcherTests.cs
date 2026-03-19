@@ -1,11 +1,11 @@
 using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire;
 using ExecutionFlow.Hangfire.Infrastructure;
+using HangfireDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireDispatcher;
 using Hangfire;
 using Hangfire.Storage;
 using NSubstitute;
 
-namespace ExecutionFlow.Tests;
+namespace ExecutionFlow.Hangfire.Tests;
 
 public class DispatcherTests
 {
@@ -21,17 +21,9 @@ public class DispatcherTests
         _jobClient = Substitute.For<IBackgroundJobClient>();
     }
 
-    private HangfireSetup CreateSetup(Action<HangfireOptions> configure)
-    {
-        var setup = new HangfireSetup();
-        setup.Configure(configure);
-        return setup;
-    }
-
     [Fact]
     public void Enqueue_DoesNotSetCustomId_WhenEventDoesNotImplementICustomIdEvent()
     {
-        var setup = CreateSetup(options => options.Add(typeof(TestEventHandler)));
         _jobClient.Create(default, default).ReturnsForAnyArgs("job-99");
 
         var dispatcher = new HangfireDispatcher(_jobClient, _storage);
@@ -41,24 +33,34 @@ public class DispatcherTests
         _connection.DidNotReceiveWithAnyArgs().SetJobParameter(default, default, default);
     }
 
-    public class UnregisteredEvent { }
+    [Fact]
+    public void Enqueue_SetsCustomId_WhenEventImplementsICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-100");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage);
+
+        dispatcher.Enqueue(new TestNamedEvent());
+
+        _connection.Received(1).SetJobParameter("job-100", HangfireDispatcher.EventId, "named-job-1");
+    }
+
+    [Fact]
+    public void Enqueue_ReturnsJobId()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-42");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage);
+
+        var jobId = dispatcher.Enqueue(new TestEvent());
+
+        Assert.Equal("job-42", jobId);
+    }
 
     public class TestEvent { }
-
-    public class TestEventHandler : IHandler<TestEvent>
-    {
-        public Task HandleAsync(FlowContext<TestEvent> context, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
-    }
 
     public class TestNamedEvent : ICustomIdEvent
     {
         public string GetCustomId() => "named-job-1";
-    }
-
-    public class TestNamedEventHandler : IHandler<TestNamedEvent>
-    {
-        public Task HandleAsync(FlowContext<TestNamedEvent> context, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
     }
 }
