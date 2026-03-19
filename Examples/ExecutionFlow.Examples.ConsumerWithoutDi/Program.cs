@@ -1,3 +1,4 @@
+using ExecutionFlow.Examples.Handlers;
 using ExecutionFlow.Hangfire;
 using Hangfire;
 
@@ -7,26 +8,21 @@ builder.AddServiceDefaults();
 
 var connectionString = builder.Configuration.GetConnectionString("hangfire")!;
 
-// Hangfire server (infrastructure only — needed to process jobs from the queue)
-builder.Services.AddHangfire(config =>
-    config.UseSqlServerStorage(connectionString));
+GlobalConfiguration.Configuration.UseSqlServerStorage(connectionString);
 
-builder.Services.AddHangfireServer();
+var setup = new HangfireSetup();
+setup.Configure(options => options.Scan(typeof(IHandlerMark).Assembly));
+setup.ConfigureActivator().Build();
+
+Console.WriteLine("=============================================");
+Console.WriteLine("  ExecutionFlow Consumer (without DI) Started");
+Console.WriteLine("  Waiting for messages...");
+Console.WriteLine("  Press Ctrl+C to stop.");
+Console.WriteLine("=============================================");
+
+using var server = new BackgroundJobServer();
 
 var host = builder.Build();
 
-// ExecutionFlow — configured MANUALLY, no handlers or services registered in DI
-var setup = new HangfireSetup();
-setup.Configure(options =>
-{
-    options.Scan(typeof(Program).Assembly);
-});
-var dispatcher = setup.ConfigureActivator().Build();
-
-Console.WriteLine("===========================================");
-Console.WriteLine("  ExecutionFlow Consumer (sem DI) Started");
-Console.WriteLine("  Waiting for messages...");
-Console.WriteLine("  Press Ctrl+C to stop.");
-Console.WriteLine("===========================================");
-
 host.Run();
+await server.WaitForShutdownAsync(default);
