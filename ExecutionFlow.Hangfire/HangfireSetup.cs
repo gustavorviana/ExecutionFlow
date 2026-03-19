@@ -3,6 +3,7 @@ using ExecutionFlow.Hangfire.Dispatcher;
 using ExecutionFlow.Hangfire.Filters;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
+using Hangfire.Storage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,18 +50,35 @@ namespace ExecutionFlow.Hangfire
 
             GlobalJobFilters.Filters.Add(new HangfireStateFilter(jobActivator, StateHandlerTypes));
             GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(Options.AutoRunRecurring, Options.JobAutoRunSettings));
-            RegisterRecurring(new RecurringJobManager(jobStorage));
+            RegisterRecurring(jobStorage);
             return _dispatcher = new HangfireDispatcher(jobClient, jobStorage);
         }
 
-        private void RegisterRecurring(IRecurringJobManager recurringJobManager)
+        private void RegisterRecurring(JobStorage jobStorage)
         {
+            var recurringJobManager = new RecurringJobManager(jobStorage);
+            var registeredIds = new HashSet<string>();
+
             foreach (var registration in Registrations.Where(r => r.IsRecurring))
             {
+                var jobId = registration.HandlerType.FullName;
+                registeredIds.Add(jobId);
+
                 recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(
-                    registration.HandlerType.FullName,
+                    jobId,
                     dispatcher => dispatcher.DispatchRecurringAsync(null, registration.HandlerType, CancellationToken.None),
                     registration.Cron);
+            }
+
+            if (!Options.RemoveOrphanRecurringJobs)
+                return;
+
+            using (var connection = jobStorage.GetConnection())
+            {
+                var existingJobs = connection.GetRecurringJobs();
+                foreach (var job in existingJobs)
+                    if (!registeredIds.Contains(job.Id))
+                        recurringJobManager.RemoveIfExists(job.Id);
             }
         }
     }

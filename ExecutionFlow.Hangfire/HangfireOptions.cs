@@ -9,6 +9,7 @@ namespace ExecutionFlow.Hangfire
         private readonly Dictionary<Type, bool> _jobAutoRun = new Dictionary<Type, bool>();
 
         public bool AutoRunRecurring { get; set; } = true;
+        public bool RemoveOrphanRecurringJobs { get; set; } = false;
 
         public IReadOnlyList<Type> StateHandlerTypes => _stateHandlerTypes;
 
