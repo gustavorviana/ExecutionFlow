@@ -87,7 +87,7 @@ public class HangfireOptionsTests
         });
 
         Assert.NotEmpty(setup.RecurringHandlers);
-        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(TestRecurringHandler));
+        Assert.Contains(setup.RecurringHandlers.Values, r => r.HandlerType == typeof(TestRecurringHandler));
     }
 
     [Fact]

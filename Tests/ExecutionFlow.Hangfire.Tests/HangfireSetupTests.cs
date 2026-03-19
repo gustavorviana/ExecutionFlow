@@ -19,7 +19,7 @@ public class HangfireSetupTests
         var registration = setup.EventHandlers.Values.Single();
         Assert.Equal(typeof(OrderCreatedHandler), registration.HandlerType);
         Assert.Equal(typeof(OrderCreatedEvent), registration.EventType);
-        Assert.False(registration.IsRecurring);
+        Assert.IsNotType<RecurringJobRegistryInfo>(registration);
     }
 
     [Fact]
@@ -32,9 +32,9 @@ public class HangfireSetupTests
             options.Add(typeof(CleanupHandler));
         });
 
-        var registration = setup.RecurringHandlers.Single();
+        var registration = setup.RecurringHandlers.Single().Value;
         Assert.Equal(typeof(CleanupHandler), registration.HandlerType);
-        Assert.True(registration.IsRecurring);
+        Assert.IsType<RecurringJobRegistryInfo>(registration);
         Assert.Equal("0 * * * *", registration.Cron);
         Assert.Equal("Cleanup Old Records", registration.DisplayName);
     }
@@ -50,7 +50,7 @@ public class HangfireSetupTests
         });
 
         Assert.Contains(setup.EventHandlers.Values, r => r.HandlerType == typeof(OrderCreatedHandler));
-        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(CleanupHandler));
+        Assert.Contains(setup.RecurringHandlers.Values, r => r.HandlerType == typeof(CleanupHandler));
     }
 
     [Fact]
@@ -64,7 +64,7 @@ public class HangfireSetupTests
             options.Add(typeof(InlineHandler));
         });
 
-        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(InlineHandler));
+        Assert.Contains(setup.RecurringHandlers.Values, r => r.HandlerType == typeof(InlineHandler));
     }
 
     [Fact]
@@ -79,7 +79,7 @@ public class HangfireSetupTests
         });
 
         var eventHandlers = setup.EventHandlers.Values.ToList();
-        var recurringHandlers = setup.RecurringHandlers.Where(r => r.IsRecurring).ToList();
+        var recurringHandlers = setup.RecurringHandlers.Values.ToList();
 
         Assert.Single(eventHandlers);
         Assert.Single(recurringHandlers);

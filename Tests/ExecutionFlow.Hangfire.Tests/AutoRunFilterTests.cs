@@ -6,7 +6,7 @@ using Hangfire.States;
 using Hangfire.Storage;
 using NSubstitute;
 using System.Reflection;
-using HangfireJobDispatcher = ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher;
+using HangfireJobDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher;
 
 namespace ExecutionFlow.Hangfire.Tests;
 
@@ -15,6 +15,11 @@ public class AutoRunFilterTests
     private static HangfireAutoRunFilter CreateFilter(bool autoRun, Dictionary<Type, bool> perJob)
     {
         var registry = Substitute.For<IExecutionFlowRegistry>();
+        var recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>
+        {
+            { typeof(TestRecurringHandler), new RecurringJobRegistryInfo(typeof(TestRecurringHandler), "Test", null) }
+        };
+        registry.RecurringHandlers.Returns((IReadOnlyDictionary<Type, RecurringJobRegistryInfo>)recurringHandlers);
         return new HangfireAutoRunFilter(registry, autoRun, perJob);
     }
 

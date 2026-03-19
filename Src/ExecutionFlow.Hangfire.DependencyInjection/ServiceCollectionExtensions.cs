@@ -19,7 +19,7 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
             if (configure != null)
                 setup.Configure(configure);
 
-            foreach (var registration in setup.RecurringHandlers)
+            foreach (var registration in setup.RecurringHandlers.Values)
                 services.AddTransient(registration.HandlerType);
 
             foreach (var registration in setup.EventHandlers.Values)

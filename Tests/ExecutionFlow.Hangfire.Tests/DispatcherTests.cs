@@ -61,6 +61,6 @@ public class DispatcherTests
 
     public class TestNamedEvent : ICustomIdEvent
     {
-        public string GetCustomId() => "named-job-1";
+        public string CustomId => "named-job-1";
     }
 }

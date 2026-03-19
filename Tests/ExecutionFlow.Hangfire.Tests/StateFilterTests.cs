@@ -1,8 +1,7 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Filters;
-using ExecutionFlow.Hangfire.Infrastructure;
-using HangfireJobDispatcher = ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher;
+using HangfireJobDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
@@ -24,14 +23,14 @@ public class StateFilterTests
     private HangfireStateFilter CreateFilter()
     {
         var registry = Substitute.For<IExecutionFlowRegistry>();
-        var activator = Substitute.For<JobActivator>();
+        var serviceProvider = Substitute.For<IServiceProvider>();
 
-        activator.ActivateJob(typeof(IOnEnqueued)).Returns(_onEnqueued);
-        activator.ActivateJob(typeof(IOnProcessing)).Returns(_onProcessing);
-        activator.ActivateJob(typeof(IOnSucceeded)).Returns(_onSucceeded);
-        activator.ActivateJob(typeof(IOnFailed)).Returns(_onFailed);
-        activator.ActivateJob(typeof(IOnCancelled)).Returns(_onCancelled);
-        activator.ActivateJob(typeof(IOnRetrying)).Returns(_onRetrying);
+        serviceProvider.GetService(typeof(IOnEnqueued)).Returns(_onEnqueued);
+        serviceProvider.GetService(typeof(IOnProcessing)).Returns(_onProcessing);
+        serviceProvider.GetService(typeof(IOnSucceeded)).Returns(_onSucceeded);
+        serviceProvider.GetService(typeof(IOnFailed)).Returns(_onFailed);
+        serviceProvider.GetService(typeof(IOnCancelled)).Returns(_onCancelled);
+        serviceProvider.GetService(typeof(IOnRetrying)).Returns(_onRetrying);
 
         var stateHandlerTypes = new List<Type>
         {
@@ -39,7 +38,7 @@ public class StateFilterTests
             typeof(IOnFailed), typeof(IOnCancelled), typeof(IOnRetrying)
         };
 
-        return new HangfireStateFilter(registry, activator, stateHandlerTypes);
+        return new HangfireStateFilter(registry, serviceProvider, stateHandlerTypes);
     }
 
     private static ElectStateContext CreateContext(

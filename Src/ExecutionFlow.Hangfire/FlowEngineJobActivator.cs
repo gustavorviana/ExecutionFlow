@@ -1,5 +1,5 @@
 ﻿using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire.Dispatcher;
+using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using System;
 using System.Collections.Generic;

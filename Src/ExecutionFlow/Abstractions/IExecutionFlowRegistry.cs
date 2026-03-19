@@ -5,7 +5,7 @@ namespace ExecutionFlow.Abstractions
 {
     public interface IExecutionFlowRegistry
     {
-        IReadOnlyDictionary<Type, HandlerRegistration> EventHandlers { get; }
-        IReadOnlyList<HandlerRegistration> RecurringHandlers { get; }
+        IReadOnlyDictionary<Type, EventJobRegistryInfo> EventHandlers { get; }
+        IReadOnlyDictionary<Type, RecurringJobRegistryInfo> RecurringHandlers { get; }
     }
 }

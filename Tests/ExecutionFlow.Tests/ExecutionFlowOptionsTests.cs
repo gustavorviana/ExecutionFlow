@@ -21,30 +21,30 @@ public class ExecutionFlowOptionsTests
 
         options.Scan(typeof(ExecutionFlowOptionsTests).Assembly);
 
-        Assert.NotEmpty(options.HandlerTypes);
+        Assert.True(options.EventHandlers.Count > 0 || options.RecurringHandlers.Count > 0);
     }
 
     [Fact]
-    public void Add_Populates_Registrations()
+    public void Add_RecurringHandler_Populates_RecurringHandlers()
     {
         var options = new TestOptions();
 
         options.Add(typeof(TestHandler));
 
-        Assert.Single(options.HandlerTypes);
-        Assert.Equal(typeof(TestHandler), options.HandlerTypes[0].HandlerType);
+        Assert.Single(options.RecurringHandlers);
+        Assert.Equal(typeof(TestHandler), options.RecurringHandlers.Values.Single().HandlerType);
     }
 
     [Fact]
-    public void Add_Event_Handler_Populates_Registrations()
+    public void Add_EventHandler_Populates_EventHandlers()
     {
         var options = new TestOptions();
 
         options.Add(typeof(TestEventHandler));
 
-        Assert.Single(options.HandlerTypes);
-        Assert.Equal(typeof(TestEventHandler), options.HandlerTypes[0].HandlerType);
-        Assert.Equal(typeof(TestEvent), options.HandlerTypes[0].EventType);
+        Assert.Single(options.EventHandlers);
+        Assert.Equal(typeof(TestEventHandler), options.EventHandlers.Values.Single().HandlerType);
+        Assert.Equal(typeof(TestEvent), options.EventHandlers.Values.Single().EventType);
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class ExecutionFlowOptionsTests
         });
 
         Assert.NotEmpty(setup.RecurringHandlers);
-        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(TestHandler));
+        Assert.Contains(setup.RecurringHandlers.Values, r => r.HandlerType == typeof(TestHandler));
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public class ExecutionFlowOptionsTests
 
         Assert.Single(setup.EventHandlers);
         Assert.Contains(setup.EventHandlers.Values, r => r.HandlerType == typeof(TestEventHandler));
-        Assert.Contains(setup.RecurringHandlers, r => r.HandlerType == typeof(TestHandler));
+        Assert.Contains(setup.RecurringHandlers.Values, r => r.HandlerType == typeof(TestHandler));
     }
 
     // Test types

@@ -26,7 +26,7 @@ namespace ExecutionFlow.Hangfire.Filters
             var candidateState = context.CandidateState;
             var jobId = context.BackgroundJob.Id;
             var customId = GetCustomId(context, jobId);
-            var handlerType = context.BackgroundJob.Job.GetHandlerType(_handlerRegistry);
+            var handlerType = HangfireJobInfo.Create(context.BackgroundJob.Job)?.GetHandlerType(_handlerRegistry);
 
             if (candidateState is EnqueuedState)
             {

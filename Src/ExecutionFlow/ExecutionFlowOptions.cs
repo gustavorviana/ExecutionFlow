@@ -1,24 +1,59 @@
+using ExecutionFlow.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
-using ExecutionFlow.Abstractions;
-using ExecutionFlow.Scanner;
 
 namespace ExecutionFlow
 {
     public abstract class ExecutionFlowOptions
     {
-        private readonly List<HandlerRegistration> _registrations = new List<HandlerRegistration>();
         private bool _locked;
+        public Action<AssemblyTypeScanContext> OnTypeLoadFailure;
 
-        public IReadOnlyList<HandlerRegistration> HandlerTypes => _registrations;
+
+        private readonly Dictionary<Type, RecurringJobRegistryInfo> _recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>(new TypeEqualityComparer());
+        private readonly Dictionary<Type, EventJobRegistryInfo> _eventHandlers = new Dictionary<Type, EventJobRegistryInfo>(new TypeEqualityComparer());
+
+        public IReadOnlyDictionary<Type, RecurringJobRegistryInfo> RecurringHandlers => _recurringHandlers;
+        public IReadOnlyDictionary<Type, EventJobRegistryInfo> EventHandlers => _eventHandlers;
+
 
         public void Scan(Assembly assembly)
         {
             ThrowIfLocked();
-            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
-            var scanned = ExecutionFlowScanner.ScanAssembly(assembly);
-            _registrations.AddRange(scanned);
+
+            foreach (var type in GetValidTypes(assembly))
+                if (!type.IsAbstract && !type.IsInterface)
+                    Add(type);
+        }
+
+        private Type[] GetValidTypes(Assembly assembly)
+        {
+            try
+            {
+                return assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                var loadedTypes = ex.Types
+                    .Where(t => t != null && t.IsClass && !t.IsAbstract && ImplementsHandler(t))
+                    .Cast<Type>()
+                    .ToArray();
+
+                OnTypeLoadFailure?.Invoke(new AssemblyTypeScanContext(assembly, ex, loadedTypes));
+
+                return loadedTypes;
+            }
+        }
+
+        private static bool ImplementsHandler(Type type)
+        {
+            if (typeof(IHandler).IsAssignableFrom(type))
+                return true;
+
+            return type.GetInterfaces()
+                .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IHandler<>));
         }
 
         public void Add(Type handlerType)
@@ -33,12 +68,11 @@ namespace ExecutionFlow
             // Check for IHandler (non-generic)
             if (typeof(IHandler).IsAssignableFrom(handlerType))
             {
-                _registrations.Add(new HandlerRegistration(
+                _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
                     handlerType: handlerType,
-                    eventType: null,
                     displayName: displayName,
                     cron: cron
-                ));
+                );
                 return;
             }
 
@@ -48,12 +82,11 @@ namespace ExecutionFlow
                 if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IHandler<>))
                 {
                     var eventType = iface.GetGenericArguments()[0];
-                    _registrations.Add(new HandlerRegistration(
+                    _eventHandlers[eventType] = new EventJobRegistryInfo(
                         handlerType: handlerType,
                         eventType: eventType,
-                        displayName: displayName,
-                        cron: cron
-                    ));
+                        displayName: displayName
+                    );
                     return;
                 }
             }

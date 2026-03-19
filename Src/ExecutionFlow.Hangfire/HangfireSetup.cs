@@ -1,5 +1,4 @@
 using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire.Dispatcher;
 using ExecutionFlow.Hangfire.Filters;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
@@ -24,7 +23,7 @@ namespace ExecutionFlow.Hangfire
             foreach (var kvp in options.JobAutoRunSettings)
             {
                 var handlerType = kvp.Key;
-                var isRegistered = RecurringHandlers.Any(r => r.HandlerType == handlerType);
+                var isRegistered = RecurringHandlers.ContainsKey(handlerType);
                 if (!isRegistered)
                     throw new InvalidOperationException(
                         $"SetJobAutoRun references type '{handlerType.FullName}' which is not registered as a recurring handler.");
@@ -72,7 +71,7 @@ namespace ExecutionFlow.Hangfire
             var recurringJobManager = new RecurringJobManager(jobStorage);
             var registeredIds = new HashSet<string>(StringComparer.Ordinal);
 
-            foreach (var registration in RecurringHandlers.Where(r => r.IsRecurring))
+            foreach (var registration in RecurringHandlers.OfType<RecurringJobRegistryInfo>())
             {
                 var jobId = JobIdGenerator.GenerateId(registration.HandlerType);
                 registeredIds.Add(jobId);
@@ -109,7 +108,7 @@ namespace ExecutionFlow.Hangfire
                 if (job == null)
                     return Array.Empty<JobFilter>();
 
-                var handlerType = job.GetHandlerType(_registry);
+                var handlerType = HangfireJobInfo.Create(job)?.GetHandlerType(_registry);
                 if (handlerType == null)
                     return Enumerable.Empty<JobFilter>();
 

@@ -1,5 +1,4 @@
 using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire.Dispatcher;
 using Hangfire;
 using System;
 
@@ -19,14 +18,15 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public string Publish<TEvent>(TEvent @event)
         {
-            var jobId = _jobClient.Enqueue<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, null, default));
+            var customName = @event is ICustomNameEvent customNameEvent ? customNameEvent.CustomName : null;
+
+            var jobId = _jobClient.Enqueue<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default));
 
             if (@event is ICustomIdEvent customIdEvent)
             {
-                var customId = customIdEvent.GetCustomId();
                 using (var connection = _jobStorage.GetConnection())
                 {
-                    connection.SetJobParameter(jobId, EventId, customId);
+                    connection.SetJobParameter(jobId, EventId, customIdEvent.CustomId);
                 }
             }
 

@@ -1,6 +1,6 @@
 using ExecutionFlow.Abstractions;
+using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.Client;
-using Hangfire.Common;
 using Hangfire.States;
 using System;
 using System.Collections.Generic;
@@ -25,7 +25,7 @@ namespace ExecutionFlow.Hangfire.Filters
             if (!IsAutoScheduledRecurringJob(context.Parameters))
                 return;
 
-            if (ShouldBlock(context.Job.GetHandlerType(_handlerRegistry)))
+            if (ShouldBlock(HangfireJobInfo.Create(context.Job).GetHandlerType(_handlerRegistry)))
                 context.Canceled = true;
         }
 
@@ -40,7 +40,7 @@ namespace ExecutionFlow.Hangfire.Filters
             if (!IsRecurringJob(context) || IsManuallyTriggered(context))
                 return;
 
-            if (ShouldBlock(context.BackgroundJob.Job.GetHandlerType(_handlerRegistry)))
+            if (ShouldBlock(HangfireJobInfo.Create(context.BackgroundJob.Job)?.GetHandlerType(_handlerRegistry)))
                 context.CandidateState = new DeletedState();
         }
 

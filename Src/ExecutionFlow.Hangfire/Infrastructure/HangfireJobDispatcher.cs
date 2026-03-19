@@ -1,12 +1,11 @@
 using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using Hangfire.Server;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ExecutionFlow.Hangfire.Dispatcher
+namespace ExecutionFlow.Hangfire.Infrastructure
 {
     internal class HangfireJobDispatcher
     {
@@ -28,12 +27,12 @@ namespace ExecutionFlow.Hangfire.Dispatcher
 
             var logger = new HangfireExecutionLogger(performContext);
             var context = new FlowContext(logger);
-            context.Items["PerformContext"] = performContext;
+            context.Items[ContextConsts.Name] = performContext;
 
             await handler.HandleAsync(context, ct);
         }
 
-        public async Task DispatchEventAsync<TEvent>(TEvent @event, PerformContext performContext, CancellationToken ct)
+        public async Task DispatchEventAsync<TEvent>(TEvent @event, string eventCustomName, PerformContext performContext, CancellationToken ct)
         {
             var eventType = typeof(TEvent);
             if (!_executionRegistry.EventHandlers.TryGetValue(eventType, out var handlerInfo))
@@ -46,7 +45,8 @@ namespace ExecutionFlow.Hangfire.Dispatcher
             var logger = new HangfireExecutionLogger(performContext);
             using (var context = CreateEvent(@event, performContext, logger))
             {
-                context.Items["PerformContext"] = performContext;
+                context.Items[ContextConsts.Name] = performContext;
+                context.Items[ContextConsts.EventName] = eventCustomName;
                 await handler.HandleAsync(context, ct);
             }
         }
@@ -59,7 +59,7 @@ namespace ExecutionFlow.Hangfire.Dispatcher
             });
 
             if (@event is ICustomIdEvent customIdEvent)
-                context.SetCustomId(customIdEvent.GetCustomId());
+                context.SetCustomId(customIdEvent.CustomId);
 
             return context;
         }

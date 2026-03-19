@@ -1,6 +1,6 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
-using HangfireJobDispatcher = ExecutionFlow.Hangfire.Dispatcher.HangfireJobDispatcher;
+using HangfireJobDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.Storage;
@@ -48,7 +48,7 @@ public class ExecutionManagerTests
     private static Job CreateGenericJob<TEvent>()
     {
         return Job.FromExpression<HangfireJobDispatcher>(
-            x => x.DispatchEventAsync<TEvent>(default!, null, default));
+            x => x.DispatchEventAsync<TEvent>(default!, null, null, default));
     }
 
     [Fact]

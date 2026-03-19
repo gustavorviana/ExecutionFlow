@@ -1,22 +1,18 @@
-using System;
+﻿using System;
 
 namespace ExecutionFlow.Abstractions
 {
-    public class HandlerRegistration
+    public class EventJobRegistryInfo : IJobRegistryInfo
     {
         public Type HandlerType { get; }
         public Type EventType { get; }
-        public bool IsRecurring { get; }
         public string DisplayName { get; }
-        public string Cron { get; }
 
-        public HandlerRegistration(Type handlerType, Type eventType, string displayName, string cron)
+        public EventJobRegistryInfo(Type handlerType, Type eventType, string displayName)
         {
             HandlerType = handlerType;
             EventType = eventType;
-            IsRecurring = eventType == null;
             DisplayName = displayName;
-            Cron = cron;
         }
     }
 }
