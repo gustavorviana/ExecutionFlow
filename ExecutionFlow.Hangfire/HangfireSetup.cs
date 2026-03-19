@@ -33,10 +33,13 @@ namespace ExecutionFlow.Hangfire
             return this;
         }
 
-        public IDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null)
+        public IDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, JobActivator jobActivator = null)
         {
             if (_dispatcher != null)
                 return _dispatcher;
+
+            if (jobActivator == null)
+                jobActivator = JobActivator.Current;
 
             if (jobStorage == null)
                 jobStorage = JobStorage.Current;
@@ -44,7 +47,7 @@ namespace ExecutionFlow.Hangfire
             if (jobClient == null)
                 jobClient = new BackgroundJobClient(jobStorage);
 
-            GlobalJobFilters.Filters.Add(new HangfireStateFilter(StateHandlerTypes.Select(Activator.CreateInstance).ToArray()));
+            GlobalJobFilters.Filters.Add(new HangfireStateFilter(jobActivator, StateHandlerTypes));
             GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(Options.AutoRunRecurring, Options.JobAutoRunSettings));
             RegisterRecurring(new RecurringJobManager(jobStorage));
             return _dispatcher = new HangfireDispatcher(jobClient, jobStorage);

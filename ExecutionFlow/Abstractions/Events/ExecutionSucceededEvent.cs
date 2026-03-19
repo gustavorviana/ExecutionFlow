@@ -6,8 +6,8 @@ namespace ExecutionFlow.Abstractions.Events
     {
         public TimeSpan Duration { get; }
 
-        public ExecutionSucceededEvent(string jobId, string displayName, string customId, Type handlerType, TimeSpan duration)
-            : base(jobId, displayName, customId, handlerType)
+        public ExecutionSucceededEvent(string jobId, string customId, Type handlerType, TimeSpan duration)
+            : base(jobId, customId, handlerType)
         {
             Duration = duration;
         }

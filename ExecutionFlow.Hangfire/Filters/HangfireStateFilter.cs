@@ -1,5 +1,6 @@
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Infrastructure;
+using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
 using System;
@@ -10,28 +11,19 @@ namespace ExecutionFlow.Hangfire.Filters
 {
     public class HangfireStateFilter : IElectStateFilter
     {
-        private readonly IReadOnlyList<IOnEnqueued> _onEnqueued;
-        private readonly IReadOnlyList<IOnProcessing> _onProcessing;
-        private readonly IReadOnlyList<IOnSucceeded> _onSucceeded;
-        private readonly IReadOnlyList<IOnFailed> _onFailed;
-        private readonly IReadOnlyList<IOnCancelled> _onCancelled;
-        private readonly IReadOnlyList<IOnRetrying> _onRetrying;
+        private readonly IReadOnlyList<Type> _stateHandlers;
+        private readonly JobActivator _activator;
 
-        public HangfireStateFilter(IReadOnlyList<object> stateHandlers)
+        public HangfireStateFilter(JobActivator activator, IReadOnlyList<Type> stateHandlers)
         {
-            _onEnqueued = stateHandlers.OfType<IOnEnqueued>().ToList();
-            _onProcessing = stateHandlers.OfType<IOnProcessing>().ToList();
-            _onSucceeded = stateHandlers.OfType<IOnSucceeded>().ToList();
-            _onFailed = stateHandlers.OfType<IOnFailed>().ToList();
-            _onCancelled = stateHandlers.OfType<IOnCancelled>().ToList();
-            _onRetrying = stateHandlers.OfType<IOnRetrying>().ToList();
+            _activator = activator;
+            _stateHandlers = stateHandlers;
         }
 
         public void OnStateElection(ElectStateContext context)
         {
             var candidateState = context.CandidateState;
             var jobId = context.BackgroundJob.Id;
-            var displayName = GetDisplayName(context.BackgroundJob.Job);
             var customId = GetCustomId(context, jobId);
             var handlerType = GetHandlerType(context.BackgroundJob.Job);
 
@@ -40,55 +32,58 @@ namespace ExecutionFlow.Hangfire.Filters
                 if (IsRetry(context))
                 {
                     var attemptNumber = GetAttemptNumber(context);
-                    var retryEvent = new ExecutionRetryingEvent(jobId, displayName, customId, handlerType, attemptNumber);
-                    foreach (var handler in _onRetrying)
+                    var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber);
+                    foreach (var handler in GetAllInstancesOf<IOnRetrying>())
                         handler.OnRetrying(retryEvent);
                 }
                 else
                 {
-                    var executionEvent = new ExecutionEvent(jobId, displayName, customId, handlerType);
-                    foreach (var handler in _onEnqueued)
+                    var executionEvent = new ExecutionEvent(jobId, customId, handlerType);
+                    foreach (var handler in GetAllInstancesOf<IOnEnqueued>())
                         handler.OnEnqueued(executionEvent);
                 }
             }
             else if (candidateState is ProcessingState)
             {
-                var executionEvent = new ExecutionEvent(jobId, displayName, customId, handlerType);
-                foreach (var handler in _onProcessing)
+                var executionEvent = new ExecutionEvent(jobId, customId, handlerType);
+                foreach (var handler in GetAllInstancesOf<IOnProcessing>())
                     handler.OnProcessing(executionEvent);
             }
             else if (candidateState is SucceededState)
             {
                 var duration = GetDuration(context);
-                var succeededEvent = new ExecutionSucceededEvent(jobId, displayName, customId, handlerType, duration);
-                foreach (var handler in _onSucceeded)
+                var succeededEvent = new ExecutionSucceededEvent(jobId, customId, handlerType, duration);
+                foreach (var handler in GetAllInstancesOf<IOnSucceeded>())
                     handler.OnSucceeded(succeededEvent);
             }
             else if (candidateState is FailedState failedState)
             {
-                var failedEvent = new ExecutionFailedEvent(jobId, displayName, customId, handlerType, failedState.Exception);
-                foreach (var handler in _onFailed)
+                var failedEvent = new ExecutionFailedEvent(jobId, customId, handlerType, failedState.Exception);
+                foreach (var handler in GetAllInstancesOf<IOnFailed>())
                     handler.OnFailed(failedEvent);
             }
             else if (candidateState is DeletedState)
             {
-                var executionEvent = new ExecutionEvent(jobId, displayName, customId, handlerType);
-                foreach (var handler in _onCancelled)
+                var executionEvent = new ExecutionEvent(jobId, customId, handlerType);
+                foreach (var handler in GetAllInstancesOf<IOnCancelled>())
                     handler.OnCancelled(executionEvent);
             }
             else if (candidateState is ScheduledState && IsRetry(context))
             {
                 var attemptNumber = GetAttemptNumber(context);
-                var retryEvent = new ExecutionRetryingEvent(jobId, displayName, customId, handlerType, attemptNumber);
-                foreach (var handler in _onRetrying)
+                var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber);
+                foreach (var handler in GetAllInstancesOf<IOnRetrying>())
                     handler.OnRetrying(retryEvent);
             }
         }
 
-        private static string GetDisplayName(Job job)
+        private IEnumerable<TState> GetAllInstancesOf<TState>()
         {
-            if (job == null) return string.Empty;
-            return job.ToString();
+            var stateType = typeof(TState);
+            return _stateHandlers
+                .Where(x => x.IsAssignableFrom(stateType))
+                .Select(_activator.ActivateJob)
+                .Cast<TState>();
         }
 
         private static string GetCustomId(ElectStateContext context, string jobId)

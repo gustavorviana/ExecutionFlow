@@ -7,16 +7,17 @@
   <Folder Name="/Examples/">
     <Project Path="Examples/ExecutionFlow.Examples.Aspire/ExecutionFlow.Examples.Aspire.AppHost/ExecutionFlow.Examples.AppHost.csproj" />
     <Project Path="Examples/ExecutionFlow.Examples.Aspire/ExecutionFlow.Examples.Aspire.ServiceDefaults/ExecutionFlow.Examples.ServiceDefaults.csproj" />
-    <Project Path="Examples/ExecutionFlow.Examples.Shared/ExecutionFlow.Examples.Shared.csproj" />
     <Project Path="Examples/ExecutionFlow.Examples.ConsumerWithoutDi/ExecutionFlow.Examples.ConsumerWithoutDi.csproj" />
     <Project Path="Examples/ExecutionFlow.Examples.Handlers/ExecutionFlow.Examples.Handlers.csproj" Id="ed9b4ea1-37a7-430c-9de6-c849dd686d35" />
     <Project Path="Examples/ExecutionFlow.Examples.Producer/ExecutionFlow.Examples.Producer.csproj" />
+    <Project Path="Examples/ExecutionFlow.Examples.Shared/ExecutionFlow.Examples.Shared.csproj" />
     <Project Path="ExecutionFlow.Examples.Consumer/ExecutionFlow.Examples.Consumer.csproj" />
   </Folder>
   <Folder Name="/Src/">
     <Project Path="ExecutionFlow.Hangfire.Console/ExecutionFlow.Hangfire.Console.csproj" />
     <Project Path="ExecutionFlow.Hangfire/ExecutionFlow.Hangfire.csproj" />
     <Project Path="ExecutionFlow/ExecutionFlow.csproj" />
+    <Project Path="Src/ExecutionFlow.Hangfire.DependencyInjection/ExecutionFlow.Hangfire.DependencyInjection.csproj" Id="2974a71b-abc4-43a4-bdc1-3bfbf98c42b2" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="ExecutionFlow.Tests/ExecutionFlow.Tests.csproj" />

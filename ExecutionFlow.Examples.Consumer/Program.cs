@@ -1,6 +1,5 @@
-using ExecutionFlow.Abstractions;
 using ExecutionFlow.Examples.Handlers;
-using ExecutionFlow.Hangfire;
+using ExecutionFlow.Hangfire.DependencyInjection;
 using Hangfire;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -15,19 +14,13 @@ builder.Services.AddHangfire(config =>
 
 builder.Services.AddHangfireServer();
 
-// Register handlers in DI
-builder.Services.AddTransient<SendMessageHandler>();
-builder.Services.AddTransient<HeartbeatHandler>();
-
-// Register ExecutionFlow setup (HangfireSetup implements IExecutionFlowSetup)
-builder.Services.AddSingleton<HangfireSetup>();
-builder.Services.AddSingleton<IExecutionFlowRegistry>(sp => sp.GetRequiredService<HangfireSetup>());
+// Register ExecutionFlow with all handlers via DI
+builder.Services.AddHangfireToExecutionFlow(options =>
+{
+    options.Scan(typeof(IHandlerMark).Assembly);
+});
 
 var host = builder.Build();
-
-// Configure — single call, scans handlers + sets up Hangfire
-var setup = host.Services.GetRequiredService<HangfireSetup>();
-setup.Configure(options => options.Scan(typeof(IHandlerMark).Assembly));
 
 Console.WriteLine("===========================================");
 Console.WriteLine("  ExecutionFlow Console Worker Started");
