@@ -28,16 +28,16 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
             foreach (var stateHandlerType in setup.StateHandlerTypes)
                 services.AddTransient(stateHandlerType);
 
-            services.AddSingleton<IHangfireJobName>(setup);
+            services.AddSingleton(typeof(IJobIdGenerator), setup.Options.JobIdGeneratorType);
+            services.AddSingleton(typeof(IHangfireJobName), setup.Options.JobNameType);
             services.AddSingleton<IExecutionFlowRegistry>(setup);
 
             services.AddSingleton(sp =>
             {
                 var jobClient = sp.GetRequiredService<IBackgroundJobClient>();
                 var jobStorage = sp.GetRequiredService<JobStorage>();
-                var jobActivator = sp.GetRequiredService<JobActivator>();
 
-                return setup.Build(jobClient, jobStorage, jobActivator);
+                return setup.Build(jobClient, jobStorage, sp);
             });
 
             services.AddSingleton<IExecutionManager>(sp =>

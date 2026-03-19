@@ -16,6 +16,7 @@ namespace ExecutionFlow
         public void Scan(Assembly assembly)
         {
             ThrowIfLocked();
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
             var scanned = ExecutionFlowScanner.ScanAssembly(assembly);
             _registrations.AddRange(scanned);
         }
@@ -23,6 +24,7 @@ namespace ExecutionFlow
         public void Add(Type handlerType)
         {
             ThrowIfLocked();
+            if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
             var recurringAttr = handlerType.GetCustomAttribute<Attributes.RecurringAttribute>();
             var displayNameAttr = handlerType.GetCustomAttribute<System.ComponentModel.DisplayNameAttribute>();
             var displayName = displayNameAttr?.DisplayName ?? handlerType.Name;

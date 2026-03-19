@@ -12,10 +12,12 @@ using System.Threading;
 
 namespace ExecutionFlow.Hangfire
 {
-    public class HangfireSetup : ExecutionFlowSetup<HangfireOptions>, IHangfireJobName
+    public class HangfireSetup : ExecutionFlowSetup<HangfireOptions>
     {
         private IDispatcher _dispatcher;
         public IReadOnlyList<Type> StateHandlerTypes => Options?.StateHandlerTypes;
+        public IJobIdGenerator JobIdGenerator { get; internal set; }
+        public IHangfireJobName JobNameGenerator { get; internal set; }
 
         protected override void OnConfigured(HangfireOptions options)
         {
@@ -35,13 +37,22 @@ namespace ExecutionFlow.Hangfire
             return this;
         }
 
-        public IDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, JobActivator jobActivator = null)
+        public IDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, IServiceProvider serviceProvider = null)
         {
             if (_dispatcher != null)
                 return _dispatcher;
 
-            if (jobActivator == null)
-                jobActivator = JobActivator.Current;
+            if (serviceProvider == null)
+                serviceProvider = (JobActivator.Current as FlowEngineJobActivator) ?? new FlowEngineJobActivator(this);
+
+            if (serviceProvider is FlowEngineJobActivator flowActivator)
+            {
+                flowActivator.AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType);
+                flowActivator.AddSingleton<IHangfireJobName>(Options.JobNameType);
+            }
+
+            JobIdGenerator = (IJobIdGenerator)serviceProvider.GetService(typeof(IJobIdGenerator));
+            JobNameGenerator = (IHangfireJobName)serviceProvider.GetService(typeof(IHangfireJobName));
 
             if (jobStorage == null)
                 jobStorage = JobStorage.Current;
@@ -49,7 +60,7 @@ namespace ExecutionFlow.Hangfire
             if (jobClient == null)
                 jobClient = new BackgroundJobClient(jobStorage);
 
-            GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, jobActivator, StateHandlerTypes));
+            GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes));
             GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(this, Options.AutoRunRecurring, Options.JobAutoRunSettings));
             JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this));
             RegisterRecurring(jobStorage);
@@ -59,11 +70,11 @@ namespace ExecutionFlow.Hangfire
         private void RegisterRecurring(JobStorage jobStorage)
         {
             var recurringJobManager = new RecurringJobManager(jobStorage);
-            var registeredIds = new HashSet<string>();
+            var registeredIds = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var registration in RecurringHandlers.Where(r => r.IsRecurring))
             {
-                var jobId = registration.HandlerType.FullName;
+                var jobId = JobIdGenerator.GenerateId(registration.HandlerType);
                 registeredIds.Add(jobId);
 
                 recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(
@@ -84,31 +95,9 @@ namespace ExecutionFlow.Hangfire
             }
         }
 
-        public string GetName(Job job)
-        {
-            var handlerInfo = GetEventInfo(job);
-            if (handlerInfo != null)
-                return string.IsNullOrEmpty(handlerInfo.DisplayName) ? handlerInfo.HandlerType.FullName : handlerInfo.DisplayName;
-
-            if (job.Args.Count == 3 && job.Args[1] is Type jobType)
-                return jobType.FullName;
-
-            return $"{job.Method.DeclaringType.FullName}.{job.Method.Name}";
-        }
-
-        private HandlerRegistration GetEventInfo(Job job)
-        {
-            if (job.TryGetEventType(out var eventType))
-                return EventHandlers.TryGetValue(eventType, out var eventHandler) ? eventHandler : null;
-
-            var handlerType = job.GetRecurringHandlerType(this);
-            return handlerType == null ? null : RecurringHandlers.FirstOrDefault(x => x.HandlerType.FullName == handlerType.FullName);
-        }
-
         private class HandlerJobFilterProvider : IJobFilterProvider
         {
             private readonly IExecutionFlowRegistry _registry;
-
 
             public HandlerJobFilterProvider(IExecutionFlowRegistry registry)
             {

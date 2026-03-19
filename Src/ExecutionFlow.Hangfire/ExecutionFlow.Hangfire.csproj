@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
 		<TargetFramework>netstandard2.0</TargetFramework>
@@ -16,5 +16,6 @@
 	<ItemGroup>
 		<InternalsVisibleTo Include="ExecutionFlow.Tests"/>
 		<InternalsVisibleTo Include="ExecutionFlow.Hangfire.Tests"/>
+		<InternalsVisibleTo Include="ExecutionFlow.Hangfire.DependencyInjection"/>
 	</ItemGroup>
 </Project>

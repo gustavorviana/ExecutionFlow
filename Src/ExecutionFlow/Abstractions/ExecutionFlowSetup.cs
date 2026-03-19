@@ -10,7 +10,7 @@ namespace ExecutionFlow.Abstractions
 
         public IReadOnlyList<HandlerRegistration> RecurringHandlers { get; private set; } = new List<HandlerRegistration>();
 
-        protected TOptions Options { get; } = new TOptions();
+        public TOptions Options { get; } = new TOptions();
 
         public void Configure(Action<TOptions> configure)
         {
@@ -20,7 +20,7 @@ namespace ExecutionFlow.Abstractions
             EventHandlers = Options
                 .HandlerTypes
                 .Where(x => !x.IsRecurring)
-                .ToDictionary(x => x.EventType, x => x,new TypeEqualityComparer());
+                .ToDictionary(x => x.EventType, x => x, new TypeEqualityComparer());
 
             RecurringHandlers = Options
                 .HandlerTypes

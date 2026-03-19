@@ -1,7 +1,6 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Infrastructure;
-using Hangfire;
 using Hangfire.States;
 using System;
 using System.Collections.Generic;
@@ -13,11 +12,11 @@ namespace ExecutionFlow.Hangfire.Filters
     {
         private readonly IReadOnlyList<Type> _stateHandlers;
         private readonly IExecutionFlowRegistry _handlerRegistry;
-        private readonly JobActivator _activator;
+        private readonly IServiceProvider _serviceProvider;
 
-        public HangfireStateFilter(IExecutionFlowRegistry handlerRegistry, JobActivator activator, IReadOnlyList<Type> stateHandlers)
+        public HangfireStateFilter(IExecutionFlowRegistry handlerRegistry, IServiceProvider serviceProvider, IReadOnlyList<Type> stateHandlers)
         {
-            _activator = activator;
+            _serviceProvider = serviceProvider;
             _stateHandlers = stateHandlers;
             _handlerRegistry = handlerRegistry;
         }
@@ -84,7 +83,7 @@ namespace ExecutionFlow.Hangfire.Filters
             var stateType = typeof(TState);
             return _stateHandlers
                 .Where(x => x.IsAssignableFrom(stateType))
-                .Select(_activator.ActivateJob)
+                .Select(_serviceProvider.GetService)
                 .Cast<TState>();
         }
 

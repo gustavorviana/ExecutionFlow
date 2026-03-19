@@ -1,6 +1,5 @@
 ﻿using ExecutionFlow.Abstractions;
 using Hangfire.Common;
-using Microsoft.Win32;
 using System;
 
 namespace ExecutionFlow.Hangfire
@@ -15,7 +14,7 @@ namespace ExecutionFlow.Hangfire
             if (TryGetEventHandler(job, registry, out var eventHandlerType))
                 return eventHandlerType;
 
-            return GetRecurringHandlerType(job, registry);
+            return GetRecurringHandlerType(job);
         }
 
         public static bool TryGetEventHandler(this Job job, IExecutionFlowRegistry registry, out Type eventHandlerType)
@@ -47,7 +46,7 @@ namespace ExecutionFlow.Hangfire
             return job?.Method?.IsGenericMethod == true;
         }
 
-        public static Type GetRecurringHandlerType(this Job job, IExecutionFlowRegistry registry)
+        public static Type GetRecurringHandlerType(this Job job)
         {
             if (job?.Args == null || job.Args.Count != 3)
                 return null;

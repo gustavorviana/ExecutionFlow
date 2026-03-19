@@ -7,6 +7,8 @@ namespace ExecutionFlow.Hangfire
     {
         private readonly List<Type> _stateHandlerTypes = new List<Type>();
         private readonly Dictionary<Type, bool> _jobAutoRun = new Dictionary<Type, bool>();
+        internal Type JobNameType { get; private set; } = typeof(DefaultHangfireJobName);
+        internal Type JobIdGeneratorType { get; private set; } = typeof(DefaultRecurringServiceIdGenerator);
 
         public bool AutoRunRecurring { get; set; } = true;
         public bool RemoveOrphanRecurringJobs { get; set; } = false;
@@ -23,6 +25,7 @@ namespace ExecutionFlow.Hangfire
         public void SetJobAutoRun(Type handlerType, bool autoRun)
         {
             ThrowIfLocked();
+            if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
             _jobAutoRun[handlerType] = autoRun;
         }
 
@@ -34,7 +37,33 @@ namespace ExecutionFlow.Hangfire
         public void AddStateHandler(Type stateHandlerType)
         {
             ThrowIfLocked();
+            if (stateHandlerType == null) throw new ArgumentNullException(nameof(stateHandlerType));
             _stateHandlerTypes.Add(stateHandlerType);
+        }
+
+
+        public void SetJobName<T>()
+        {
+            SetJobName(typeof(T));
+        }
+
+        public void SetJobName(Type jobNameType)
+        {
+            ThrowIfLocked();
+            if (jobNameType == null) throw new ArgumentNullException(nameof(jobNameType));
+            JobNameType = jobNameType;
+        }
+
+        public void SetJobIdGeneratorType<T>()
+        {
+            SetJobIdGeneratorType(typeof(T));
+        }
+
+        public void SetJobIdGeneratorType(Type jobIdGeneratorType)
+        {
+            ThrowIfLocked();
+            if (jobIdGeneratorType == null) throw new ArgumentNullException(nameof(jobIdGeneratorType));
+            JobIdGeneratorType = jobIdGeneratorType;
         }
     }
 }
