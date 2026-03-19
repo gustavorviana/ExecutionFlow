@@ -1,5 +1,6 @@
 ﻿using ExecutionFlow.Abstractions;
 using Hangfire.Common;
+using Microsoft.Win32;
 using System;
 
 namespace ExecutionFlow.Hangfire
@@ -19,13 +20,25 @@ namespace ExecutionFlow.Hangfire
 
         public static bool TryGetEventHandler(this Job job, IExecutionFlowRegistry registry, out Type eventHandlerType)
         {
-            if (!IsEventHandler(job) || !registry.EventHandlers.TryGetValue(job.Method.GetGenericArguments()[0], out var eventHandler))
+            if (!TryGetEventType(job, out var eventType) || !registry.EventHandlers.TryGetValue(eventType, out var eventHandler))
             {
                 eventHandlerType = null;
                 return false;
             }
 
             eventHandlerType = eventHandler.HandlerType;
+            return true;
+        }
+
+        public static bool TryGetEventType(this Job job, out Type eventHandlerType)
+        {
+            if (!IsEventHandler(job))
+            {
+                eventHandlerType = null;
+                return false;
+            }
+
+            eventHandlerType = job.Method.GetGenericArguments()[0];
             return true;
         }
 

@@ -17,7 +17,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _jobStorage = jobStorage ?? throw new ArgumentNullException(nameof(jobStorage));
         }
 
-        public string Enqueue<TEvent>(TEvent @event)
+        public string Publish<TEvent>(TEvent @event)
         {
             var jobId = _jobClient.Enqueue<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, null, default));
 

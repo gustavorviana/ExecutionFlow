@@ -2,6 +2,7 @@ using ExecutionFlow.Examples.Handlers;
 using ExecutionFlow.Hangfire;
 using ExecutionFlow.Hangfire.DependencyInjection;
 using Hangfire;
+using Hangfire.Console;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,7 +12,9 @@ var connectionString = builder.Configuration.GetConnectionString("hangfire")!;
 
 // Hangfire server (processes jobs from the queue)
 builder.Services.AddHangfire(config =>
-    config.UseSqlServerStorage(connectionString));
+    config
+        .UseSqlServerStorage(connectionString)
+        .UseConsole());
 
 builder.Services.AddHangfireServer();
 
@@ -32,7 +35,8 @@ Console.WriteLine("===========================================");
 
 app.UseHangfireDashboard("", options: new DashboardOptions
 {
-    DisplayNameFunc = (context, job) => app.Services.GetRequiredService<IHangfireJobName>().GetName(job),
+    DisplayNameFunc = (context, job) => 
+    app.Services.GetRequiredService<IHangfireJobName>().GetName(job),
 });
 
 app.Run();

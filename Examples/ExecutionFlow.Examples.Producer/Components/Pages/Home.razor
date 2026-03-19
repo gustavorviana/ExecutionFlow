@@ -75,7 +75,7 @@
         sending = true;
 
         var sentAt = DateTime.UtcNow;
-        var jobId = Dispatcher.Enqueue(new SendMessageEvent
+        var jobId = Dispatcher.Publish(new SendMessageEvent
         {
             From = from,
             Content = content,

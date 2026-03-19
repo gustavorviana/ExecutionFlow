@@ -28,7 +28,7 @@ public class DispatcherTests
 
         var dispatcher = new HangfireDispatcher(_jobClient, _storage);
 
-        dispatcher.Enqueue(new TestEvent());
+        dispatcher.Publish(new TestEvent());
 
         _connection.DidNotReceiveWithAnyArgs().SetJobParameter(default, default, default);
     }
@@ -40,7 +40,7 @@ public class DispatcherTests
 
         var dispatcher = new HangfireDispatcher(_jobClient, _storage);
 
-        dispatcher.Enqueue(new TestNamedEvent());
+        dispatcher.Publish(new TestNamedEvent());
 
         _connection.Received(1).SetJobParameter("job-100", HangfireDispatcher.EventId, "named-job-1");
     }
@@ -52,7 +52,7 @@ public class DispatcherTests
 
         var dispatcher = new HangfireDispatcher(_jobClient, _storage);
 
-        var jobId = dispatcher.Enqueue(new TestEvent());
+        var jobId = dispatcher.Publish(new TestEvent());
 
         Assert.Equal("job-42", jobId);
     }

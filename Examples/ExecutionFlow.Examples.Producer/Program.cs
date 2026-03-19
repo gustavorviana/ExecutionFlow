@@ -46,7 +46,7 @@ app.MapPost("/api/messages", (MessageRequest request, IDispatcher dispatcher) =>
         SentAt = DateTime.UtcNow
     };
 
-    var jobId = dispatcher.Enqueue(@event);
+    var jobId = dispatcher.Publish(@event);
 
     return Results.Ok(new { jobId, message = "Message enqueued successfully." });
 });

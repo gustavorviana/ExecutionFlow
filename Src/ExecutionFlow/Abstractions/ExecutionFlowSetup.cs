@@ -20,7 +20,7 @@ namespace ExecutionFlow.Abstractions
             EventHandlers = Options
                 .HandlerTypes
                 .Where(x => !x.IsRecurring)
-                .ToDictionary(x => x.EventType, x => x);
+                .ToDictionary(x => x.EventType, x => x,new TypeEqualityComparer());
 
             RecurringHandlers = Options
                 .HandlerTypes

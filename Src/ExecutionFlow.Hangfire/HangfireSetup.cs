@@ -98,7 +98,7 @@ namespace ExecutionFlow.Hangfire
 
         private HandlerRegistration GetEventInfo(Job job)
         {
-            if (job.TryGetEventHandler(this, out var eventType))
+            if (job.TryGetEventType(out var eventType))
                 return EventHandlers.TryGetValue(eventType, out var eventHandler) ? eventHandler : null;
 
             var handlerType = job.GetRecurringHandlerType(this);
