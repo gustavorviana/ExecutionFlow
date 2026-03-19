@@ -25,6 +25,9 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
             foreach (var registration in setup.EventHandlers.Values)
                 services.AddTransient(registration.HandlerType);
 
+            foreach (var stateHandlerType in setup.StateHandlerTypes)
+                services.AddTransient(stateHandlerType);
+
             services.AddSingleton<IHangfireJobName>(setup);
             services.AddSingleton<IExecutionFlowRegistry>(setup);
 
