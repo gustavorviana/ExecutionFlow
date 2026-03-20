@@ -3,7 +3,7 @@ using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
 using ExecutionFlow.Hangfire.Console;
 
-namespace ExecutionFlow.Examples.Handlers;
+namespace ExecutionFlow.Examples.Handlers.Recurring;
 
 [Recurring("*/5 * * * *")]
 [DisplayName("Data Sync")]

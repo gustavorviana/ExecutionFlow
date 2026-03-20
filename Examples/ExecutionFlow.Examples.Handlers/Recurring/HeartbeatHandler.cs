@@ -1,8 +1,8 @@
-using System.ComponentModel;
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
+using System.ComponentModel;
 
-namespace ExecutionFlow.Examples.Handlers;
+namespace ExecutionFlow.Examples.Handlers.Recurring;
 
 [Recurring("* * * * *")]
 [DisplayName("Heartbeat")]

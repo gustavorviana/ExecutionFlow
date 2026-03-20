@@ -7,13 +7,10 @@ namespace ExecutionFlow.Hangfire
     {
         private readonly List<Type> _stateHandlerTypes = new List<Type>();
         internal Dictionary<Type, bool> RecurringAutoRun { get; } = new Dictionary<Type, bool>();
-        internal Dictionary<Type, bool> RecurringDisableConcurrent { get; } = new Dictionary<Type, bool>();
         internal Type JobNameType { get; private set; } = typeof(DefaultHangfireJobName);
         internal Type JobIdGeneratorType { get; private set; } = typeof(DefaultRecurringServiceIdGenerator);
 
         public bool GlobalRecurringAutoRun { get; set; } = true;
-        public bool GlobalDisableConcurrentExecution { get; set; } = false;
-        public TimeSpan ConcurrentExecutionTimeout { get; set; } = TimeSpan.Zero;
         internal Dictionary<Type, object> OptionValues { get; } = new Dictionary<Type, object>();
 
         public bool RemoveOrphanRecurringJobs { get; set; } = false;
@@ -30,18 +27,6 @@ namespace ExecutionFlow.Hangfire
             ThrowIfLocked();
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
             RecurringAutoRun[handlerType] = autoRun;
-        }
-
-        public void SetDisableConcurrentExecution<T>(bool disable = true)
-        {
-            SetDisableConcurrentExecution(typeof(T), disable);
-        }
-
-        public void SetDisableConcurrentExecution(Type handlerType, bool disable = true)
-        {
-            ThrowIfLocked();
-            if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
-            RecurringDisableConcurrent[handlerType] = disable;
         }
 
         public void AddStateHandler<T>()

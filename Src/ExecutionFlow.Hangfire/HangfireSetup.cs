@@ -13,7 +13,7 @@ namespace ExecutionFlow.Hangfire
 {
     public class HangfireSetup : ExecutionFlowSetup<HangfireOptions>
     {
-        private IEventDispatcher _dispatcher;
+        private IHangfireDispatcher _dispatcher;
         private readonly object _buildLock = new object();
         public IReadOnlyList<Type> StateHandlerTypes => Options?.StateHandlerTypes;
         public IJobIdGenerator JobIdGenerator { get; internal set; }
@@ -28,14 +28,6 @@ namespace ExecutionFlow.Hangfire
                     throw new InvalidOperationException(
                         $"SetJobAutoRun references type '{handlerType.FullName}' which is not registered as a recurring handler.");
             }
-
-            foreach (var kvp in options.RecurringDisableConcurrent)
-            {
-                var handlerType = kvp.Key;
-                if (!RecurringHandlers.ContainsKey(handlerType))
-                    throw new InvalidOperationException(
-                        $"SetDisableConcurrentExecution references type '{handlerType.FullName}' which is not registered as a recurring handler.");
-            }
         }
 
         public HangfireSetup ConfigureActivator()
@@ -44,7 +36,7 @@ namespace ExecutionFlow.Hangfire
             return this;
         }
 
-        public IEventDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, IServiceProvider serviceProvider = null)
+        public IHangfireDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, IServiceProvider serviceProvider = null)
         {
             if (_dispatcher != null)
                 return _dispatcher;
@@ -71,10 +63,9 @@ namespace ExecutionFlow.Hangfire
 
                 GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes));
                 GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(this, Options));
-                GlobalJobFilters.Filters.Add(new HangfireNoConcurrentFilter(this, Options, jobStorage));
                 JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this));
                 RegisterRecurring(jobStorage);
-                return _dispatcher = new HangfireDispatcher(jobClient, jobStorage);
+                return _dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this);
             }
         }
 
@@ -90,7 +81,8 @@ namespace ExecutionFlow.Hangfire
             flowActivator.AddSingleton<IHangfireJobName>(Options.JobNameType);
             flowActivator.AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType);
             flowActivator.AddSingleton<IExecutionManager>(typeof(HangfireExecutionManager));
-            flowActivator.AddSingleton<IRecurringTrigger>(typeof(HangfireRecurringTrigger));
+            flowActivator.AddSingleton<IRecurringTrigger>(() => _dispatcher);
+            flowActivator.AddSingleton<IEventDispatcher>(() => _dispatcher);
         }
 
         private void RegisterRecurring(JobStorage jobStorage)

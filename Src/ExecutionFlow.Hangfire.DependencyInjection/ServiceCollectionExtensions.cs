@@ -55,13 +55,8 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
                 return new HangfireExecutionManager(jobClient, jobStorage);
             });
 
-            services.AddSingleton<IRecurringTrigger>(sp =>
-            {
-                var jobStorage = sp.GetRequiredService<JobStorage>();
-                var jobIdGenerator = sp.GetRequiredService<IJobIdGenerator>();
-                var registry = sp.GetRequiredService<IExecutionFlowRegistry>();
-                return new HangfireRecurringTrigger(jobStorage, jobIdGenerator, registry);
-            });
+            services.AddSingleton<IRecurringTrigger>(sp => sp.GetRequiredService<IHangfireDispatcher>());
+            services.AddSingleton<IEventDispatcher>(sp => sp.GetRequiredService<IHangfireDispatcher>());
 
             services.AddHostedService<HostedDi>();
 

@@ -1,16 +1,14 @@
 ﻿using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
-using System.ComponentModel;
 
-namespace ExecutionFlow.Examples.Handlers
+namespace ExecutionFlow.Examples.Handlers.Recurring
 {
-    [DisplayName("Auto Run Disabled")]
-    [Recurring("* * * * *")]
-    public class AutoRunDisabledHandler : IHandler
+    [Recurring("0 0 * * *")]
+    public class RecurringCleanupHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken)
         {
-            context.Log.Warning("Running");
+            context.Log.Info("Cleanup finished.");
             return Task.CompletedTask;
         }
     }

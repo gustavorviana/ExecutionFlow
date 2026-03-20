@@ -1,4 +1,5 @@
-﻿using ExecutionFlow.Hangfire;
+﻿using ExecutionFlow.Examples.Handlers.Recurring;
+using ExecutionFlow.Hangfire;
 using ExecutionFlow.Hangfire.Console;
 
 namespace ExecutionFlow.Examples.Handlers
