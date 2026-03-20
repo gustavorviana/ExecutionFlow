@@ -1,7 +1,6 @@
 ﻿using Hangfire.Storage.Monitoring;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
@@ -9,7 +8,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
     {
         private const int PageSize = 10;
 
-        public static IEnumerable<TDto> ReadAll<TDto>(string queueName, Func<string, int, int, JobList<TDto>> function)
+        public static IEnumerable<KeyValuePair<string, TDto>> ReadAll<TDto>(string queueName, Func<string, int, int, JobList<TDto>> function)
         {
             var from = 0;
             while (true)
@@ -18,7 +17,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 if (jobs == null || jobs.Count == 0)
                     break;
 
-                foreach (var job in jobs.Select(x => x.Value))
+                foreach (var job in jobs)
                     yield return job;
 
                 if (jobs.Count < PageSize)
@@ -28,7 +27,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             }
         }
 
-        public static IEnumerable<TDto> ReadAll<TDto>(Func<int, int, JobList<TDto>> function)
+        public static IEnumerable<KeyValuePair<string, TDto>> ReadAll<TDto>(Func<int, int, JobList<TDto>> function)
         {
             var from = 0;
             while (true)
@@ -37,7 +36,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 if (jobs == null || jobs.Count == 0)
                     break;
 
-                foreach (var job in jobs.Select(x => x.Value))
+                foreach (var job in jobs)
                     yield return job;
 
                 if (jobs.Count < PageSize)

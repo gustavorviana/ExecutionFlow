@@ -1,14 +1,15 @@
 using ExecutionFlow.Abstractions;
 using Hangfire;
-using Hangfire.Storage.Monitoring;
+using Hangfire.Common;
+using Hangfire.Storage;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
     public class HangfireExecutionManager : IExecutionManager
     {
-        private const int PageSize = 100;
         private readonly IBackgroundJobClient _jobClient;
         private readonly JobStorage _jobStorage;
 
@@ -21,28 +22,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         public bool IsRunning(string customId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
-            var from = 0;
 
-            while (true)
-            {
-                var jobs = monitoringApi.ProcessingJobs(from, PageSize);
-                if (jobs == null || jobs.Count == 0)
-                    break;
-
-                foreach (var job in jobs)
-                {
-                    var name = GetCustomId(job.Key);
-                    if (name == customId)
-                        return true;
-                }
-
-                if (jobs.Count < PageSize)
-                    break;
-
-                from += PageSize;
-            }
-
-            return false;
+            return InfraUtils
+                .ReadAll(monitoringApi.ProcessingJobs)
+                .Any(x => GetCustomId(x.Key) == customId);
         }
 
         public bool IsPending(string customId)
@@ -50,173 +33,70 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             var monitoringApi = _jobStorage.GetMonitoringApi();
             var queues = monitoringApi.Queues();
 
-            foreach (var queue in queues)
-            {
-                var from = 0;
-
-                while (true)
-                {
-                    var jobs = monitoringApi.EnqueuedJobs(queue.Name, from, PageSize);
-                    if (jobs == null || jobs.Count == 0)
-                        break;
-
-                    foreach (var job in jobs)
-                    {
-                        var name = GetCustomId(job.Key);
-                        if (name == customId)
-                            return true;
-                    }
-
-                    if (jobs.Count < PageSize)
-                        break;
-
-                    from += PageSize;
-                }
-            }
-
-            return false;
+            return queues
+                .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
+                .Any(x => GetCustomId(x.Key) == customId);
         }
 
         public void Cancel(string customId)
         {
             var jobId = FindJobId(customId);
             if (jobId != null)
-            {
                 _jobClient.Delete(jobId);
-            }
         }
 
         private string FindJobId(string customId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
-            // Check processing jobs
-            var from = 0;
-            while (true)
-            {
-                var jobs = monitoringApi.ProcessingJobs(from, PageSize);
-                if (jobs == null || jobs.Count == 0)
-                    break;
+            var processingID = InfraUtils
+                .ReadAll(monitoringApi.ProcessingJobs)
+                .FirstOrDefault(x => GetCustomId(x.Key) == customId)
+                .Key;
 
-                foreach (var job in jobs)
-                {
-                    var name = GetCustomId(job.Key);
-                    if (name == customId)
-                        return job.Key;
-                }
+            if (!string.IsNullOrEmpty(processingID))
+                return processingID;
 
-                if (jobs.Count < PageSize)
-                    break;
-
-                from += PageSize;
-            }
-
-            // Check enqueued jobs
             var queues = monitoringApi.Queues();
-            foreach (var queue in queues)
-            {
-                from = 0;
-                while (true)
-                {
-                    var jobs = monitoringApi.EnqueuedJobs(queue.Name, from, PageSize);
-                    if (jobs == null || jobs.Count == 0)
-                        break;
-
-                    foreach (var job in jobs)
-                    {
-                        var name = GetCustomId(job.Key);
-                        if (name == customId)
-                            return job.Key;
-                    }
-
-                    if (jobs.Count < PageSize)
-                        break;
-
-                    from += PageSize;
-                }
-            }
-
-            return null;
+            return queues
+                .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
+                .FirstOrDefault(x => GetCustomId(x.Key) == customId)
+                .Key;
         }
 
         public IEnumerable<JobInfo> GetJobs(JobState state)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
-            var results = new List<JobInfo>();
 
             switch (state)
             {
                 case JobState.Enqueued:
-                    foreach (var queue in monitoringApi.Queues())
-                    {
-                        var from = 0;
-                        while (true)
-                        {
-                            var jobs = monitoringApi.EnqueuedJobs(queue.Name, from, PageSize);
-                            if (jobs == null || jobs.Count == 0)
-                                break;
-
-                            foreach (var job in jobs)
-                                results.Add(BuildJobInfo(job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.EnqueuedAt));
-
-                            if (jobs.Count < PageSize)
-                                break;
-
-                            from += PageSize;
-                        }
-                    }
-                    break;
-
+                    return monitoringApi
+                        .Queues()
+                        .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
+                        .Select(job => BuildJobInfo(job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.EnqueuedAt));
                 case JobState.Processing:
-                    CollectJobs(monitoringApi.ProcessingJobs, results, state,
-                        v => v.StartedAt, v => v.Job, v => v.InvocationData);
-                    break;
-
+                    return InfraUtils
+                        .ReadAll(monitoringApi.ProcessingJobs)
+                        .Select(job => BuildJobInfo(job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.StartedAt));
                 case JobState.Succeeded:
-                    CollectJobs(monitoringApi.SucceededJobs, results, state,
-                        v => v.SucceededAt, v => v.Job, v => v.InvocationData);
-                    break;
-
+                    return InfraUtils
+                        .ReadAll(monitoringApi.SucceededJobs)
+                        .Select(job => BuildJobInfo(job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.SucceededAt));
                 case JobState.Failed:
-                    CollectJobs(monitoringApi.FailedJobs, results, state,
-                        v => v.FailedAt, v => v.Job, v => v.InvocationData);
-                    break;
-
+                    return InfraUtils
+                        .ReadAll(monitoringApi.FailedJobs)
+                        .Select(job => BuildJobInfo(job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.FailedAt));
                 case JobState.Cancelled:
-                    CollectJobs(monitoringApi.DeletedJobs, results, state,
-                        v => v.DeletedAt, v => v.Job, v => v.InvocationData);
-                    break;
-            }
-
-            return results;
-        }
-
-        private void CollectJobs<TDto>(
-            Func<int, int, JobList<TDto>> fetch,
-            List<JobInfo> results,
-            JobState state,
-            Func<TDto, DateTime?> getTimestamp,
-            Func<TDto, global::Hangfire.Common.Job> getJob,
-            Func<TDto, global::Hangfire.Storage.InvocationData> getInvocationData)
-        {
-            var from = 0;
-            while (true)
-            {
-                var jobs = fetch(from, PageSize);
-                if (jobs == null || jobs.Count == 0)
-                    break;
-
-                foreach (var job in jobs)
-                    results.Add(BuildJobInfo(job.Key, getJob(job.Value), getInvocationData(job.Value), state, getTimestamp(job.Value)));
-
-                if (jobs.Count < PageSize)
-                    break;
-
-                from += PageSize;
+                    return InfraUtils
+                        .ReadAll(monitoringApi.DeletedJobs)
+                        .Select(job => BuildJobInfo(job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.DeletedAt));
+                default:
+                    return Array.Empty<JobInfo>();
             }
         }
 
-        private JobInfo BuildJobInfo(string jobId, global::Hangfire.Common.Job job, global::Hangfire.Storage.InvocationData invocationData, JobState state, DateTime? timestamp)
+        private JobInfo BuildJobInfo(string jobId, Job job, InvocationData invocationData, JobState state, DateTime? timestamp)
         {
             var customId = GetCustomId(jobId);
 

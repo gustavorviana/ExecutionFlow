@@ -39,11 +39,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
         {
             var monitoring = _jobStorage.GetMonitoringApi();
 
-            if (InfraUtils.ReadAll(monitoring.ProcessingJobs).Any(x => IsRecurringType(x.Job, handlerType)))
+            if (InfraUtils.ReadAll(monitoring.ProcessingJobs).Any(x => IsRecurringType(x.Value.Job, handlerType)))
                 return true;
 
             foreach (var queue in monitoring.Queues())
-                if (InfraUtils.ReadAll(queue.Name, monitoring.EnqueuedJobs).Any(x => IsRecurringType(x.Job, handlerType)))
+                if (InfraUtils.ReadAll(queue.Name, monitoring.EnqueuedJobs).Any(x => IsRecurringType(x.Value.Job, handlerType)))
                     return true;
 
             return false;
