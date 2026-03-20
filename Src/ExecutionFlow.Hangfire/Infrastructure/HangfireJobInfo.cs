@@ -1,7 +1,6 @@
 ﻿using ExecutionFlow.Abstractions;
 using Hangfire.Common;
 using System;
-using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
@@ -100,7 +99,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public virtual string GetExpectedName(IJobRegistryInfo info)
         {
-            return string.IsNullOrEmpty(info?.DisplayName) ? info.HandlerType.FullName : info?.DisplayName;
+            return string.IsNullOrEmpty(info?.DisplayName) ? info?.HandlerType?.FullName : info.DisplayName;
         }
     }
 }

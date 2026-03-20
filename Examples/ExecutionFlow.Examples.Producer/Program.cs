@@ -37,7 +37,7 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 // API endpoint to enqueue messages
-app.MapPost("/api/messages", (MessageRequest request, IDispatcher dispatcher) =>
+app.MapPost("/api/messages", (MessageRequest request, IEventDispatcher dispatcher) =>
 {
     var @event = new SendMessageEvent
     {

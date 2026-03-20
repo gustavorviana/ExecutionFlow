@@ -1,4 +1,5 @@
 using ExecutionFlow.Abstractions;
+using ExecutionFlow.Hangfire;
 using Hangfire;
 using Hangfire.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,7 +32,7 @@ public class ServiceCollectionExtensionsTests
     {
         using var provider = BuildProvider();
 
-        var dispatcher = provider.GetService<IDispatcher>();
+        var dispatcher = provider.GetService<IEventDispatcher>();
 
         Assert.NotNull(dispatcher);
     }
@@ -64,6 +65,16 @@ public class ServiceCollectionExtensionsTests
         var registry = provider.GetService<IExecutionFlowRegistry>();
 
         Assert.NotNull(registry);
+    }
+
+    [Fact]
+    public void Registers_IRecurringTrigger()
+    {
+        using var provider = BuildProvider();
+
+        var trigger = provider.GetService<IRecurringTrigger>();
+
+        Assert.NotNull(trigger);
     }
 
     [Fact]

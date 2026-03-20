@@ -15,6 +15,7 @@ namespace ExecutionFlow.Abstractions
 
         public void Configure(Action<TOptions> configure)
         {
+            if (configure == null) throw new ArgumentNullException(nameof(configure));
             configure(Options);
             Options.Lock();
 

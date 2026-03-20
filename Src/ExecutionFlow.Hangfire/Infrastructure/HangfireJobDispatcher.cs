@@ -34,7 +34,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         {
             var eventType = typeof(TEvent);
             if (!_executionRegistry.EventHandlers.TryGetValue(eventType, out var handlerInfo))
-                throw new InvalidOperationException($"Could not resolve handler type '{handlerInfo.HandlerType}'.");
+                throw new InvalidOperationException($"No handler registered for event type '{eventType.FullName}'.");
 
             var handler = (IHandler<TEvent>)_activator.ActivateJob(handlerInfo.HandlerType);
             if (handler == null)

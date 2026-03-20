@@ -1,7 +1,7 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
-using ExecutionFlow.Hangfire.Filters;
-using HangfireJobDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher;
+using ExecutionFlow.Hangfire.Infrastructure.Filters;
+using ExecutionFlow.Hangfire.Tests.Utils;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
@@ -50,7 +50,7 @@ public class StateFilterTests
         var connection = Substitute.For<IStorageConnection>();
         var transaction = Substitute.For<IWriteOnlyTransaction>();
         var storage = Substitute.For<JobStorage>();
-        var bgJob = job ?? CreateTestJob();
+        var bgJob = job ?? JobBuilder.CreateRecurringJob(typeof(TestHandler));
         var backgroundJob = new BackgroundJob("test-job-1", bgJob, DateTime.UtcNow);
 
         if (customId != null)
@@ -66,17 +66,6 @@ public class StateFilterTests
             storage, connection, transaction, backgroundJob, candidateState, currentState);
 
         return new ElectStateContext(applyContext);
-    }
-
-    private static Job CreateTestJob()
-    {
-        var method = typeof(HangfireJobDispatcher)
-            .GetMethod(nameof(HangfireJobDispatcher.DispatchRecurringAsync))!;
-
-        return new Job(
-            typeof(HangfireJobDispatcher),
-            method,
-            new object[] { null!, typeof(TestHandler)!, CancellationToken.None });
     }
 
     [Fact]
@@ -151,7 +140,7 @@ public class StateFilterTests
         var connection = Substitute.For<IStorageConnection>();
         var transaction = Substitute.For<IWriteOnlyTransaction>();
         var storage = Substitute.For<JobStorage>();
-        var bgJob = CreateTestJob();
+        var bgJob = JobBuilder.CreateRecurringJob(typeof(TestHandler));
         var backgroundJob = new BackgroundJob("test-job-1", bgJob, DateTime.UtcNow);
 
         connection.GetJobParameter(backgroundJob.Id, Infrastructure.HangfireDispatcher.EventId).Returns((string?)null);
@@ -175,7 +164,7 @@ public class StateFilterTests
         var connection = Substitute.For<IStorageConnection>();
         var transaction = Substitute.For<IWriteOnlyTransaction>();
         var storage = Substitute.For<JobStorage>();
-        var bgJob = CreateTestJob();
+        var bgJob = JobBuilder.CreateRecurringJob(typeof(TestHandler));
         var backgroundJob = new BackgroundJob("test-job-1", bgJob, DateTime.UtcNow);
 
         connection.GetJobParameter(backgroundJob.Id, Infrastructure.HangfireDispatcher.EventId).Returns((string?)null);

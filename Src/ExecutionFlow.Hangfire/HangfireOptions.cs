@@ -6,18 +6,19 @@ namespace ExecutionFlow.Hangfire
     public class HangfireOptions : ExecutionFlowOptions
     {
         private readonly List<Type> _stateHandlerTypes = new List<Type>();
-        private readonly Dictionary<Type, bool> _jobAutoRun = new Dictionary<Type, bool>();
+        internal Dictionary<Type, bool> RecurringAutoRun { get; } = new Dictionary<Type, bool>();
+        internal Dictionary<Type, bool> RecurringDisableConcurrent { get; } = new Dictionary<Type, bool>();
         internal Type JobNameType { get; private set; } = typeof(DefaultHangfireJobName);
         internal Type JobIdGeneratorType { get; private set; } = typeof(DefaultRecurringServiceIdGenerator);
 
+        public bool GlobalRecurringAutoRun { get; set; } = true;
+        public bool GlobalDisableConcurrentExecution { get; set; } = false;
+        public TimeSpan ConcurrentExecutionTimeout { get; set; } = TimeSpan.Zero;
         internal Dictionary<Type, object> OptionValues { get; } = new Dictionary<Type, object>();
 
-        public bool AutoRunRecurring { get; set; } = true;
         public bool RemoveOrphanRecurringJobs { get; set; } = false;
 
         public IReadOnlyList<Type> StateHandlerTypes => _stateHandlerTypes;
-
-        internal IReadOnlyDictionary<Type, bool> JobAutoRunSettings => _jobAutoRun;
 
         public void SetJobAutoRun<T>(bool autoRun)
         {
@@ -28,7 +29,19 @@ namespace ExecutionFlow.Hangfire
         {
             ThrowIfLocked();
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
-            _jobAutoRun[handlerType] = autoRun;
+            RecurringAutoRun[handlerType] = autoRun;
+        }
+
+        public void SetDisableConcurrentExecution<T>(bool disable = true)
+        {
+            SetDisableConcurrentExecution(typeof(T), disable);
+        }
+
+        public void SetDisableConcurrentExecution(Type handlerType, bool disable = true)
+        {
+            ThrowIfLocked();
+            if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
+            RecurringDisableConcurrent[handlerType] = disable;
         }
 
         public void AddStateHandler<T>()

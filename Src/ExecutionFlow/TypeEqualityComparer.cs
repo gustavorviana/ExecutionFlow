@@ -15,6 +15,6 @@ namespace ExecutionFlow
         }
 
         public override int GetHashCode(Type obj)
-            => obj.FullName.GetHashCode();
+            => obj?.FullName?.GetHashCode() ?? 0;
     }
 }

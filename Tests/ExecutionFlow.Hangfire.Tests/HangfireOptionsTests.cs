@@ -10,7 +10,7 @@ public class HangfireOptionsTests
     {
         var options = new HangfireOptions();
 
-        Assert.True(options.AutoRunRecurring);
+        Assert.True(options.GlobalRecurringAutoRun);
     }
 
     [Fact]

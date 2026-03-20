@@ -5,6 +5,13 @@ namespace ExecutionFlow.Examples.Handlers;
 
 public class SendMessageHandler : IHandler<SendMessageEvent>
 {
+    private readonly IEventDispatcher _dispatcher;
+
+    public SendMessageHandler(IEventDispatcher dispatcher)
+    {
+        _dispatcher = dispatcher;
+    }
+
     public Task HandleAsync(FlowContext<SendMessageEvent> context, CancellationToken cancellationToken)
     {
         var msg = context.Event;

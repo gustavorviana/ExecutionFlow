@@ -1,6 +1,6 @@
 namespace ExecutionFlow.Abstractions
 {
-    public interface IDispatcher
+    public interface IEventDispatcher
     {
         string Publish<TEvent>(TEvent @event);
     }

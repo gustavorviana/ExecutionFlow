@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ExecutionFlow.Hangfire.Filters
+namespace ExecutionFlow.Hangfire.Infrastructure.Filters
 {
     public class HangfireStateFilter : IElectStateFilter
     {
@@ -82,7 +82,7 @@ namespace ExecutionFlow.Hangfire.Filters
         {
             var stateType = typeof(TState);
             return _stateHandlers
-                .Where(x => x.IsAssignableFrom(stateType))
+                .Where(stateType.IsAssignableFrom)
                 .Select(_serviceProvider.GetService)
                 .Cast<TState>();
         }
@@ -93,7 +93,7 @@ namespace ExecutionFlow.Hangfire.Filters
             {
                 return context.Connection.GetJobParameter(jobId, HangfireDispatcher.EventId);
             }
-            catch
+            catch (Exception)
             {
                 return null;
             }
@@ -113,7 +113,7 @@ namespace ExecutionFlow.Hangfire.Filters
                 if (int.TryParse(retryCountStr, out var count))
                     return count;
             }
-            catch
+            catch (Exception)
             {
                 // Ignore
             }

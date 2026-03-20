@@ -11,7 +11,6 @@
     <PackageReference Include="Hangfire.Console" />
     <PackageReference Include="Hangfire.SqlServer" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Newtonsoft.Json" />
   </ItemGroup>
 

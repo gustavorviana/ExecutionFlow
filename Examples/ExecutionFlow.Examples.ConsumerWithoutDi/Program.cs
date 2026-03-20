@@ -1,6 +1,7 @@
 using ExecutionFlow.Examples.Handlers;
 using ExecutionFlow.Hangfire;
 using Hangfire;
+using Hangfire.Console;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -8,10 +9,12 @@ builder.AddServiceDefaults();
 
 var connectionString = builder.Configuration.GetConnectionString("hangfire")!;
 
-GlobalConfiguration.Configuration.UseSqlServerStorage(connectionString);
+GlobalConfiguration.Configuration
+    .UseSqlServerStorage(connectionString)
+    .UseConsole();
 
 var setup = new HangfireSetup();
-setup.Configure(options => options.Scan(typeof(IHandlerMark).Assembly));
+setup.Configure(OptionsConfigurator.Configure);
 setup.ConfigureActivator().Build();
 
 Console.WriteLine("=============================================");

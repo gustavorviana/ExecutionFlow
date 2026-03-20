@@ -4,7 +4,7 @@ using System;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
-    public class HangfireDispatcher : IDispatcher
+    public class HangfireDispatcher : IEventDispatcher
     {
         internal const string EventId = "customId";
         private readonly IBackgroundJobClient _jobClient;

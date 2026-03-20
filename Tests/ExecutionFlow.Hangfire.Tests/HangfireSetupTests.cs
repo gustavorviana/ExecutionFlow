@@ -1,5 +1,9 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
+using ExecutionFlow.Hangfire.Infrastructure;
+using Hangfire;
+using Hangfire.Storage;
+using NSubstitute;
 using System.ComponentModel;
 
 namespace ExecutionFlow.Hangfire.Tests;
@@ -85,6 +89,69 @@ public class HangfireSetupTests
         Assert.Single(recurringHandlers);
         Assert.Equal(typeof(OrderCreatedHandler), eventHandlers[0].HandlerType);
         Assert.Equal(typeof(CleanupHandler), recurringHandlers[0].HandlerType);
+    }
+
+    // --- Build() tests ---
+
+    private static (JobStorage storage, IStorageConnection connection, IBackgroundJobClient jobClient) CreateHangfireMocks()
+    {
+        var storage = Substitute.For<JobStorage>();
+        var connection = Substitute.For<IStorageConnection>();
+        storage.GetConnection().Returns(connection);
+        var jobClient = Substitute.For<IBackgroundJobClient>();
+        return (storage, connection, jobClient);
+    }
+
+    [Fact]
+    public void Build_Returns_NonNull_Dispatcher()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, jobClient) = CreateHangfireMocks();
+
+        var dispatcher = setup.Build(jobClient, storage);
+
+        Assert.NotNull(dispatcher);
+        Assert.IsAssignableFrom<IEventDispatcher>(dispatcher);
+    }
+
+    [Fact]
+    public void Build_Returns_SameInstance_When_Called_Twice()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, jobClient) = CreateHangfireMocks();
+
+        var first = setup.Build(jobClient, storage);
+        var second = setup.Build(jobClient, storage);
+
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void Build_WithCustomServiceProvider_Uses_It()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, jobClient) = CreateHangfireMocks();
+
+        var flowActivator = new FlowEngineJobActivator(setup);
+        var dispatcher = setup.Build(jobClient, storage, flowActivator);
+
+        Assert.NotNull(dispatcher);
+        Assert.NotNull(setup.JobIdGenerator);
+        Assert.NotNull(setup.JobNameGenerator);
+    }
+
+    [Fact]
+    public void ConfigureActivator_Sets_JobActivator_Current()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+
+        setup.ConfigureActivator();
+
+        Assert.IsType<FlowEngineJobActivator>(JobActivator.Current);
     }
 
     // --- Test types ---

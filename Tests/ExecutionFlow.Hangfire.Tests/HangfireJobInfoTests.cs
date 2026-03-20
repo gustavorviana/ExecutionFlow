@@ -1,5 +1,6 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
+using ExecutionFlow.Hangfire.Tests.Utils;
 using Hangfire.Common;
 using NSubstitute;
 using HangfireJobDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher;
@@ -14,19 +15,6 @@ public class HangfireJobInfoTests
             x => x.DispatchEventAsync<TEvent>(default!, customName, null, default));
     }
 
-    private static Job CreateRecurringJob(Type? handlerType = null)
-    {
-        var method = typeof(HangfireJobDispatcher)
-            .GetMethod(nameof(HangfireJobDispatcher.DispatchRecurringAsync))!;
-
-        return new Job(
-            typeof(HangfireJobDispatcher),
-            method,
-            new object[] { null!, handlerType!, CancellationToken.None });
-    }
-
-    // --- HangfireJobInfo.Create ---
-
     [Fact]
     public void Create_GenericJob_Returns_HangfireEventJobInfo()
     {
@@ -40,7 +28,7 @@ public class HangfireJobInfoTests
     [Fact]
     public void Create_NonGenericJob_Returns_HangfireRecurringJobInfo()
     {
-        var job = CreateRecurringJob(typeof(TestHandler));
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
 
         var info = HangfireJobInfo.Create(job);
 
@@ -146,7 +134,7 @@ public class HangfireJobInfoTests
     [Fact]
     public void RecurringJobInfo_HandlerType_Extracted()
     {
-        var job = CreateRecurringJob(typeof(TestHandler));
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
 
         var info = new HangfireRecurringJobInfo(job);
 
@@ -156,7 +144,7 @@ public class HangfireJobInfoTests
     [Fact]
     public void RecurringJobInfo_GetHandler_Returns_RecurringHandler_FromRegistry()
     {
-        var job = CreateRecurringJob(typeof(TestHandler));
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
         var info = new HangfireRecurringJobInfo(job);
         var registry = Substitute.For<IExecutionFlowRegistry>();
         var expectedHandler = new RecurringJobRegistryInfo(typeof(TestHandler), "Test Handler", "* * * * *");
@@ -171,7 +159,7 @@ public class HangfireJobInfoTests
     [Fact]
     public void RecurringJobInfo_GetHandler_Returns_Null_WhenNotRegistered()
     {
-        var job = CreateRecurringJob(typeof(TestHandler));
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
         var info = new HangfireRecurringJobInfo(job);
         var registry = Substitute.For<IExecutionFlowRegistry>();
         registry.RecurringHandlers.Returns(new Dictionary<Type, RecurringJobRegistryInfo>());
@@ -184,7 +172,7 @@ public class HangfireJobInfoTests
     [Fact]
     public void RecurringJobInfo_GetJobType_Returns_Type_FromArgs()
     {
-        var job = CreateRecurringJob(typeof(TestHandler));
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
 
         var type = HangfireRecurringJobInfo.GetJobType(job);
 
@@ -211,7 +199,7 @@ public class HangfireJobInfoTests
     [Fact]
     public void GetExpectedName_Returns_DisplayName()
     {
-        var job = CreateRecurringJob(typeof(TestHandler));
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
         var info = HangfireJobInfo.Create(job);
         var registry = Substitute.For<IExecutionFlowRegistry>();
         var handler = new RecurringJobRegistryInfo(typeof(TestHandler), "My Display Name", "* * * * *");
@@ -226,7 +214,7 @@ public class HangfireJobInfoTests
     [Fact]
     public void GetExpectedName_Falls_Back_To_FullName_WhenDisplayNameEmpty()
     {
-        var job = CreateRecurringJob(typeof(TestHandler));
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
         var info = HangfireJobInfo.Create(job);
         var registryInfo = new RecurringJobRegistryInfo(typeof(TestHandler), "", "* * * * *");
 

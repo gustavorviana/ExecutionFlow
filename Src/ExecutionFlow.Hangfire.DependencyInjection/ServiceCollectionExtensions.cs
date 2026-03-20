@@ -36,12 +36,6 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
 
             services.AddSingleton<ExecutionLoggerFactory>();
 
-            services.AddSingleton(sp =>
-            {
-                var factories = sp.GetServices<IExecutionLoggerFactory>();
-                return new ExecutionLoggerFactory(new System.Collections.Generic.List<IExecutionLoggerFactory>(factories));
-            });
-
             services.AddSingleton(typeof(IJobIdGenerator), setup.Options.JobIdGeneratorType);
             services.AddSingleton(typeof(IHangfireJobName), setup.Options.JobNameType);
             services.AddSingleton<IExecutionFlowRegistry>(setup);
@@ -61,6 +55,14 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
                 return new HangfireExecutionManager(jobClient, jobStorage);
             });
 
+            services.AddSingleton<IRecurringTrigger>(sp =>
+            {
+                var jobStorage = sp.GetRequiredService<JobStorage>();
+                var jobIdGenerator = sp.GetRequiredService<IJobIdGenerator>();
+                var registry = sp.GetRequiredService<IExecutionFlowRegistry>();
+                return new HangfireRecurringTrigger(jobStorage, jobIdGenerator, registry);
+            });
+
             services.AddHostedService<HostedDi>();
 
             return services;
@@ -68,7 +70,7 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
 
         private class HostedDi : IHostedService
         {
-            public HostedDi(IDispatcher dispatcher)
+            public HostedDi(IEventDispatcher dispatcher)
             {
 
             }
