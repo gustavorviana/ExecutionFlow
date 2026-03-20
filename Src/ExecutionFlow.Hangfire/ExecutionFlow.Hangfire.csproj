@@ -16,6 +16,7 @@
 	<ItemGroup>
 		<InternalsVisibleTo Include="ExecutionFlow.Tests" />
 		<InternalsVisibleTo Include="ExecutionFlow.Hangfire.Tests" />
+		<InternalsVisibleTo Include="ExecutionFlow.Hangfire.Console" />
 		<InternalsVisibleTo Include="ExecutionFlow.Hangfire.DependencyInjection" />
 	</ItemGroup>
 </Project>

@@ -46,8 +46,12 @@ namespace ExecutionFlow.Hangfire
 
             if (serviceProvider is FlowEngineJobActivator flowActivator)
             {
+                foreach (var kvp in Options.OptionValues)
+                    flowActivator.AddSingleton(kvp.Key, kvp.Value);
+
                 flowActivator.AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType);
                 flowActivator.AddSingleton<IHangfireJobName>(Options.JobNameType);
+                flowActivator.RegisterLoggerFactory(Options.LoggerFactoryTypes);
             }
 
             JobIdGenerator = (IJobIdGenerator)serviceProvider.GetService(typeof(IJobIdGenerator));

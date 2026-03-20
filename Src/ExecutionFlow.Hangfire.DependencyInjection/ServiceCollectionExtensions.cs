@@ -28,6 +28,20 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
             foreach (var stateHandlerType in setup.StateHandlerTypes)
                 services.AddTransient(stateHandlerType);
 
+            foreach (var kvp in setup.Options.OptionValues)
+                services.AddSingleton(kvp.Key, kvp.Value);
+
+            foreach (var loggerFactoryType in setup.LoggerFactoryTypes)
+                services.AddSingleton(typeof(IExecutionLoggerFactory), loggerFactoryType);
+
+            services.AddSingleton<ExecutionLoggerFactory>();
+
+            services.AddSingleton(sp =>
+            {
+                var factories = sp.GetServices<IExecutionLoggerFactory>();
+                return new ExecutionLoggerFactory(new System.Collections.Generic.List<IExecutionLoggerFactory>(factories));
+            });
+
             services.AddSingleton(typeof(IJobIdGenerator), setup.Options.JobIdGeneratorType);
             services.AddSingleton(typeof(IHangfireJobName), setup.Options.JobNameType);
             services.AddSingleton<IExecutionFlowRegistry>(setup);

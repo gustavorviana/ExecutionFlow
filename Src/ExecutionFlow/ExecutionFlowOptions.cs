@@ -12,9 +12,11 @@ namespace ExecutionFlow
         public Action<AssemblyTypeScanContext> OnTypeLoadFailure;
 
 
+        private readonly List<Type> _loggerFactoryTypes = new List<Type>();
         private readonly Dictionary<Type, RecurringJobRegistryInfo> _recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>(new TypeEqualityComparer());
         private readonly Dictionary<Type, EventJobRegistryInfo> _eventHandlers = new Dictionary<Type, EventJobRegistryInfo>(new TypeEqualityComparer());
 
+        public IReadOnlyList<Type> LoggerFactoryTypes => _loggerFactoryTypes;
         public IReadOnlyDictionary<Type, RecurringJobRegistryInfo> RecurringHandlers => _recurringHandlers;
         public IReadOnlyDictionary<Type, EventJobRegistryInfo> EventHandlers => _eventHandlers;
 
@@ -90,6 +92,22 @@ namespace ExecutionFlow
                     return;
                 }
             }
+        }
+
+        public void AddLogger<TFactory>() where TFactory : class, IExecutionLoggerFactory
+        {
+            AddLogger(typeof(TFactory));
+        }
+
+        public void AddLogger(Type factoryType)
+        {
+            ThrowIfLocked();
+
+            if (factoryType == null) throw new ArgumentNullException(nameof(factoryType));
+            if (!typeof(IExecutionLoggerFactory).IsAssignableFrom(factoryType))
+                throw new ArgumentException($"Type '{factoryType.FullName}' does not implement IExecutionLoggerFactory.", nameof(factoryType));
+
+            _loggerFactoryTypes.Add(factoryType);
         }
 
         internal void Lock()

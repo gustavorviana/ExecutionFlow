@@ -1,5 +1,6 @@
 using ExecutionFlow.Examples.Handlers;
 using ExecutionFlow.Hangfire;
+using ExecutionFlow.Hangfire.Console;
 using ExecutionFlow.Hangfire.DependencyInjection;
 using Hangfire;
 using Hangfire.Console;
@@ -21,6 +22,7 @@ builder.Services.AddHangfireServer();
 // Register ExecutionFlow with all handlers via DI
 builder.Services.AddHangfireToExecutionFlow(options =>
 {
+    options.ConfigureConsole();
     options.RemoveOrphanRecurringJobs = true;
     options.Scan(typeof(IHandlerMark).Assembly);
 });

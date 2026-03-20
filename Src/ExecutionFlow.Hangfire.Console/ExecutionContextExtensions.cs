@@ -1,5 +1,6 @@
 using System;
 using ExecutionFlow.Abstractions;
+using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.Console;
 using Hangfire.Server;
 
@@ -23,11 +24,11 @@ namespace ExecutionFlow.Hangfire.Console
 
         private static PerformContext GetPerformContext(FlowContext context)
         {
-            if (context.Items.TryGetValue("PerformContext", out var value) && value is PerformContext performContext)
+            if (context.Parameters.TryGetValue(ContextConsts.Context, out var value) && value is PerformContext performContext)
                 return performContext;
 
             throw new InvalidOperationException(
-                "PerformContext is not available. Progress bars can only be created within a Hangfire job execution context.");
+                $"{ContextConsts.Context} is not available. Progress bars can only be created within a Hangfire job execution context.");
         }
     }
 }

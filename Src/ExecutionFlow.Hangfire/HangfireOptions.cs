@@ -10,6 +10,8 @@ namespace ExecutionFlow.Hangfire
         internal Type JobNameType { get; private set; } = typeof(DefaultHangfireJobName);
         internal Type JobIdGeneratorType { get; private set; } = typeof(DefaultRecurringServiceIdGenerator);
 
+        internal Dictionary<Type, object> OptionValues { get; } = new Dictionary<Type, object>();
+
         public bool AutoRunRecurring { get; set; } = true;
         public bool RemoveOrphanRecurringJobs { get; set; } = false;
 
@@ -64,6 +66,13 @@ namespace ExecutionFlow.Hangfire
             ThrowIfLocked();
             if (jobIdGeneratorType == null) throw new ArgumentNullException(nameof(jobIdGeneratorType));
             JobIdGeneratorType = jobIdGeneratorType;
+        }
+
+        public void AddOption<T>(T value) where T : class
+        {
+            ThrowIfLocked();
+            if (value == null) throw new ArgumentNullException(nameof(value));
+            OptionValues[typeof(IHangfireOption<T>)] = new HangfireOption<T>(value);
         }
     }
 }

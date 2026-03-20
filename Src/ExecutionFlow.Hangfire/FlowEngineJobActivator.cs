@@ -2,6 +2,7 @@
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -9,8 +10,8 @@ namespace ExecutionFlow.Hangfire
 {
     internal class FlowEngineJobActivator : JobActivator, IServiceProvider
     {
-        private readonly Dictionary<Type, Type> _registrations = new Dictionary<Type, Type>();
-        private readonly Dictionary<Type, object> _singletons = new Dictionary<Type, object>();
+        private readonly ConcurrentDictionary<Type, Type> _registrations = new ConcurrentDictionary<Type, Type>();
+        private readonly ConcurrentDictionary<Type, object> _singletons = new ConcurrentDictionary<Type, object>();
 
         public FlowEngineJobActivator(IExecutionFlowRegistry registry)
         {
@@ -31,6 +32,17 @@ namespace ExecutionFlow.Hangfire
             _registrations[type] = type;
         }
 
+        public void AddSingleton(Type serviceType, object instance)
+        {
+            _singletons[serviceType] = instance;
+        }
+
+        public void RegisterLoggerFactory(IReadOnlyList<Type> loggerFactoryTypes)
+        {
+            var factories = loggerFactoryTypes.Select(CreateInstance).Cast<IExecutionLoggerFactory>().ToArray();
+            _singletons[typeof(ExecutionLoggerFactory)] = new ExecutionLoggerFactory(factories);
+        }
+
         public override object ActivateJob(Type jobType)
             => GetService(jobType);
 
@@ -39,12 +51,8 @@ namespace ExecutionFlow.Hangfire
             if (_singletons.TryGetValue(serviceType, out var cached))
                 return cached;
 
-            if (_registrations.TryGetValue(serviceType, out var implType))
-            {
-                var instance = CreateInstance(implType);
-                _singletons[serviceType] = instance;
-                return instance;
-            }
+            if (_registrations.ContainsKey(serviceType))
+                return _singletons.GetOrAdd(serviceType, x => CreateInstance(_registrations[x]));
 
             return CreateInstance(serviceType);
         }

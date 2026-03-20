@@ -10,11 +10,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
     internal class HangfireJobDispatcher
     {
         private readonly JobActivator _activator;
+        private readonly IServiceProvider _serviceProvider;
         private readonly IExecutionFlowRegistry _executionRegistry;
 
-        public HangfireJobDispatcher(JobActivator activator, IExecutionFlowRegistry executionRegistry)
+        public HangfireJobDispatcher(JobActivator activator, IServiceProvider serviceProvider, IExecutionFlowRegistry executionRegistry)
         {
             _activator = activator ?? throw new ArgumentNullException(nameof(activator));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             _executionRegistry = executionRegistry ?? throw new ArgumentNullException(nameof(executionRegistry));
         }
 
@@ -25,11 +27,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             if (handler == null)
                 throw new InvalidOperationException($"Could not activate handler instance for type '{handlerType}'.");
 
-            var logger = new HangfireExecutionLogger(performContext);
-            var context = new FlowContext(logger);
-            context.Items[ContextConsts.Name] = performContext;
-
-            await handler.HandleAsync(context, ct);
+            await handler.HandleAsync(CreateContextBuilder(performContext).Build(), ct);
         }
 
         public async Task DispatchEventAsync<TEvent>(TEvent @event, string eventCustomName, PerformContext performContext, CancellationToken ct)
@@ -42,18 +40,16 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             if (handler == null)
                 throw new InvalidOperationException($"Could not activate handler instance for type '{handlerInfo.HandlerType}'.");
 
-            var logger = new HangfireExecutionLogger(performContext);
-            using (var context = CreateEvent(@event, performContext, logger))
-            {
-                context.Items[ContextConsts.Name] = performContext;
-                context.Items[ContextConsts.EventName] = eventCustomName;
+            var builder = CreateContextBuilder(performContext);
+            builder.Parameters[ContextConsts.EventName] = eventCustomName;
+
+            using (var context = CreateEvent(@event, performContext, builder))
                 await handler.HandleAsync(context, ct);
-            }
         }
 
-        private FlowContext<TEvent> CreateEvent<TEvent>(TEvent @event, PerformContext performContext, HangfireExecutionLogger logger)
+        private FlowContext<TEvent> CreateEvent<TEvent>(TEvent @event, PerformContext performContext, FlowContextBuilder contexBuilder)
         {
-            var context = new FlowContext<TEvent>(logger, @event, customId =>
+            var context = contexBuilder.Build(@event, customId =>
             {
                 performContext.Connection.SetJobParameter(performContext.BackgroundJob.Id, HangfireDispatcher.EventId, customId);
             });
@@ -62,6 +58,14 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 context.SetCustomId(customIdEvent.CustomId);
 
             return context;
+        }
+
+        private FlowContextBuilder CreateContextBuilder(PerformContext performContext)
+        {
+            var builder = new FlowContextBuilder((ExecutionLoggerFactory)_serviceProvider.GetService(typeof(ExecutionLoggerFactory)));
+            builder.Parameters[ContextConsts.Context] = performContext;
+
+            return builder;
         }
     }
 }

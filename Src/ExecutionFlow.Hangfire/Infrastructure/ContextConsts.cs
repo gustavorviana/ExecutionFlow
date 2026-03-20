@@ -2,7 +2,7 @@
 {
     internal static class ContextConsts
     {
-        public const string Name = "PerformContext";
+        public const string Context = "PerformContext";
         public const string EventName = "CustomName";
     }
 }

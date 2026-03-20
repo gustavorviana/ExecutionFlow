@@ -9,6 +9,8 @@ namespace ExecutionFlow.Abstractions
 
         public IReadOnlyDictionary<Type, RecurringJobRegistryInfo> RecurringHandlers { get; private set; } = new Dictionary<Type, RecurringJobRegistryInfo>();
 
+        public IReadOnlyList<Type> LoggerFactoryTypes => Options?.LoggerFactoryTypes;
+
         public TOptions Options { get; } = new TOptions();
 
         public void Configure(Action<TOptions> configure)

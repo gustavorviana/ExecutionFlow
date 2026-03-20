@@ -10,8 +10,11 @@ namespace ExecutionFlow.Abstractions
         public string CustomId { get; private set; }
         private Action<string> OnCustomIdChange;
 
-        public FlowContext(IExecutionLogger log, TEvent @event, Action<string> onCustomIdChange = null)
-            : base(log)
+        public FlowContext(IReadOnlyDictionary<string, object> parameters,
+            IExecutionLogger log,
+            TEvent @event,
+            Action<string> onCustomIdChange = null)
+            : base(parameters, log)
         {
             Event = @event;
             OnCustomIdChange = onCustomIdChange;
@@ -33,11 +36,12 @@ namespace ExecutionFlow.Abstractions
     {
         public IExecutionLogger Log { get; }
 
-        public IDictionary<string, object> Items { get; } = new Dictionary<string, object>();
+        public IReadOnlyDictionary<string, object> Parameters { get; }
 
-        public FlowContext(IExecutionLogger log)
+        public FlowContext(IReadOnlyDictionary<string, object> parameters, IExecutionLogger log)
         {
             Log = log;
+            Parameters = parameters;
         }
     }
 }
