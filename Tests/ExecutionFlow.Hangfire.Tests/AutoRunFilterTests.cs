@@ -19,7 +19,10 @@ public class AutoRunFilterTests
             { typeof(TestRecurringHandler), new RecurringJobRegistryInfo(typeof(TestRecurringHandler), "Test", null) }
         };
         registry.RecurringHandlers.Returns((IReadOnlyDictionary<Type, RecurringJobRegistryInfo>)recurringHandlers);
-        return new HangfireAutoRunFilter(registry, autoRun, perJob);
+        var options = new HangfireOptions { GlobalRecurringAutoRun = autoRun };
+        foreach (var kvp in perJob)
+            options.SetJobAutoRun(kvp.Key, kvp.Value);
+        return new HangfireAutoRunFilter(registry, options);
     }
 
     private static ElectStateContext CreateContext(

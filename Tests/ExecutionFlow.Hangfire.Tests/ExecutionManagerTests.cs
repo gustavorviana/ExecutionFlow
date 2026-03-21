@@ -54,7 +54,7 @@ public class ExecutionManagerTests
     [Fact]
     public void IsRunning_ReturnsTrue_WhenMatchingJobFound()
     {
-        _monitoringApi.ProcessingJobs(0, 100).Returns(
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
         _connection.GetJobParameter("job-1", Infrastructure.HangfireDispatcher.EventId).Returns("my-job");
 
@@ -66,7 +66,7 @@ public class ExecutionManagerTests
     [Fact]
     public void IsRunning_ReturnsFalse_WhenNoMatchingJob()
     {
-        _monitoringApi.ProcessingJobs(0, 100).Returns(
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
         _connection.GetJobParameter("job-1", Infrastructure.HangfireDispatcher.EventId).Returns("other-job");
 
@@ -78,7 +78,7 @@ public class ExecutionManagerTests
     [Fact]
     public void IsRunning_ReturnsFalse_WhenNoProcessingJobs()
     {
-        _monitoringApi.ProcessingJobs(0, 100).Returns(ProcessingJobList());
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
 
         var result = _manager.IsRunning("my-job");
 
@@ -90,7 +90,7 @@ public class ExecutionManagerTests
     {
         var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
         _monitoringApi.Queues().Returns(queues);
-        _monitoringApi.EnqueuedJobs("default", 0, 100).Returns(
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(
             EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("job-2", new EnqueuedJobDto())));
         _connection.GetJobParameter("job-2", Infrastructure.HangfireDispatcher.EventId).Returns("pending-job");
 
@@ -104,7 +104,7 @@ public class ExecutionManagerTests
     {
         var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
         _monitoringApi.Queues().Returns(queues);
-        _monitoringApi.EnqueuedJobs("default", 0, 100).Returns(
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(
             EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("job-2", new EnqueuedJobDto())));
         _connection.GetJobParameter("job-2", Infrastructure.HangfireDispatcher.EventId).Returns("other-job");
 
@@ -116,14 +116,14 @@ public class ExecutionManagerTests
     [Fact]
     public void Cancel_QueriesProcessingJobs()
     {
-        _monitoringApi.ProcessingJobs(0, 100).Returns(
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-3", new ProcessingJobDto())));
         _connection.GetJobParameter("job-3", Infrastructure.HangfireDispatcher.EventId).Returns("cancel-me");
         _monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
 
         _manager.Cancel("cancel-me");
 
-        _monitoringApi.Received(1).ProcessingJobs(0, 100);
+        _monitoringApi.Received(1).ProcessingJobs(0, 10);
     }
 
     // --- GetJobs tests ---
@@ -134,7 +134,7 @@ public class ExecutionManagerTests
         var startedAt = new DateTime(2026, 3, 7, 12, 0, 0, DateTimeKind.Utc);
         var job = CreateGenericJob<TestEvent>();
         var dto = new ProcessingJobDto { Job = job, StartedAt = startedAt };
-        _monitoringApi.ProcessingJobs(0, 100).Returns(
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-10", dto)));
         _connection.GetJobParameter("job-10", Infrastructure.HangfireDispatcher.EventId).Returns("my-custom-id");
 
@@ -153,7 +153,7 @@ public class ExecutionManagerTests
     public void GetJobs_CustomIdIsNull_WhenNoCustomIdParameter()
     {
         var dto = new ProcessingJobDto { Job = CreateGenericJob<TestEvent>() };
-        _monitoringApi.ProcessingJobs(0, 100).Returns(
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-11", dto)));
         _connection.GetJobParameter("job-11", Infrastructure.HangfireDispatcher.EventId).Returns((string)null);
 
@@ -171,7 +171,7 @@ public class ExecutionManagerTests
             Job = null,
             InvocationData = new InvocationData("SomeType", "SomeMethod", "[]", "[]")
         };
-        _monitoringApi.ProcessingJobs(0, 100).Returns(
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-12", dto)));
         _connection.GetJobParameter("job-12", Infrastructure.HangfireDispatcher.EventId).Returns((string)null);
 
@@ -187,7 +187,7 @@ public class ExecutionManagerTests
     {
         var succeededAt = new DateTime(2026, 3, 7, 14, 30, 0, DateTimeKind.Utc);
         var dto = new SucceededJobDto { Job = CreateGenericJob<TestEvent>(), SucceededAt = succeededAt };
-        _monitoringApi.SucceededJobs(0, 100).Returns(
+        _monitoringApi.SucceededJobs(0, 10).Returns(
             SucceededJobList(new KeyValuePair<string, SucceededJobDto>("job-13", dto)));
         _connection.GetJobParameter("job-13", Infrastructure.HangfireDispatcher.EventId).Returns((string)null);
 
@@ -200,7 +200,7 @@ public class ExecutionManagerTests
     [Fact]
     public void GetJobs_ReturnsEmpty_WhenNoJobsExist()
     {
-        _monitoringApi.ProcessingJobs(0, 100).Returns(ProcessingJobList());
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
 
         var results = _manager.GetJobs(JobState.Processing).ToList();
 
@@ -214,7 +214,7 @@ public class ExecutionManagerTests
         var dto = new EnqueuedJobDto { Job = CreateGenericJob<TestEvent>(), EnqueuedAt = enqueuedAt };
         var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
         _monitoringApi.Queues().Returns(queues);
-        _monitoringApi.EnqueuedJobs("default", 0, 100).Returns(
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(
             EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("job-14", dto)));
         _connection.GetJobParameter("job-14", Infrastructure.HangfireDispatcher.EventId).Returns("enqueued-id");
 
@@ -231,7 +231,7 @@ public class ExecutionManagerTests
     {
         var failedAt = new DateTime(2026, 3, 7, 11, 0, 0, DateTimeKind.Utc);
         var dto = new FailedJobDto { Job = CreateGenericJob<TestEvent>(), FailedAt = failedAt };
-        _monitoringApi.FailedJobs(0, 100).Returns(
+        _monitoringApi.FailedJobs(0, 10).Returns(
             FailedJobList(new KeyValuePair<string, FailedJobDto>("job-15", dto)));
         _connection.GetJobParameter("job-15", Infrastructure.HangfireDispatcher.EventId).Returns((string)null);
 
@@ -247,7 +247,7 @@ public class ExecutionManagerTests
     {
         var deletedAt = new DateTime(2026, 3, 7, 13, 0, 0, DateTimeKind.Utc);
         var dto = new DeletedJobDto { Job = CreateGenericJob<TestEvent>(), DeletedAt = deletedAt };
-        _monitoringApi.DeletedJobs(0, 100).Returns(
+        _monitoringApi.DeletedJobs(0, 10).Returns(
             DeletedJobList(new KeyValuePair<string, DeletedJobDto>("job-16", dto)));
         _connection.GetJobParameter("job-16", Infrastructure.HangfireDispatcher.EventId).Returns((string)null);
 
@@ -263,7 +263,7 @@ public class ExecutionManagerTests
     {
         var succeededAt = new DateTime(2026, 3, 7, 15, 0, 0, DateTimeKind.Utc);
         var dto = new SucceededJobDto { Job = CreateGenericJob<TestEvent>(), SucceededAt = succeededAt };
-        _monitoringApi.SucceededJobs(0, 100).Returns(
+        _monitoringApi.SucceededJobs(0, 10).Returns(
             SucceededJobList(new KeyValuePair<string, SucceededJobDto>("job-17", dto)));
         _connection.GetJobParameter("job-17", Infrastructure.HangfireDispatcher.EventId).Returns("succeeded-id");
 
