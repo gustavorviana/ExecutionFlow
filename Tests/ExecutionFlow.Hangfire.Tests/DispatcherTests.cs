@@ -1,9 +1,8 @@
 using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire.Infrastructure;
-using HangfireDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireDispatcher;
 using Hangfire;
 using Hangfire.Storage;
 using NSubstitute;
+using HangfireDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireDispatcher;
 
 namespace ExecutionFlow.Hangfire.Tests;
 
@@ -12,6 +11,8 @@ public class DispatcherTests
     private readonly JobStorage _storage;
     private readonly IStorageConnection _connection;
     private readonly IBackgroundJobClient _jobClient;
+    private readonly IJobIdGenerator _jobIdGenerator;
+    private readonly IExecutionFlowRegistry _registry;
 
     public DispatcherTests()
     {
@@ -19,6 +20,8 @@ public class DispatcherTests
         _connection = Substitute.For<IStorageConnection>();
         _storage.GetConnection().Returns(_connection);
         _jobClient = Substitute.For<IBackgroundJobClient>();
+        _jobIdGenerator = Substitute.For<IJobIdGenerator>();
+        _registry = Substitute.For<IExecutionFlowRegistry>();
     }
 
     [Fact]
@@ -26,7 +29,7 @@ public class DispatcherTests
     {
         _jobClient.Create(default, default).ReturnsForAnyArgs("job-99");
 
-        var dispatcher = new HangfireDispatcher(_jobClient, _storage);
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
 
         dispatcher.Publish(new TestEvent());
 
@@ -38,7 +41,7 @@ public class DispatcherTests
     {
         _jobClient.Create(default, default).ReturnsForAnyArgs("job-100");
 
-        var dispatcher = new HangfireDispatcher(_jobClient, _storage);
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
 
         dispatcher.Publish(new TestNamedEvent());
 
@@ -50,7 +53,7 @@ public class DispatcherTests
     {
         _jobClient.Create(default, default).ReturnsForAnyArgs("job-42");
 
-        var dispatcher = new HangfireDispatcher(_jobClient, _storage);
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
 
         var jobId = dispatcher.Publish(new TestEvent());
 
