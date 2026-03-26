@@ -11,7 +11,7 @@ namespace ExecutionFlow
             if (x == null || y == null)
                 return false;
 
-            return x.FullName.Equals(y.FullName);
+            return string.Equals(x.FullName, y.FullName);
         }
 
         public override int GetHashCode(Type obj)

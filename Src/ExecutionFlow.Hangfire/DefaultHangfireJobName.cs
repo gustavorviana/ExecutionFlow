@@ -9,10 +9,10 @@ namespace ExecutionFlow.Hangfire
         private readonly IJobIdGenerator _idGenerator;
         private readonly IExecutionFlowRegistry _jobExecutionFlow;
 
-        public DefaultHangfireJobName(IJobIdGenerator idGenerator, IExecutionFlowRegistry JobExecutionFlow)
+        public DefaultHangfireJobName(IJobIdGenerator idGenerator, IExecutionFlowRegistry jobExecutionFlow)
         {
             _idGenerator = idGenerator;
-            _jobExecutionFlow = JobExecutionFlow;
+            _jobExecutionFlow = jobExecutionFlow;
         }
 
         public string GetName(Job job)

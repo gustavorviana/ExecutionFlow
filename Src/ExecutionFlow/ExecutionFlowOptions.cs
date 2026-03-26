@@ -9,7 +9,7 @@ namespace ExecutionFlow
     public abstract class ExecutionFlowOptions
     {
         private bool _locked;
-        public Action<AssemblyTypeScanContext> OnTypeLoadFailure;
+        public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get; set; }
 
 
         private readonly List<Type> _loggerFactoryTypes = new List<Type>();
@@ -84,6 +84,11 @@ namespace ExecutionFlow
                 if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IHandler<>))
                 {
                     var eventType = iface.GetGenericArguments()[0];
+
+                    if (_eventHandlers.TryGetValue(eventType, out var existingHandler) && existingHandler.HandlerType != handlerType)
+                        throw new InvalidOperationException(
+                            $"An event handler for event type '{eventType.FullName}' is already registered (existing: '{existingHandler.HandlerType.FullName}', duplicate: '{handlerType.FullName}').");
+
                     _eventHandlers[eventType] = new EventJobRegistryInfo(
                         handlerType: handlerType,
                         eventType: eventType,

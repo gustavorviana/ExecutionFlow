@@ -47,9 +47,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 await handler.HandleAsync(context, ct);
         }
 
-        private FlowContext<TEvent> CreateEvent<TEvent>(TEvent @event, PerformContext performContext, FlowContextBuilder contexBuilder)
+        private FlowContext<TEvent> CreateEvent<TEvent>(TEvent @event, PerformContext performContext, FlowContextBuilder contextBuilder)
         {
-            var context = contexBuilder.Build(@event, customId =>
+            var context = contextBuilder.Build(@event, customId =>
             {
                 performContext.Connection.SetJobParameter(performContext.BackgroundJob.Id, HangfireDispatcher.EventId, customId);
             });

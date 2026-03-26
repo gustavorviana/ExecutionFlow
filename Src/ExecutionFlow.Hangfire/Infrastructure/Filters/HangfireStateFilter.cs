@@ -4,6 +4,7 @@ using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.States;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure.Filters
@@ -93,8 +94,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             {
                 return context.Connection.GetJobParameter(jobId, HangfireDispatcher.EventId);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Trace.TraceWarning("ExecutionFlow: Failed to get custom ID for job '{0}': {1}", jobId, ex.Message);
                 return null;
             }
         }
@@ -109,13 +111,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
         {
             try
             {
-                var retryCountStr = context.Connection.GetJobParameter(context.BackgroundJob.Id, "RetryCount");
+                var retryCountStr = context.Connection.GetJobParameter(context.BackgroundJob.Id, ContextConsts.RetryCount);
                 if (int.TryParse(retryCountStr, out var count))
                     return count;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Ignore
+                Trace.TraceWarning("ExecutionFlow: Failed to get retry count for job '{0}': {1}", context.BackgroundJob.Id, ex.Message);
             }
             return 0;
         }
@@ -135,15 +137,15 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
                     : null;
 
                 if (processingState?.Data != null &&
-                    processingState.Data.TryGetValue("StartedAt", out var startedAtStr) &&
+                    processingState.Data.TryGetValue(ContextConsts.StartedAt, out var startedAtStr) &&
                     DateTime.TryParse(startedAtStr, out var startedAt))
                 {
                     return DateTime.UtcNow - startedAt;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignore
+                Trace.TraceWarning("ExecutionFlow: Failed to get duration for job '{0}': {1}", context.BackgroundJob.Id, ex.Message);
             }
             return TimeSpan.Zero;
         }

@@ -55,8 +55,8 @@ namespace ExecutionFlow.Hangfire
                 if (jobClient == null)
                     jobClient = new BackgroundJobClient(jobStorage);
 
-                if (serviceProvider is FlowEngineJobActivator flowActivator)
-                    RegisterServices(flowActivator, jobClient, jobStorage);
+                if (serviceProvider is IFlowServiceRegistry serviceRegistry)
+                    RegisterServices(serviceRegistry, jobClient, jobStorage);
 
                 JobIdGenerator = (IJobIdGenerator)serviceProvider.GetService(typeof(IJobIdGenerator));
                 JobNameGenerator = (IHangfireJobName)serviceProvider.GetService(typeof(IHangfireJobName));
@@ -69,20 +69,20 @@ namespace ExecutionFlow.Hangfire
             }
         }
 
-        private void RegisterServices(FlowEngineJobActivator flowActivator, IBackgroundJobClient jobClient, JobStorage jobStorage)
+        private void RegisterServices(IFlowServiceRegistry serviceRegistry, IBackgroundJobClient jobClient, JobStorage jobStorage)
         {
             foreach (var kvp in Options.OptionValues)
-                flowActivator.AddSingleton(kvp.Key, kvp.Value);
+                serviceRegistry.AddSingleton(kvp.Key, kvp.Value);
 
-            flowActivator.AddSingleton(() => jobClient);
-            flowActivator.AddSingleton(() => jobStorage);
-            flowActivator.AddSingleton(() => _dispatcher);
-            flowActivator.RegisterLoggerFactory(Options.LoggerFactoryTypes);
-            flowActivator.AddSingleton<IHangfireJobName>(Options.JobNameType);
-            flowActivator.AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType);
-            flowActivator.AddSingleton<IExecutionManager>(typeof(HangfireExecutionManager));
-            flowActivator.AddSingleton<IRecurringTrigger>(() => _dispatcher);
-            flowActivator.AddSingleton<IEventDispatcher>(() => _dispatcher);
+            serviceRegistry.AddSingleton(() => jobClient)
+                .AddSingleton(() => jobStorage)
+                .AddSingleton(() => _dispatcher)
+                .RegisterLoggerFactory(Options.LoggerFactoryTypes)
+                .AddSingleton<IHangfireJobName>(Options.JobNameType)
+                .AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType)
+                .AddSingleton<IExecutionManager>(typeof(HangfireExecutionManager))
+                .AddSingleton<IRecurringTrigger>(() => _dispatcher)
+                .AddSingleton<IEventDispatcher>(() => _dispatcher);
         }
 
         private void RegisterRecurring(JobStorage jobStorage)
@@ -129,7 +129,7 @@ namespace ExecutionFlow.Hangfire
 
                 var handlerType = HangfireJobInfo.Create(job)?.GetHandlerType(_registry);
                 if (handlerType == null)
-                    return Enumerable.Empty<JobFilter>();
+                    return Array.Empty<JobFilter>();
 
                 return handlerType
                     .GetCustomAttributes(true)

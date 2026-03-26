@@ -63,6 +63,11 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
             return services;
         }
 
+        /// <summary>
+        /// Forces the DI container to resolve <see cref="IEventDispatcher"/> during application startup,
+        /// which triggers <see cref="HangfireSetup.Build"/> and initializes all ExecutionFlow services.
+        /// Removing this class will prevent the dispatcher from being constructed.
+        /// </summary>
         private class HostedDi : IHostedService
         {
             public HostedDi(IEventDispatcher dispatcher)

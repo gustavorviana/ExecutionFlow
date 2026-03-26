@@ -4,5 +4,7 @@
     {
         public const string Context = "PerformContext";
         public const string EventName = "CustomName";
+        public const string RetryCount = "RetryCount";
+        public const string StartedAt = "StartedAt";
     }
 }

@@ -7,7 +7,7 @@ using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
-    internal class FlowEngineJobActivator : JobActivator, IServiceProvider
+    internal class FlowEngineJobActivator : JobActivator, IServiceProvider, IFlowServiceRegistry
     {
         private readonly ConcurrentDictionary<Type, Type> _registrations = new ConcurrentDictionary<Type, Type>();
         private readonly ConcurrentDictionary<Type, SingletonBase> _singletons = new ConcurrentDictionary<Type, SingletonBase>();
@@ -84,6 +84,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             var ctors = type.GetConstructors();
             if (ctors.Length == 0)
                 throw new InvalidOperationException($"Type '{type.FullName}' has no public constructors and cannot be instantiated.");
+
+            if (ctors.Length > 1)
+                throw new InvalidOperationException($"Type '{type.FullName}' has multiple public constructors. Only types with a single public constructor are supported.");
 
             var ctor = ctors[0];
             var parameters = ctor.GetParameters();
