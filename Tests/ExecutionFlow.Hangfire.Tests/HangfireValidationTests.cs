@@ -295,7 +295,8 @@ public class HangfireValidationTests
             jobClient ?? Substitute.For<IBackgroundJobClient>(),
             storage,
             Substitute.For<IJobIdGenerator>(),
-            registry ?? Substitute.For<IExecutionFlowRegistry>());
+            registry ?? Substitute.For<IExecutionFlowRegistry>(),
+            new HangfireOptions());
     }
 
     private static ElectStateContext CreateElectStateContext(IState candidateState, string? currentState = null, Job? job = null)

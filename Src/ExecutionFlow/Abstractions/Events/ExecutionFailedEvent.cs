@@ -6,8 +6,8 @@ namespace ExecutionFlow.Abstractions.Events
     {
         public Exception Exception { get; }
 
-        public ExecutionFailedEvent(string jobId, string customId, Type handlerType, Exception exception)
-            : base(jobId, customId, handlerType)
+        public ExecutionFailedEvent(string jobId, string customId, Type handlerType, Exception exception, TimeSpan duration = default)
+            : base(jobId, customId, handlerType, duration)
         {
             Exception = exception;
         }

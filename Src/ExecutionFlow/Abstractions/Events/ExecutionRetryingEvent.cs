@@ -6,8 +6,8 @@ namespace ExecutionFlow.Abstractions.Events
     {
         public int AttemptNumber { get; }
 
-        public ExecutionRetryingEvent(string jobId, string customId, Type handlerType, int attemptNumber)
-            : base(jobId, customId, handlerType)
+        public ExecutionRetryingEvent(string jobId, string customId, Type handlerType, int attemptNumber, TimeSpan duration = default)
+            : base(jobId, customId, handlerType, duration)
         {
             AttemptNumber = attemptNumber;
         }

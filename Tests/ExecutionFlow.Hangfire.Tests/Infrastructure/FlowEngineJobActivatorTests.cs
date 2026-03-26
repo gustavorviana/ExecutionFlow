@@ -175,6 +175,6 @@ public class FlowEngineJobActivatorTests
 
     public class TestLoggerFactory : IExecutionLoggerFactory
     {
-        public IExecutionLogger CreateLogger(IDictionary<string, object> parameters) => null!;
+        public IExecutionLogger CreateLogger(FlowParameters parameters) => null!;
     }
 }

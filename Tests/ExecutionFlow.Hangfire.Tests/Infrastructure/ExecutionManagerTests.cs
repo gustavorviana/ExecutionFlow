@@ -274,5 +274,44 @@ public class ExecutionManagerTests
         Assert.Equal("succeeded-id", results[0].CustomId);
     }
 
+    // --- Retry ---
+
+    [Fact]
+    public void Retry_RequeuesFailedJob_ReturnsTrue()
+    {
+        _monitoringApi.FailedJobs(0, 10).Returns(FailedJobList(
+            new KeyValuePair<string, FailedJobDto>("failed-job-1", new FailedJobDto { Job = null })));
+
+        _connection.GetJobParameter("failed-job-1", ContextConsts.CustomId).Returns("my-custom-id");
+        _jobClient.ChangeState(Arg.Any<string>(), Arg.Any<global::Hangfire.States.IState>(), Arg.Any<string>()).Returns(true);
+
+        var result = _manager.Retry("my-custom-id");
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void Retry_ReturnsFalse_WhenNoFailedJobWithCustomId()
+    {
+        _monitoringApi.FailedJobs(0, 10).Returns(FailedJobList());
+
+        var result = _manager.Retry("nonexistent");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void Retry_ReturnsFalse_WhenCustomIdDoesNotMatch()
+    {
+        _monitoringApi.FailedJobs(0, 10).Returns(FailedJobList(
+            new KeyValuePair<string, FailedJobDto>("failed-job-2", new FailedJobDto { Job = null })));
+
+        _connection.GetJobParameter("failed-job-2", ContextConsts.CustomId).Returns("other-id");
+
+        var result = _manager.Retry("my-custom-id");
+
+        Assert.False(result);
+    }
+
     public class TestEvent { }
 }

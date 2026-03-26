@@ -13,7 +13,7 @@ namespace ExecutionFlow.Abstractions
             _factories = factories.ToArray();
         }
 
-        public IExecutionLogger CreateLogger(IDictionary<string, object> jobParameters)
+        public IExecutionLogger CreateLogger(FlowParameters jobParameters)
         {
             var loggers = _factories
                 .Select(f => f.CreateLogger(jobParameters))

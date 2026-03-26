@@ -103,6 +103,40 @@ public class ExecutionFlowOptionsTests
         Assert.Contains(setup.RecurringHandlers.Values, r => r.HandlerType == typeof(TestHandler));
     }
 
+    // --- Scan with predicate ---
+
+    [Fact]
+    public void Scan_WithPredicate_OnlyRegistersMatchingTypes()
+    {
+        var options = new TestOptions();
+
+        options.Scan(typeof(ExecutionFlowOptionsTests).Assembly, type => type == typeof(TestEventHandler));
+
+        Assert.Single(options.EventHandlers);
+        Assert.Empty(options.RecurringHandlers);
+    }
+
+    [Fact]
+    public void Scan_WithPredicate_ExcludesNonMatchingTypes()
+    {
+        var options = new TestOptions();
+
+        options.Scan(typeof(ExecutionFlowOptionsTests).Assembly, type => type.Namespace?.Contains("DoesNotExist") == true);
+
+        Assert.Empty(options.EventHandlers);
+        Assert.Empty(options.RecurringHandlers);
+    }
+
+    [Fact]
+    public void Scan_WithNullPredicate_RegistersAll()
+    {
+        var options = new TestOptions();
+
+        options.Scan(typeof(ExecutionFlowOptionsTests).Assembly, null);
+
+        Assert.True(options.EventHandlers.Count > 0 || options.RecurringHandlers.Count > 0);
+    }
+
     // Test types
 
     public class TestEvent { }

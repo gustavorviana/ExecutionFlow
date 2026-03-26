@@ -122,7 +122,8 @@ public class FlowParametersTests
         parameters["user1"] = "v2";
         parameters["user2"] = "v3";
 
-        parameters.Clear();
+        parameters.Remove("user1");
+        parameters.Remove("user2");
 
         Assert.Equal(1, parameters.Count);
         Assert.True(parameters.ContainsKey("infra"));

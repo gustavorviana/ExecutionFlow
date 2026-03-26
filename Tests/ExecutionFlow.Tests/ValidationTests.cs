@@ -147,7 +147,7 @@ public class ValidationTests
     {
         var factory = new ExecutionLoggerFactory(Array.Empty<IExecutionLoggerFactory>());
 
-        var logger = factory.CreateLogger(new Dictionary<string, object>());
+        var logger = factory.CreateLogger(jobParameters: new FlowParameters());
 
         Assert.NotNull(logger);
     }
@@ -175,7 +175,7 @@ public class ValidationTests
         factory2.CreateLogger(default!).ReturnsForAnyArgs(logger2);
 
         var loggerFactory = new ExecutionLoggerFactory(new[] { factory1, factory2 });
-        var composite = loggerFactory.CreateLogger(new Dictionary<string, object>());
+        var composite = loggerFactory.CreateLogger(new FlowParameters());
 
         composite.Log(HandlerLogType.Information, "test message");
 
@@ -194,7 +194,7 @@ public class ValidationTests
         factoryNull.CreateLogger(default!).ReturnsForAnyArgs((IExecutionLogger)null!);
 
         var loggerFactory = new ExecutionLoggerFactory(new[] { factoryNull, factory1 });
-        var composite = loggerFactory.CreateLogger(new Dictionary<string, object>());
+        var composite = loggerFactory.CreateLogger(new FlowParameters());
 
         composite.Log(HandlerLogType.Information, "test");
 
@@ -240,6 +240,6 @@ public class ValidationTests
 
     public class TestLoggerFactory : IExecutionLoggerFactory
     {
-        public IExecutionLogger CreateLogger(IDictionary<string, object> parameters) => null!;
+        public IExecutionLogger CreateLogger(FlowParameters parameters) => null!;
     }
 }

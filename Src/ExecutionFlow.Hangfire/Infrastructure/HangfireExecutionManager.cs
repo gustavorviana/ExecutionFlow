@@ -48,6 +48,24 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 _jobClient.Delete(jobId);
         }
 
+        public bool Retry(string customId)
+        {
+            var monitoringApi = _jobStorage.GetMonitoringApi();
+
+            using (var connection = _jobStorage.GetConnection())
+            {
+                var failedJobId = InfraUtils
+                    .ReadAll(monitoringApi.FailedJobs)
+                    .FirstOrDefault(x => GetCustomId(connection, x.Key) == customId)
+                    .Key;
+
+                if (string.IsNullOrEmpty(failedJobId))
+                    return false;
+
+                return _jobClient.Requeue(failedJobId);
+            }
+        }
+
         private string FindJobId(string customId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();

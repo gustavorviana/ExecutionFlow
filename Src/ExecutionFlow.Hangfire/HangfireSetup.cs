@@ -62,7 +62,7 @@ namespace ExecutionFlow.Hangfire
                 GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(this, Options));
                 JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this, Options));
                 RegisterRecurring(jobStorage);
-                return _dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this);
+                return _dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this, Options);
             }
         }
 

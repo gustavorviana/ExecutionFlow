@@ -17,6 +17,8 @@ namespace ExecutionFlow.Hangfire
 
         public bool DisableRecurringRetries { get; set; } = true;
 
+        public DeduplicationBehavior DeduplicationBehavior { get; set; } = DeduplicationBehavior.Disabled;
+
         public IReadOnlyList<Type> StateHandlerTypes => _stateHandlerTypes;
 
         public void SetJobAutoRun<T>(bool autoRun)

@@ -63,7 +63,7 @@ public class FlowContextBuilderTests
     {
         var mockLogger = Substitute.For<IExecutionLogger>();
         var mockFactory = Substitute.For<IExecutionLoggerFactory>();
-        mockFactory.CreateLogger(Arg.Any<IDictionary<string, object>>()).Returns(mockLogger);
+        mockFactory.CreateLogger(Arg.Any<FlowParameters>()).Returns(mockLogger);
 
         var loggerFactory = new ExecutionLoggerFactory(new[] { mockFactory });
         var builder = new FlowContextBuilder(loggerFactory);

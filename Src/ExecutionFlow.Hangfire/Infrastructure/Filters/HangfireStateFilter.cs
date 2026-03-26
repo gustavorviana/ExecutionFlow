@@ -33,8 +33,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             {
                 if (IsRetry(context))
                 {
+                    var duration = GetDuration(context);
                     var attemptNumber = GetAttemptNumber(context);
-                    var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber);
+                    var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber, duration);
                     foreach (var handler in GetAllInstancesOf<IOnRetrying>())
                         handler.OnRetrying(retryEvent);
                 }
@@ -60,7 +61,8 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             }
             else if (candidateState is FailedState failedState)
             {
-                var failedEvent = new ExecutionFailedEvent(jobId, customId, handlerType, failedState.Exception);
+                var duration = GetDuration(context);
+                var failedEvent = new ExecutionFailedEvent(jobId, customId, handlerType, failedState.Exception, duration);
                 foreach (var handler in GetAllInstancesOf<IOnFailed>())
                     handler.OnFailed(failedEvent);
             }
@@ -72,8 +74,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             }
             else if (candidateState is ScheduledState && IsRetry(context))
             {
+                var duration = GetDuration(context);
                 var attemptNumber = GetAttemptNumber(context);
-                var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber);
+                var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber, duration);
                 foreach (var handler in GetAllInstancesOf<IOnRetrying>())
                     handler.OnRetrying(retryEvent);
             }

@@ -23,10 +23,15 @@ namespace ExecutionFlow
 
         public void Scan(Assembly assembly)
         {
+            Scan(assembly, null);
+        }
+
+        public void Scan(Assembly assembly, Func<Type, bool> predicate)
+        {
             ThrowIfLocked();
 
             foreach (var type in GetValidTypes(assembly))
-                if (!type.IsAbstract && !type.IsInterface && ImplementsHandler(type))
+                if (!type.IsAbstract && !type.IsInterface && ImplementsHandler(type) && (predicate == null || predicate(type)))
                     Add(type);
         }
 
