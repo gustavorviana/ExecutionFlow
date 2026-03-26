@@ -50,7 +50,7 @@ public class FlowContextBuilderTests
     public void Parameters_ArePassedToContext()
     {
         var builder = new FlowContextBuilder(CreateLoggerFactory());
-        builder.Parameters["key1"] = "value1";
+        builder.Add("key1", "value1");
 
         var context = builder.Build();
 
@@ -71,6 +71,62 @@ public class FlowContextBuilderTests
         var context = builder.Build();
 
         Assert.NotNull(context.Log);
+    }
+
+    // --- ThrowIfBuilt tests ---
+
+    [Fact]
+    public void Build_NonGeneric_Throws_WhenCalledTwice()
+    {
+        var builder = new FlowContextBuilder(CreateLoggerFactory());
+        builder.Build();
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
+    [Fact]
+    public void Build_Generic_Throws_WhenCalledTwice()
+    {
+        var builder = new FlowContextBuilder(CreateLoggerFactory());
+        builder.Build(new TestEvent(), _ => { });
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build(new TestEvent(), _ => { }));
+    }
+
+    [Fact]
+    public void Build_Generic_Throws_AfterNonGenericBuild()
+    {
+        var builder = new FlowContextBuilder(CreateLoggerFactory());
+        builder.Build();
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build(new TestEvent(), _ => { }));
+    }
+
+    [Fact]
+    public void Build_NonGeneric_Throws_AfterGenericBuild()
+    {
+        var builder = new FlowContextBuilder(CreateLoggerFactory());
+        builder.Build(new TestEvent(), _ => { });
+
+        Assert.Throws<InvalidOperationException>(() => builder.Build());
+    }
+
+    [Fact]
+    public void Add_Throws_AfterBuild()
+    {
+        var builder = new FlowContextBuilder(CreateLoggerFactory());
+        builder.Build();
+
+        Assert.Throws<InvalidOperationException>(() => builder.Add("key", "value"));
+    }
+
+    [Fact]
+    public void AddReadOnly_Throws_AfterBuild()
+    {
+        var builder = new FlowContextBuilder(CreateLoggerFactory());
+        builder.Build();
+
+        Assert.Throws<InvalidOperationException>(() => builder.AddReadOnly("key", "value"));
     }
 
     public class TestEvent

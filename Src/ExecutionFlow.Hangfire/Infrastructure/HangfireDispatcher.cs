@@ -24,18 +24,25 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public string Publish<TEvent>(TEvent @event)
         {
-            var customName = @event is ICustomNameEvent customNameEvent ? customNameEvent.CustomName : null;
-
+            var customName = GetCustomName(@event);
             var jobId = _jobClient.Enqueue<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default));
+            SetCustomId(@event, jobId);
+            return jobId;
+        }
 
-            if (@event is ICustomIdEvent customIdEvent)
-            {
-                using (var connection = _jobStorage.GetConnection())
-                {
-                    connection.SetJobParameter(jobId, ContextConsts.CustomId, customIdEvent.CustomId);
-                }
-            }
+        public string Schedule<TEvent>(TEvent @event, TimeSpan delay)
+        {
+            var customName = GetCustomName(@event);
+            var jobId = _jobClient.Schedule<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default), delay);
+            SetCustomId(@event, jobId);
+            return jobId;
+        }
 
+        public string Schedule<TEvent>(TEvent @event, DateTimeOffset enqueueAt)
+        {
+            var customName = GetCustomName(@event);
+            var jobId = _jobClient.Schedule<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default), enqueueAt);
+            SetCustomId(@event, jobId);
             return jobId;
         }
 
@@ -56,6 +63,22 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
             _recurringJobManager.Trigger(jobId);
+        }
+
+        private static string GetCustomName<TEvent>(TEvent @event)
+        {
+            return @event is ICustomNameEvent customNameEvent ? customNameEvent.CustomName : null;
+        }
+
+        private void SetCustomId<TEvent>(TEvent @event, string jobId)
+        {
+            if (@event is ICustomIdEvent customIdEvent)
+            {
+                using (var connection = _jobStorage.GetConnection())
+                {
+                    connection.SetJobParameter(jobId, ContextConsts.CustomId, customIdEvent.CustomId);
+                }
+            }
         }
     }
 }

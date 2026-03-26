@@ -10,7 +10,7 @@ public class FlowContextDisposeTests
     {
         var callbackInvoked = false;
         var logger = Substitute.For<IExecutionLogger>();
-        var parameters = new Dictionary<string, object>() as IReadOnlyDictionary<string, object>;
+        var parameters = new FlowParameters();
 
         var context = new FlowContext<string>(parameters, logger, "event", _ => callbackInvoked = true);
 
@@ -26,7 +26,7 @@ public class FlowContextDisposeTests
     {
         var callCount = 0;
         var logger = Substitute.For<IExecutionLogger>();
-        var parameters = new Dictionary<string, object>() as IReadOnlyDictionary<string, object>;
+        var parameters = new FlowParameters();
 
         FlowContext<string> ctx;
         using (ctx = new FlowContext<string>(parameters, logger, "event", _ => callCount++))

@@ -60,7 +60,7 @@ namespace ExecutionFlow.Hangfire
 
                 GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes));
                 GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(this, Options));
-                JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this));
+                JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this, Options));
                 RegisterRecurring(jobStorage);
                 return _dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this);
             }
@@ -110,29 +110,5 @@ namespace ExecutionFlow.Hangfire
             }
         }
 
-        private class HandlerJobFilterProvider : IJobFilterProvider
-        {
-            private readonly IExecutionFlowRegistry _registry;
-
-            public HandlerJobFilterProvider(IExecutionFlowRegistry registry)
-            {
-                _registry = registry;
-            }
-
-            public IEnumerable<JobFilter> GetFilters(Job job)
-            {
-                if (job == null)
-                    return Array.Empty<JobFilter>();
-
-                var handlerType = HangfireJobInfo.Create(job)?.GetHandlerType(_registry);
-                if (handlerType == null)
-                    return Array.Empty<JobFilter>();
-
-                return handlerType
-                    .GetCustomAttributes(true)
-                    .OfType<JobFilterAttribute>()
-                    .Select((attr, i) => new JobFilter(attr, JobFilterScope.Type, i));
-            }
-        }
     }
 }

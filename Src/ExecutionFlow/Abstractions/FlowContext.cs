@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 
 namespace ExecutionFlow.Abstractions
 {
@@ -10,7 +9,7 @@ namespace ExecutionFlow.Abstractions
         public string CustomId { get; private set; }
         private Action<string> OnCustomIdChange;
 
-        public FlowContext(IReadOnlyDictionary<string, object> parameters,
+        public FlowContext(FlowParameters parameters,
             IExecutionLogger log,
             TEvent @event,
             Action<string> onCustomIdChange = null)
@@ -36,9 +35,9 @@ namespace ExecutionFlow.Abstractions
     {
         public IExecutionLogger Log { get; }
 
-        public IReadOnlyDictionary<string, object> Parameters { get; }
+        public FlowParameters Parameters { get; }
 
-        public FlowContext(IReadOnlyDictionary<string, object> parameters, IExecutionLogger log)
+        public FlowContext(FlowParameters parameters, IExecutionLogger log)
         {
             Log = log;
             Parameters = parameters;

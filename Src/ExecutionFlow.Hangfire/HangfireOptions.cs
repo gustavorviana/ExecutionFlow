@@ -15,6 +15,8 @@ namespace ExecutionFlow.Hangfire
 
         public bool RemoveOrphanRecurringJobs { get; set; } = false;
 
+        public bool DisableRecurringRetries { get; set; } = true;
+
         public IReadOnlyList<Type> StateHandlerTypes => _stateHandlerTypes;
 
         public void SetJobAutoRun<T>(bool autoRun)

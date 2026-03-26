@@ -1,12 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
 
 namespace ExecutionFlow.Abstractions
 {
     public class FlowContextBuilder
     {
-        public Dictionary<string, object> Parameters { get; set; } = new Dictionary<string, object>();
         private readonly ExecutionLoggerFactory _logFactory;
+        private readonly FlowParameters _parameters = new FlowParameters();
+        private bool _built;
 
         public FlowContextBuilder(ExecutionLoggerFactory logFactory)
         {
@@ -15,17 +15,41 @@ namespace ExecutionFlow.Abstractions
 
         public FlowContext<TEvent> Build<TEvent>(TEvent @event, Action<string> onCustomIdChange)
         {
-            return new FlowContext<TEvent>(Parameters, CreateLogger(), @event, onCustomIdChange);
+            ThrowIfBuilt();
+            _built = true;
+            return new FlowContext<TEvent>(_parameters, CreateLogger(), @event, onCustomIdChange);
         }
 
         public FlowContext Build()
         {
-            return new FlowContext(Parameters, CreateLogger());
+            ThrowIfBuilt();
+            _built = true;
+            return new FlowContext(_parameters, CreateLogger());
+        }
+
+        public FlowContextBuilder AddReadOnly(string key, object value)
+        {
+            ThrowIfBuilt();
+            _parameters.AddReadOnly(key, value);
+            return this;
+        }
+
+        public FlowContextBuilder Add(string key, object value)
+        {
+            ThrowIfBuilt();
+            _parameters.Add(key, value);
+            return this;
         }
 
         private IExecutionLogger CreateLogger()
         {
-            return _logFactory.CreateLogger(Parameters);
+            return _logFactory.CreateLogger(_parameters);
+        }
+
+        private void ThrowIfBuilt()
+        {
+            if (_built)
+                throw new InvalidOperationException("FlowContextBuilder has already been built and cannot be modified.");
         }
     }
 }

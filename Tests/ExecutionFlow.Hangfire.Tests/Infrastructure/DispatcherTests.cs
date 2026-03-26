@@ -61,6 +61,84 @@ public class DispatcherTests
         Assert.Equal("job-42", jobId);
     }
 
+    // --- Schedule with TimeSpan ---
+
+    [Fact]
+    public void Schedule_TimeSpan_ReturnsJobId()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-50");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
+
+        var jobId = dispatcher.Schedule(new TestEvent(), TimeSpan.FromMinutes(30));
+
+        Assert.Equal("job-50", jobId);
+    }
+
+    [Fact]
+    public void Schedule_TimeSpan_SetsCustomId_WhenEventImplementsICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-51");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
+
+        dispatcher.Schedule(new TestNamedEvent(), TimeSpan.FromHours(1));
+
+        _connection.Received(1).SetJobParameter("job-51", ContextConsts.CustomId, "named-job-1");
+    }
+
+    [Fact]
+    public void Schedule_TimeSpan_DoesNotSetCustomId_WhenEventDoesNotImplementICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-52");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
+
+        dispatcher.Schedule(new TestEvent(), TimeSpan.FromMinutes(5));
+
+        _connection.DidNotReceiveWithAnyArgs().SetJobParameter(default, default, default);
+    }
+
+    // --- Schedule with DateTimeOffset ---
+
+    [Fact]
+    public void Schedule_DateTimeOffset_ReturnsJobId()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-60");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
+
+        var jobId = dispatcher.Schedule(new TestEvent(), DateTimeOffset.UtcNow.AddDays(1));
+
+        Assert.Equal("job-60", jobId);
+    }
+
+    [Fact]
+    public void Schedule_DateTimeOffset_SetsCustomId_WhenEventImplementsICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-61");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
+
+        dispatcher.Schedule(new TestNamedEvent(), DateTimeOffset.UtcNow.AddHours(2));
+
+        _connection.Received(1).SetJobParameter("job-61", ContextConsts.CustomId, "named-job-1");
+    }
+
+    [Fact]
+    public void Schedule_DateTimeOffset_DoesNotSetCustomId_WhenEventDoesNotImplementICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-62");
+
+        var dispatcher = new HangfireDispatcher(_jobClient, _storage, _jobIdGenerator, _registry);
+
+        dispatcher.Schedule(new TestEvent(), DateTimeOffset.UtcNow.AddMinutes(10));
+
+        _connection.DidNotReceiveWithAnyArgs().SetJobParameter(default, default, default);
+    }
+
+    // Test types
+
     public class TestEvent { }
 
     public class TestNamedEvent : ICustomIdEvent
