@@ -1,6 +1,6 @@
 using ExecutionFlow.Abstractions;
 
-namespace ExecutionFlow.Tests;
+namespace ExecutionFlow.Tests.Abstractions;
 
 public class HandlerRegistrationTests
 {

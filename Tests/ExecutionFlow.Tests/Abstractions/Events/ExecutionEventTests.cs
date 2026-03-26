@@ -1,6 +1,6 @@
 using ExecutionFlow.Abstractions.Events;
 
-namespace ExecutionFlow.Tests;
+namespace ExecutionFlow.Tests.Abstractions.Events;
 
 public class ExecutionEventTests
 {

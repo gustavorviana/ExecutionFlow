@@ -10,7 +10,7 @@ namespace ExecutionFlow.Abstractions
 
         public FlowContextBuilder(ExecutionLoggerFactory logFactory)
         {
-            _logFactory = logFactory;
+            _logFactory = logFactory ?? throw new ArgumentNullException(nameof(logFactory));
         }
 
         public FlowContext<TEvent> Build<TEvent>(TEvent @event, Action<string> onCustomIdChange)

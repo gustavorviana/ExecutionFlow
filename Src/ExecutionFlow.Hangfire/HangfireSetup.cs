@@ -38,9 +38,6 @@ namespace ExecutionFlow.Hangfire
 
         public IHangfireDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, IServiceProvider serviceProvider = null)
         {
-            if (_dispatcher != null)
-                return _dispatcher;
-
             lock (_buildLock)
             {
                 if (_dispatcher != null)

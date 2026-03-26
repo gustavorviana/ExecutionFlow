@@ -7,7 +7,7 @@ using Hangfire.States;
 using Hangfire.Storage;
 using NSubstitute;
 
-namespace ExecutionFlow.Hangfire.Tests;
+namespace ExecutionFlow.Hangfire.Tests.Infrastructure.Filters;
 
 public class AutoRunFilterTests
 {

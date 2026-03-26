@@ -9,6 +9,7 @@ namespace ExecutionFlow.Abstractions
 
         public ExecutionLoggerFactory(IEnumerable<IExecutionLoggerFactory> factories)
         {
+            if (factories == null) throw new System.ArgumentNullException(nameof(factories));
             _factories = factories.ToArray();
         }
 

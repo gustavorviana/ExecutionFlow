@@ -21,36 +21,42 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             AddSingleton(registry);
         }
 
-        public void AddSingleton<TInterface>(Type targetType)
+        public IFlowServiceRegistry AddSingleton<TInterface>(Type targetType)
         {
             _registrations[typeof(TInterface)] = targetType;
+            return this;
         }
 
-        public void AddSingleton<TInterface>()
+        public IFlowServiceRegistry AddSingleton<TInterface>()
         {
             var type = typeof(TInterface);
             _registrations[type] = type;
+            return this;
         }
 
-        public void AddSingleton<TInterface>(TInterface instance)
+        public IFlowServiceRegistry AddSingleton<TInterface>(TInterface instance)
         {
             AddSingleton(typeof(TInterface), instance);
+            return this;
         }
 
-        public void AddSingleton(Type serviceType, object instance)
+        public IFlowServiceRegistry AddSingleton(Type serviceType, object instance)
         {
             _singletons[serviceType] = new InstanceSingletonBase(instance);
+            return this;
         }
 
-        public void AddSingleton<TInstance>(Func<TInstance> func)
+        public IFlowServiceRegistry AddSingleton<TInstance>(Func<TInstance> func)
         {
             _singletons[typeof(TInstance)] = new FunctionSingleton<TInstance>(func);
+            return this;
         }
 
-        public void RegisterLoggerFactory(IReadOnlyList<Type> loggerFactoryTypes)
+        public IFlowServiceRegistry RegisterLoggerFactory(IReadOnlyList<Type> loggerFactoryTypes)
         {
             var factories = loggerFactoryTypes.Select(CreateInstance).Cast<IExecutionLoggerFactory>().ToArray();
             AddSingleton(new ExecutionLoggerFactory(factories));
+            return this;
         }
 
         public override object ActivateJob(Type jobType)
@@ -61,9 +67,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             if (_singletons.TryGetValue(serviceType, out var cached))
                 return cached.GetInstance();
 
-            if (_registrations.ContainsKey(serviceType))
+            if (_registrations.TryGetValue(serviceType, out var targetType))
                 return _singletons
-                    .GetOrAdd(serviceType, x => new InstanceSingletonBase(CreateInstance(_registrations[x])))
+                    .GetOrAdd(serviceType, _ => new InstanceSingletonBase(CreateInstance(targetType)))
                     .GetInstance();
 
             return CreateInstance(serviceType);

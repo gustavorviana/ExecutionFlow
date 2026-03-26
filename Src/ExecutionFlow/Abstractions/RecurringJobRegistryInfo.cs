@@ -10,7 +10,7 @@ namespace ExecutionFlow.Abstractions
 
         public RecurringJobRegistryInfo(Type handlerType, string displayName, string cron)
         {
-            HandlerType = handlerType;
+            HandlerType = handlerType ?? throw new ArgumentNullException(nameof(handlerType));
             DisplayName = displayName;
             Cron = cron;
         }

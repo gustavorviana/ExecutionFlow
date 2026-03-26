@@ -4,9 +4,9 @@ namespace ExecutionFlow.Hangfire
 {
     public class DefaultRecurringServiceIdGenerator : IJobIdGenerator
     {
-        public string GenerateId(Type type)
+        public string GenerateId(Type handlerType)
         {
-            return type.FullName;
+            return handlerType.FullName;
         }
     }
 }

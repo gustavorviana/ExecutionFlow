@@ -51,7 +51,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         {
             var context = contextBuilder.Build(@event, customId =>
             {
-                performContext.Connection.SetJobParameter(performContext.BackgroundJob.Id, HangfireDispatcher.EventId, customId);
+                performContext.Connection.SetJobParameter(performContext.BackgroundJob.Id, ContextConsts.CustomId, customId);
             });
 
             if (@event is ICustomIdEvent customIdEvent)

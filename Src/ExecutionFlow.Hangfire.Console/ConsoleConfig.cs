@@ -35,7 +35,16 @@ namespace ExecutionFlow.Hangfire.Console
             if (Formatter != null)
                 return Formatter(level, message, args);
 
-            var formattedMessage = args != null && args.Length > 0 ? string.Format(message, args) : message;
+            string formattedMessage;
+            try
+            {
+                formattedMessage = args != null && args.Length > 0 ? string.Format(message, args) : message;
+            }
+            catch (FormatException)
+            {
+                formattedMessage = message;
+            }
+
             return $"[{level.ToString().ToUpperInvariant()}] {formattedMessage}";
         }
     }

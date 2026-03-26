@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Src\ExecutionFlow\ExecutionFlow.csproj" />
     <ProjectReference Include="..\..\Src\ExecutionFlow.Hangfire\ExecutionFlow.Hangfire.csproj" />
+    <ProjectReference Include="..\..\Src\ExecutionFlow.Hangfire.Console\ExecutionFlow.Hangfire.Console.csproj" />
   </ItemGroup>
 
   <ItemGroup>

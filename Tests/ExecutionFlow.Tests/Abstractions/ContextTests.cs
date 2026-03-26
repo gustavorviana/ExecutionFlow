@@ -1,7 +1,7 @@
 using ExecutionFlow.Abstractions;
 using NSubstitute;
 
-namespace ExecutionFlow.Tests;
+namespace ExecutionFlow.Tests.Abstractions;
 
 public class ContextTests
 {

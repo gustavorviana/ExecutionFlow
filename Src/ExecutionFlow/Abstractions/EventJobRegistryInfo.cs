@@ -10,8 +10,8 @@ namespace ExecutionFlow.Abstractions
 
         public EventJobRegistryInfo(Type handlerType, Type eventType, string displayName)
         {
-            HandlerType = handlerType;
-            EventType = eventType;
+            HandlerType = handlerType ?? throw new ArgumentNullException(nameof(handlerType));
+            EventType = eventType ?? throw new ArgumentNullException(nameof(eventType));
             DisplayName = displayName;
         }
     }

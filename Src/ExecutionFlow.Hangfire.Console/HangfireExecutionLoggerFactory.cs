@@ -1,6 +1,7 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.Server;
+using System;
 using System.Collections.Generic;
 
 namespace ExecutionFlow.Hangfire.Console
@@ -11,7 +12,8 @@ namespace ExecutionFlow.Hangfire.Console
 
         public HangfireExecutionLoggerFactory(IHangfireOption<ConsoleConfig> option)
         {
-            _config = option.Value;
+            if (option == null) throw new ArgumentNullException(nameof(option));
+            _config = option.Value ?? throw new ArgumentNullException(nameof(option), "option.Value cannot be null.");
         }
 
         public IExecutionLogger CreateLogger(IDictionary<string, object> parameters)

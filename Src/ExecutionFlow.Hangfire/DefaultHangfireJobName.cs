@@ -1,6 +1,7 @@
 ﻿using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.Common;
+using System;
 
 namespace ExecutionFlow.Hangfire
 {
@@ -11,14 +12,17 @@ namespace ExecutionFlow.Hangfire
 
         public DefaultHangfireJobName(IJobIdGenerator idGenerator, IExecutionFlowRegistry jobExecutionFlow)
         {
-            _idGenerator = idGenerator;
-            _jobExecutionFlow = jobExecutionFlow;
+            _idGenerator = idGenerator ?? throw new ArgumentNullException(nameof(idGenerator));
+            _jobExecutionFlow = jobExecutionFlow ?? throw new ArgumentNullException(nameof(jobExecutionFlow));
         }
 
         public string GetName(Job job)
         {
             var handlerInfo = HangfireJobInfo.Create(job)?.GetExpectedName(_jobExecutionFlow);
-            return handlerInfo ?? HangfireRecurringJobInfo.GetJobType(job)?.FullName ?? $"{_idGenerator.GenerateId(job.Method.DeclaringType)}.{job.Method.Name}";
+            if (handlerInfo != null)
+                return handlerInfo;
+
+            return _idGenerator.GenerateId(job.Method.DeclaringType);
         }
     }
 }

@@ -85,41 +85,42 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             return _stateHandlers
                 .Where(stateType.IsAssignableFrom)
                 .Select(_serviceProvider.GetService)
+                .Where(x => x != null)
                 .Cast<TState>();
+        }
+
+        private static T SafeExecute<T>(string operation, string jobId, Func<T> action, T defaultValue = default)
+        {
+            try
+            {
+                return action();
+            }
+            catch (Exception ex)
+            {
+                Trace.TraceWarning("ExecutionFlow: Failed to {0} for job '{1}': {2}", operation, jobId, ex.Message);
+                return defaultValue;
+            }
         }
 
         private static string GetCustomId(ElectStateContext context, string jobId)
         {
-            try
-            {
-                return context.Connection.GetJobParameter(jobId, HangfireDispatcher.EventId);
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning("ExecutionFlow: Failed to get custom ID for job '{0}': {1}", jobId, ex.Message);
-                return null;
-            }
+            return SafeExecute("get custom ID", jobId,
+                () => context.Connection.GetJobParameter(jobId, ContextConsts.CustomId));
         }
 
         private static bool IsRetry(ElectStateContext context)
         {
-            return context.CurrentState == "Failed" ||
-                   (context.CurrentState == "Scheduled" && GetRetryCount(context) > 0);
+            return context.CurrentState == FailedState.StateName ||
+                   (context.CurrentState == ScheduledState.StateName && GetRetryCount(context) > 0);
         }
 
         private static int GetRetryCount(ElectStateContext context)
         {
-            try
+            return SafeExecute("get retry count", context.BackgroundJob.Id, () =>
             {
                 var retryCountStr = context.Connection.GetJobParameter(context.BackgroundJob.Id, ContextConsts.RetryCount);
-                if (int.TryParse(retryCountStr, out var count))
-                    return count;
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning("ExecutionFlow: Failed to get retry count for job '{0}': {1}", context.BackgroundJob.Id, ex.Message);
-            }
-            return 0;
+                return int.TryParse(retryCountStr, out var count) ? count : 0;
+            });
         }
 
         private static int GetAttemptNumber(ElectStateContext context)
@@ -130,7 +131,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
 
         private static TimeSpan GetDuration(ElectStateContext context)
         {
-            try
+            return SafeExecute("get duration", context.BackgroundJob.Id, () =>
             {
                 var processingState = context.BackgroundJob.Job != null
                     ? context.Connection.GetStateData(context.BackgroundJob.Id)
@@ -142,12 +143,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
                 {
                     return DateTime.UtcNow - startedAt;
                 }
-            }
-            catch (Exception ex)
-            {
-                Trace.TraceWarning("ExecutionFlow: Failed to get duration for job '{0}': {1}", context.BackgroundJob.Id, ex.Message);
-            }
-            return TimeSpan.Zero;
+
+                return TimeSpan.Zero;
+            });
         }
     }
 }

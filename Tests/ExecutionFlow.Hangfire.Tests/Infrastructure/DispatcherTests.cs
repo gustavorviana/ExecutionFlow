@@ -1,10 +1,11 @@
 using ExecutionFlow.Abstractions;
+using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using Hangfire.Storage;
 using NSubstitute;
 using HangfireDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireDispatcher;
 
-namespace ExecutionFlow.Hangfire.Tests;
+namespace ExecutionFlow.Hangfire.Tests.Infrastructure;
 
 public class DispatcherTests
 {
@@ -45,7 +46,7 @@ public class DispatcherTests
 
         dispatcher.Publish(new TestNamedEvent());
 
-        _connection.Received(1).SetJobParameter("job-100", HangfireDispatcher.EventId, "named-job-1");
+        _connection.Received(1).SetJobParameter("job-100", ContextConsts.CustomId, "named-job-1");
     }
 
     [Fact]

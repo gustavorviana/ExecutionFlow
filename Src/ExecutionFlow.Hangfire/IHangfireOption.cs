@@ -9,7 +9,7 @@ namespace ExecutionFlow.Hangfire
     {
         public HangfireOption(T value)
         {
-            Value = value;
+            Value = value ?? throw new System.ArgumentNullException(nameof(value));
         }
 
         public T Value { get; }

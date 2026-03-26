@@ -51,7 +51,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public override IJobRegistryInfo GetHandler(IExecutionFlowRegistry registry)
         {
-            if (registry.RecurringHandlers.TryGetValue(HandlerType, out var eventHandler)) 
+            if (HandlerType == null)
+                return null;
+
+            if (registry.RecurringHandlers.TryGetValue(HandlerType, out var eventHandler))
                 return eventHandler;
 
             return null;
@@ -59,7 +62,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public static Type GetJobType(Job job)
         {
-            if (job.Args?.Count == JobArgSize && job.Args[RecurringEventType] is Type jobType)
+            if (job?.Args?.Count == JobArgSize && job.Args[RecurringEventType] is Type jobType)
                 return jobType;
 
             return null;
@@ -79,7 +82,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         public static HangfireJobInfo Create(Job job)
         {
-            if (job?.Method?.IsGenericMethod == true)
+            if (job == null)
+                return null;
+
+            if (job.Method?.IsGenericMethod == true)
                 return new HangfireEventJobInfo(job);
 
             return new HangfireRecurringJobInfo(job);

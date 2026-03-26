@@ -3,7 +3,7 @@ using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using NSubstitute;
 
-namespace ExecutionFlow.Hangfire.Tests;
+namespace ExecutionFlow.Hangfire.Tests.Infrastructure;
 
 public class FlowEngineJobActivatorTests
 {

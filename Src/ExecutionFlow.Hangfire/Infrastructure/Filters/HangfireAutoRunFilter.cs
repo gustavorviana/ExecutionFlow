@@ -58,7 +58,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             if (IsAllowedEnqueue(context.CandidateState))
                 return true;
 
-            if (context.BackgroundJob.ParametersSnapshot.TryGetValue(HangfireTriggeredKey, out var value))
+            if (context.BackgroundJob.ParametersSnapshot?.TryGetValue(HangfireTriggeredKey, out var value) == true)
                 return value == HangfireTriggeredValue;
 
             return false;

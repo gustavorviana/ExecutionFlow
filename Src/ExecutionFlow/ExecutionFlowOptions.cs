@@ -26,7 +26,7 @@ namespace ExecutionFlow
             ThrowIfLocked();
 
             foreach (var type in GetValidTypes(assembly))
-                if (!type.IsAbstract && !type.IsInterface)
+                if (!type.IsAbstract && !type.IsInterface && ImplementsHandler(type))
                     Add(type);
         }
 
@@ -67,8 +67,21 @@ namespace ExecutionFlow
             var displayName = displayNameAttr?.DisplayName ?? handlerType.Name;
             var cron = recurringAttr?.Cron;
 
+            var isRecurring = typeof(IHandler).IsAssignableFrom(handlerType);
+            var eventInterfaces = handlerType.GetInterfaces()
+                .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IHandler<>))
+                .ToArray();
+
+            if (isRecurring && eventInterfaces.Length > 0)
+                throw new InvalidOperationException(
+                    $"Type '{handlerType.FullName}' implements both IHandler and IHandler<TEvent>. A handler must implement only one of them.");
+
+            if (eventInterfaces.Length > 1)
+                throw new InvalidOperationException(
+                    $"Type '{handlerType.FullName}' implements IHandler<TEvent> for multiple event types. A handler must handle a single event type.");
+
             // Check for IHandler (non-generic)
-            if (typeof(IHandler).IsAssignableFrom(handlerType))
+            if (isRecurring)
             {
                 _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
                     handlerType: handlerType,
@@ -79,24 +92,24 @@ namespace ExecutionFlow
             }
 
             // Check for IHandler<TEvent>
-            foreach (var iface in handlerType.GetInterfaces())
+            if (eventInterfaces.Length == 1)
             {
-                if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IHandler<>))
-                {
-                    var eventType = iface.GetGenericArguments()[0];
+                var eventType = eventInterfaces[0].GetGenericArguments()[0];
 
-                    if (_eventHandlers.TryGetValue(eventType, out var existingHandler) && existingHandler.HandlerType != handlerType)
-                        throw new InvalidOperationException(
-                            $"An event handler for event type '{eventType.FullName}' is already registered (existing: '{existingHandler.HandlerType.FullName}', duplicate: '{handlerType.FullName}').");
+                if (_eventHandlers.TryGetValue(eventType, out var existingHandler) && existingHandler.HandlerType != handlerType)
+                    throw new InvalidOperationException(
+                        $"An event handler for event type '{eventType.FullName}' is already registered (existing: '{existingHandler.HandlerType.FullName}', duplicate: '{handlerType.FullName}').");
 
-                    _eventHandlers[eventType] = new EventJobRegistryInfo(
-                        handlerType: handlerType,
-                        eventType: eventType,
-                        displayName: displayName
-                    );
-                    return;
-                }
+                _eventHandlers[eventType] = new EventJobRegistryInfo(
+                    handlerType: handlerType,
+                    eventType: eventType,
+                    displayName: displayName
+                );
+                return;
             }
+
+            throw new ArgumentException(
+                $"Type '{handlerType.FullName}' does not implement IHandler or IHandler<TEvent>.", nameof(handlerType));
         }
 
         public void AddLogger<TFactory>() where TFactory : class, IExecutionLoggerFactory

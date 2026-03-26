@@ -6,11 +6,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 {
     public class HangfireDispatcher : IHangfireDispatcher
     {
-        internal const string EventId = "customId";
         private readonly IBackgroundJobClient _jobClient;
         private readonly IJobIdGenerator _jobIdGenerator;
         private readonly IExecutionFlowRegistry _registry;
         private readonly JobStorage _jobStorage;
+        private readonly RecurringJobManager _recurringJobManager;
 
         public HangfireDispatcher(IBackgroundJobClient jobClient, JobStorage jobStorage, IJobIdGenerator jobIdGenerator, IExecutionFlowRegistry registry)
         {
@@ -19,6 +19,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
             _jobIdGenerator = jobIdGenerator ?? throw new ArgumentNullException(nameof(jobIdGenerator));
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
+            _recurringJobManager = new RecurringJobManager(jobStorage);
         }
 
         public string Publish<TEvent>(TEvent @event)
@@ -31,7 +32,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             {
                 using (var connection = _jobStorage.GetConnection())
                 {
-                    connection.SetJobParameter(jobId, EventId, customIdEvent.CustomId);
+                    connection.SetJobParameter(jobId, ContextConsts.CustomId, customIdEvent.CustomId);
                 }
             }
 
@@ -47,14 +48,14 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                     $"No recurring handler registered for type '{handlerType.FullName}'.");
 
             var jobId = _jobIdGenerator.GenerateId(handlerType);
-            new RecurringJobManager(_jobStorage).Trigger(jobId);
+            _recurringJobManager.Trigger(jobId);
         }
 
         public void Trigger(string jobId)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
 
-            new RecurringJobManager(_jobStorage).Trigger(jobId);
+            _recurringJobManager.Trigger(jobId);
         }
     }
 }

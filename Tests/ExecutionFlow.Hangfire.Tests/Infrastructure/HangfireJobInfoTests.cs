@@ -5,7 +5,7 @@ using Hangfire.Common;
 using NSubstitute;
 using HangfireJobDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher;
 
-namespace ExecutionFlow.Hangfire.Tests;
+namespace ExecutionFlow.Hangfire.Tests.Infrastructure;
 
 public class HangfireJobInfoTests
 {

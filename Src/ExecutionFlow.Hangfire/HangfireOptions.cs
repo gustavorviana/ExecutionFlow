@@ -51,6 +51,8 @@ namespace ExecutionFlow.Hangfire
         {
             ThrowIfLocked();
             if (jobNameType == null) throw new ArgumentNullException(nameof(jobNameType));
+            if (!typeof(IHangfireJobName).IsAssignableFrom(jobNameType))
+                throw new ArgumentException($"Type '{jobNameType.FullName}' does not implement IHangfireJobName.", nameof(jobNameType));
             JobNameType = jobNameType;
         }
 
@@ -63,6 +65,8 @@ namespace ExecutionFlow.Hangfire
         {
             ThrowIfLocked();
             if (jobIdGeneratorType == null) throw new ArgumentNullException(nameof(jobIdGeneratorType));
+            if (!typeof(IJobIdGenerator).IsAssignableFrom(jobIdGeneratorType))
+                throw new ArgumentException($"Type '{jobIdGeneratorType.FullName}' does not implement IJobIdGenerator.", nameof(jobIdGeneratorType));
             JobIdGeneratorType = jobIdGeneratorType;
         }
 
