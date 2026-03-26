@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
-    internal interface IFlowServiceRegistry
+    internal interface IFlowServiceRegistry : IServiceProvider
     {
         IFlowServiceRegistry AddSingleton<TInterface>(Type targetType);
         IFlowServiceRegistry AddSingleton<TInterface>();

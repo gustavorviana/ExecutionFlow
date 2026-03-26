@@ -13,7 +13,7 @@ namespace ExecutionFlow.Hangfire
 {
     public class HangfireSetup : ExecutionFlowSetup<HangfireOptions>
     {
-        private IHangfireDispatcher _dispatcher;
+        private bool _built;
         private readonly object _buildLock = new object();
         public IReadOnlyList<Type> StateHandlerTypes => Options?.StateHandlerTypes;
         public IJobIdGenerator JobIdGenerator { get; internal set; }
@@ -40,8 +40,7 @@ namespace ExecutionFlow.Hangfire
         {
             lock (_buildLock)
             {
-                if (_dispatcher != null)
-                    return _dispatcher;
+                ThrowIfBuilt();
 
                 if (serviceProvider == null)
                     serviceProvider = (JobActivator.Current as FlowEngineJobActivator) ?? new FlowEngineJobActivator(this);
@@ -55,15 +54,62 @@ namespace ExecutionFlow.Hangfire
                 if (serviceProvider is IFlowServiceRegistry serviceRegistry)
                     RegisterServices(serviceRegistry, jobClient, jobStorage);
 
-                JobIdGenerator = (IJobIdGenerator)serviceProvider.GetService(typeof(IJobIdGenerator));
-                JobNameGenerator = (IHangfireJobName)serviceProvider.GetService(typeof(IHangfireJobName));
+                InitGenerators(serviceProvider);
 
                 GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes));
                 GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(this, Options));
                 JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this, Options));
                 RegisterRecurring(jobStorage);
-                return _dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this, Options);
+
+                return CreateDispatcher(jobClient, jobStorage, serviceProvider);
             }
+        }
+
+        public IEventDispatcher BuildDispatcherOnly(JobStorage jobStorage, IServiceProvider serviceProvider = null)
+        {
+            return BuildDispatcherOnly(new BackgroundJobClient(jobStorage), jobStorage, serviceProvider);
+        }
+
+        public IEventDispatcher BuildDispatcherOnly(IBackgroundJobClient jobClient, JobStorage jobStorage, IServiceProvider serviceProvider = null)
+        {
+            lock (_buildLock)
+            {
+                ThrowIfBuilt();
+
+                if (jobClient == null) throw new ArgumentNullException(nameof(jobClient));
+                if (jobStorage == null) throw new ArgumentNullException(nameof(jobStorage));
+
+                if (serviceProvider == null)
+                    serviceProvider = new FlowEngineJobActivator(this)
+                        .AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType)
+                        .AddSingleton<IHangfireJobName>(Options.JobNameType);
+
+                InitGenerators(serviceProvider);
+                return CreateDispatcher(jobClient, jobStorage, serviceProvider);
+            }
+        }
+
+        private HangfireDispatcher CreateDispatcher(IBackgroundJobClient jobClient, JobStorage jobStorage, IServiceProvider serviceProvider)
+        {
+            var dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this, Options);
+
+            if (serviceProvider is IFlowServiceRegistry serviceRegistry)
+                RegisterDispatcher(serviceRegistry, dispatcher);
+
+            _built = true;
+            return dispatcher;
+        }
+
+        private void ThrowIfBuilt()
+        {
+            if (_built)
+                throw new InvalidOperationException("HangfireSetup has already been built. Create a new instance to build again.");
+        }
+
+        private void InitGenerators(IServiceProvider serviceProvider)
+        {
+            JobIdGenerator = (IJobIdGenerator)serviceProvider.GetService(typeof(IJobIdGenerator));
+            JobNameGenerator = (IHangfireJobName)serviceProvider.GetService(typeof(IHangfireJobName));
         }
 
         private void RegisterServices(IFlowServiceRegistry serviceRegistry, IBackgroundJobClient jobClient, JobStorage jobStorage)
@@ -73,13 +119,18 @@ namespace ExecutionFlow.Hangfire
 
             serviceRegistry.AddSingleton(() => jobClient)
                 .AddSingleton(() => jobStorage)
-                .AddSingleton(() => _dispatcher)
                 .RegisterLoggerFactory(Options.LoggerFactoryTypes)
                 .AddSingleton<IHangfireJobName>(Options.JobNameType)
                 .AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType)
-                .AddSingleton<IExecutionManager>(typeof(HangfireExecutionManager))
-                .AddSingleton<IRecurringTrigger>(() => _dispatcher)
-                .AddSingleton<IEventDispatcher>(() => _dispatcher);
+                .AddSingleton<IExecutionManager>(typeof(HangfireExecutionManager));
+        }
+
+        private void RegisterDispatcher(IFlowServiceRegistry serviceRegistry, HangfireDispatcher dispatcher)
+        {
+            serviceRegistry
+                .AddSingleton(dispatcher)
+                .AddSingleton<IRecurringTrigger>(dispatcher)
+                .AddSingleton<IEventDispatcher>(dispatcher);
         }
 
         private void RegisterRecurring(JobStorage jobStorage)
@@ -109,6 +160,5 @@ namespace ExecutionFlow.Hangfire
                         recurringJobManager.RemoveIfExists(job.Id);
             }
         }
-
     }
 }

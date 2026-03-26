@@ -75,14 +75,14 @@
         sending = true;
 
         var sentAt = DateTime.UtcNow;
-        var jobId = Dispatcher.Publish(new SendMessageEvent
+        var result = Dispatcher.Publish(new SendMessageEvent
         {
             From = from,
             Content = content,
             SentAt = sentAt
         });
 
-        sentMessages.Insert(0, new SentMessage(jobId, from, content, sentAt));
+        sentMessages.Insert(0, new SentMessage(result.JobId, from, content, sentAt));
 
         content = string.Empty;
         sending = false;

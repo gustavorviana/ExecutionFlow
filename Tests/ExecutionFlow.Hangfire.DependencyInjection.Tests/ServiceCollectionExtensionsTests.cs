@@ -127,6 +127,82 @@ public class ServiceCollectionExtensionsTests
         Assert.NotSame(handler1, handler2);
     }
 
+    // --- AddExecutionFlowDispatcher (producer-only) ---
+
+    private static ServiceProvider BuildDispatcherOnlyProvider(Action<HangfireOptions>? configure = null)
+    {
+        var services = new ServiceCollection();
+        var storage = Substitute.For<JobStorage>();
+        storage.GetConnection().Returns(Substitute.For<IStorageConnection>());
+
+        services.AddSingleton(storage);
+        services.AddExecutionFlowDispatcher(configure);
+
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public void DispatcherOnly_DefaultOverload_ResolvesStorageFromDI()
+    {
+        using var provider = BuildDispatcherOnlyProvider();
+
+        var dispatcher = provider.GetService<IEventDispatcher>();
+
+        Assert.NotNull(dispatcher);
+    }
+
+    [Fact]
+    public void DispatcherOnly_WithStorageFunc_Registers_IEventDispatcher()
+    {
+        var storage = Substitute.For<JobStorage>();
+        storage.GetConnection().Returns(Substitute.For<IStorageConnection>());
+
+        var services = new ServiceCollection();
+        services.AddExecutionFlowDispatcher(_ => storage);
+
+        using var provider = services.BuildServiceProvider();
+        var dispatcher = provider.GetService<IEventDispatcher>();
+
+        Assert.NotNull(dispatcher);
+    }
+
+    [Fact]
+    public void DispatcherOnly_DoesNotRegister_IExecutionManager()
+    {
+        using var provider = BuildDispatcherOnlyProvider();
+
+        var manager = provider.GetService<IExecutionManager>();
+
+        Assert.Null(manager);
+    }
+
+    [Fact]
+    public void DispatcherOnly_DoesNotRegister_IRecurringTrigger()
+    {
+        using var provider = BuildDispatcherOnlyProvider();
+
+        var trigger = provider.GetService<IRecurringTrigger>();
+
+        Assert.Null(trigger);
+    }
+
+    [Fact]
+    public void DispatcherOnly_WithStorageFunc_CanPublish()
+    {
+        var storage = Substitute.For<JobStorage>();
+        storage.GetConnection().Returns(Substitute.For<IStorageConnection>());
+
+        var services = new ServiceCollection();
+        services.AddExecutionFlowDispatcher(_ => storage);
+
+        using var provider = services.BuildServiceProvider();
+        var dispatcher = provider.GetRequiredService<IEventDispatcher>();
+
+        var result = dispatcher.Publish(new TestEvent());
+
+        Assert.NotNull(result);
+    }
+
     // Test types
 
     public class TestEvent { }

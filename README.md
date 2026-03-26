@@ -1,658 +1,348 @@
 # ExecutionFlow
 
-A .NET library for defining, dispatching, and managing background jobs on top of [Hangfire](https://www.hangfire.io/) with typed handler contracts, automatic discovery, and lifecycle hooks.
+A lightweight abstraction layer over [Hangfire](https://www.hangfire.io/) for structured background job execution with handler-based architecture, lifecycle hooks, and built-in logging.
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
-| **ExecutionFlow** | Core contracts and abstractions — zero external dependencies. |
-| **ExecutionFlow.Hangfire** | Hangfire provider — handler registration, dispatching, state filters, and execution manager. |
-| **ExecutionFlow.Hangfire.DependencyInjection** | ASP.NET Core dependency injection extensions. |
-| **ExecutionFlow.Hangfire.Console** | Optional progress-bar reporting on the Hangfire dashboard (requires [Hangfire.Console](https://github.com/pieceofsummer/Hangfire.Console)). |
+| **ExecutionFlow** | Core abstractions - zero external dependencies |
+| **ExecutionFlow.Hangfire** | Hangfire integration - dispatching, filters, execution manager |
+| **ExecutionFlow.Hangfire.DependencyInjection** | ASP.NET Core DI extensions |
+| **ExecutionFlow.Hangfire.Console** | Console logging + progress bars (requires [Hangfire.Console](https://github.com/pieceofsummer/Hangfire.Console)) |
 
-## Recommended Project Structure
+## Quick Start
 
-When producer and consumer run as separate processes, create a dedicated project for your events so both sides can reference it without coupling to handler implementations:
-
-```
-YourSolution/
-├── YourProject.Events/          # Event classes only (shared by producer and consumer)
-│   └── SendMessageEvent.cs
-├── YourProject.Handlers/        # Handler implementations (consumer only)
-│   ├── SendMessageHandler.cs
-│   └── HeartbeatHandler.cs
-├── YourProject.Producer/        # Enqueues events (references YourProject.Events)
-│   └── Program.cs
-└── YourProject.Consumer/        # Processes jobs (references YourProject.Events + YourProject.Handlers)
-    └── Program.cs
-```
-
-## Hangfire Configuration vs ExecutionFlow Configuration
-
-ExecutionFlow does **not** configure Hangfire itself — it only registers handlers, dispatching, and lifecycle hooks. You are responsible for configuring Hangfire storage, server, and dashboard independently.
+### 1. Define an event and handler
 
 ```csharp
-// 1. Hangfire configuration (your responsibility)
-builder.Services.AddHangfire(config =>
-    config.UseSqlServerStorage(connectionString));
-builder.Services.AddHangfireServer();
+// Event
+public class SendEmailEvent
+{
+    public string To { get; set; }
+    public string Subject { get; set; }
+}
 
-// 2. ExecutionFlow configuration (handler registration, dispatching, lifecycle)
+// Handler
+public class SendEmailHandler : IHandler<SendEmailEvent>
+{
+    public async Task HandleAsync(FlowContext<SendEmailEvent> context, CancellationToken ct)
+    {
+        var email = context.Event;
+        context.Log.Info($"Sending email to {email.To}");
+        // your logic here
+        context.Log.Success("Email sent");
+    }
+}
+```
+
+### 2. Configure
+
+**With DI (ASP.NET Core):**
+
+```csharp
+builder.Services.AddHangfire(config => config.UseSqlServerStorage(connectionString));
+builder.Services.AddHangfireServer();
 builder.Services.AddHangfireToExecutionFlow(options =>
 {
-    options.Scan(typeof(IHandlerMark).Assembly);
+    options.Scan(typeof(SendEmailHandler).Assembly);
 });
 ```
 
-> **Dashboard placement:** The Hangfire dashboard must run on a process that has ExecutionFlow handlers registered (typically the consumer), so that `IHangfireJobName` can resolve handler display names. If placed on a producer-only process without handler registration, job names won't display correctly.
+**Without DI:**
 
-## Installation
+```csharp
+GlobalConfiguration.Configuration.UseSqlServerStorage(connectionString);
 
-ExecutionFlow is not yet available on NuGet. For now, install by cloning the repository and adding project references:
+var setup = new HangfireSetup();
+setup.Configure(options => options.Scan(typeof(SendEmailHandler).Assembly));
+setup.ConfigureActivator().Build();
 
-```shell
-git clone https://github.com/your-org/ExecutionFlow.git
+using var server = new BackgroundJobServer();
 ```
 
-Then add project references from your solution:
+### 3. Publish
 
-```shell
-# Core + Hangfire provider (required)
-dotnet add reference path/to/ExecutionFlow/Src/ExecutionFlow/ExecutionFlow.csproj
-dotnet add reference path/to/ExecutionFlow/Src/ExecutionFlow.Hangfire/ExecutionFlow.Hangfire.csproj
-
-# Dependency injection support (recommended for ASP.NET Core)
-dotnet add reference path/to/ExecutionFlow/Src/ExecutionFlow.Hangfire.DependencyInjection/ExecutionFlow.Hangfire.DependencyInjection.csproj
-
-# Progress bars on the dashboard (optional)
-dotnet add reference path/to/ExecutionFlow/Src/ExecutionFlow.Hangfire.Console/ExecutionFlow.Hangfire.Console.csproj
+```csharp
+var result = dispatcher.Publish(new SendEmailEvent { To = "user@mail.com", Subject = "Hello" });
+// result.JobId = "abc-123"
+// result.Enqueued = true
 ```
 
 ## Handlers
 
-ExecutionFlow supports two types of handlers:
-
-### Event Handler (`IHandler<TEvent>`)
-
-Processes a specific event type dispatched via `IDispatcher.Enqueue()`.
-
-**1. Define your event class** — a simple POCO, no base class required:
+### Event Handler (`IHandler<TEvent>`) - fire-and-forget
 
 ```csharp
-namespace YourProject.Events;
-
-public class SendMessageEvent
+public class OrderHandler : IHandler<OrderCreatedEvent>
 {
-    public string From { get; set; } = string.Empty;
-    public string Content { get; set; } = string.Empty;
-    public DateTime SentAt { get; set; }
-}
-```
-
-**2. Create the handler:**
-
-```csharp
-using ExecutionFlow.Abstractions;
-using YourProject.Events;
-
-namespace YourProject.Handlers;
-
-public class SendMessageHandler : IHandler<SendMessageEvent>
-{
-    public Task HandleAsync(FlowContext<SendMessageEvent> context, CancellationToken cancellationToken)
+    public async Task HandleAsync(FlowContext<OrderCreatedEvent> context, CancellationToken ct)
     {
-        var msg = context.Event;
-        context.Log.Info($"Message received from '{msg.From}' at {msg.SentAt:HH:mm:ss}:");
-        context.Log.Success(msg.Content);
-        return Task.CompletedTask;
+        var order = context.Event;
+        context.Log.Info($"Processing order {order.Id}");
     }
 }
 ```
 
-The `FlowContext<TEvent>` provides:
-- `context.Event` — the deserialized event instance
-- `context.Log` — logger with `Info()`, `Success()`, `Warning()`, `Error()` methods
-- `context.Items` — a `Dictionary<string, object>` for storing arbitrary data during execution
-- `context.SetCustomId(string)` — associate a custom tracking ID with this execution
-
-### Recurring Handler (`IHandler`)
-
-Runs on a cron schedule. Uses the non-generic `IHandler` interface with `[Recurring]` and optionally `[DisplayName]` attributes.
+### Recurring Handler (`IHandler`) - cron-based
 
 ```csharp
-using System.ComponentModel;
-using ExecutionFlow.Abstractions;
-using ExecutionFlow.Attributes;
-
-namespace YourProject.Handlers;
-
-[Recurring("* * * * *")]   // every minute
-[DisplayName("Heartbeat")]
-public class HeartbeatHandler : IHandler
+[Recurring("*/5 * * * *")]
+[DisplayName("Data Sync")]
+public class DataSyncHandler : IHandler
 {
-    public Task HandleAsync(FlowContext context, CancellationToken cancellationToken)
+    public async Task HandleAsync(FlowContext context, CancellationToken ct)
     {
-        context.Log.Info($"Heartbeat at {DateTime.UtcNow:HH:mm:ss} UTC");
-        return Task.CompletedTask;
+        context.Log.Info("Syncing data...");
     }
 }
 ```
 
-The cron expression follows the standard format: `minute hour day month day-of-week`.
+## Dispatching
 
-## Setup with Dependency Injection
-
-When using `AddHangfireToExecutionFlow()`, all discovered handlers (event handlers and recurring handlers) are automatically registered in the DI container as **transient** services. State handlers added via `AddStateHandler<T>()` are also resolved through the DI container, so they can receive injected dependencies in their constructors.
-
-### Consumer (processes jobs)
+### Fire-and-forget
 
 ```csharp
-using ExecutionFlow.Hangfire;
-using ExecutionFlow.Hangfire.DependencyInjection;
-using Hangfire;
-
-var builder = WebApplication.CreateBuilder(args);
-
-var connectionString = builder.Configuration.GetConnectionString("hangfire")!;
-
-// --- Hangfire configuration ---
-builder.Services.AddHangfire(config =>
-    config.UseSqlServerStorage(connectionString));
-builder.Services.AddHangfireServer();
-
-// --- ExecutionFlow configuration ---
-builder.Services.AddHangfireToExecutionFlow(options =>
-{
-    options.Scan(typeof(IHandlerMark).Assembly); // auto-discover all handlers
-    options.RemoveOrphanRecurringJobs = true;    // clean up unregistered recurring jobs
-});
-
-var app = builder.Build();
-
-// --- Hangfire dashboard (on the consumer so IHangfireJobName can resolve names) ---
-app.UseHangfireDashboard("", options: new DashboardOptions
-{
-    DisplayNameFunc = (context, job) =>
-        app.Services.GetRequiredService<IHangfireJobName>().GetName(job),
-});
-
-app.Run();
+dispatcher.Publish(new SendEmailEvent { To = "user@mail.com" });
 ```
 
-### Producer (enqueues events)
+### Delayed / Scheduled
 
 ```csharp
-using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire.DependencyInjection;
-using Hangfire;
-using YourProject.Events;
-
-var builder = WebApplication.CreateBuilder(args);
-
-var connectionString = builder.Configuration.GetConnectionString("hangfire")!;
-
-// --- Hangfire configuration ---
-builder.Services.AddHangfire(config =>
-    config.UseSqlServerStorage(connectionString));
-
-// --- ExecutionFlow configuration (no handlers needed on the producer) ---
-builder.Services.AddHangfireToExecutionFlow();
-
-var app = builder.Build();
-
-// Enqueue events via IDispatcher
-app.MapPost("/api/messages", (MessageRequest request, IDispatcher dispatcher) =>
-{
-    var @event = new SendMessageEvent
-    {
-        From = request.From,
-        Content = request.Content,
-        SentAt = DateTime.UtcNow
-    };
-
-    var jobId = dispatcher.Enqueue(@event);
-
-    return Results.Ok(new { jobId, message = "Message enqueued successfully." });
-});
-
-app.Run();
-
-record MessageRequest(string From, string Content);
+dispatcher.Schedule(new SendReminderEvent(), TimeSpan.FromMinutes(30));
+dispatcher.Schedule(new SendReportEvent(), new DateTimeOffset(2025, 12, 31, 9, 0, 0, TimeSpan.Zero));
 ```
 
-### Marker Interface for Assembly Scanning
+### Publish Result
 
-Create a marker interface in your handlers project so `Scan()` can locate the assembly:
+All `Publish`/`Schedule` methods return `PublishResult`:
 
 ```csharp
-namespace YourProject.Handlers;
-
-public interface IHandlerMark { }
+var result = dispatcher.Publish(event);
+result.JobId;    // Hangfire job ID (null if skipped by dedup)
+result.Enqueued; // true if job was actually enqueued
 ```
-
-Then use it: `options.Scan(typeof(IHandlerMark).Assembly);`
-
-## Setup without Dependency Injection
-```csharp
-using ExecutionFlow.Hangfire;
-using Hangfire;
-
-// --- Hangfire configuration ---
-GlobalConfiguration.Configuration
-    .UseSqlServerStorage("Server=localhost;Database=HangfireDb;Trusted_Connection=True;");
-
-// --- ExecutionFlow configuration ---
-var setup = new HangfireSetup();
-setup.Configure(options =>
-    options.Scan(typeof(IHandlerMark).Assembly));
-setup.ConfigureActivator().Build();
-
-// --- Hangfire server ---
-using var server = new BackgroundJobServer();
-
-Console.WriteLine("Consumer started. Press Enter to exit.");
-Console.ReadLine();
-```
-
-Key differences from the DI approach:
-- Pure console app — no `Host`, `WebApplication`, or `IServiceCollection`
-- Use `GlobalConfiguration.Configuration` directly for Hangfire storage
-- Create `HangfireSetup` manually and call `Configure()` + `ConfigureActivator().Build()`
-- Create `BackgroundJobServer` yourself
-
-## Hangfire Dashboard
-
-The dashboard displays handler-friendly names instead of raw method signatures. Configure the `DisplayNameFunc` to use ExecutionFlow's `IHangfireJobName`:
-
-### With DI
-
-```csharp
-app.UseHangfireDashboard("/hangfire", options: new DashboardOptions
-{
-    DisplayNameFunc = (context, job) =>
-        app.Services.GetRequiredService<IHangfireJobName>().GetName(job),
-});
-```
-
-### Without DI
-
-```csharp
-// After HangfireSetup is configured:
-var setup = new HangfireSetup();
-setup.Configure(options => options.Scan(typeof(IHandlerMark).Assembly));
-setup.ConfigureActivator().Build();
-
-// Use setup directly — it implements IHangfireJobName
-app.UseHangfireDashboard("/hangfire", options: new DashboardOptions
-{
-    DisplayNameFunc = (context, job) => setup.GetName(job),
-});
-```
-
-> **Important:** The dashboard must run on a process where handlers are registered (via `AddHangfireToExecutionFlow` with `Scan`/`Add`, or via `HangfireSetup.Configure`). This is because `IHangfireJobName` relies on the handler registry to resolve display names. On a producer-only process without handler registration, names will fall back to raw method signatures.
 
 ## Custom ID (Job Tracking)
 
-Custom IDs let you associate domain-meaningful identifiers with jobs for tracking, deduplication, or cancellation.
-
-### Via `ICustomIdEvent`
-
-Implement `ICustomIdEvent` on your event class. The custom ID is stored automatically when the event is enqueued:
+Associate domain identifiers with jobs:
 
 ```csharp
-using ExecutionFlow.Abstractions;
-
-namespace YourProject.Events;
-
-public class ProcessOrderEvent : ICustomIdEvent
+public class PaymentEvent : ICustomIdEvent
 {
-    public string OrderId { get; set; } = string.Empty;
-    public decimal Amount { get; set; }
-
-    public string GetCustomId() => $"order-{OrderId}";
+    public string OrderId { get; set; }
+    public string CustomId => $"payment-{OrderId}";
 }
 ```
 
-### Via `context.SetCustomId()` inside a handler
-
-You can also set the custom ID dynamically during handler execution:
+Or set it dynamically inside the handler:
 
 ```csharp
-using ExecutionFlow.Abstractions;
-using YourProject.Events;
+context.SetCustomId($"payment-{context.Event.OrderId}");
+```
 
-namespace YourProject.Handlers;
+Then track by custom ID:
 
-public class ProcessOrderHandler : IHandler<ProcessOrderEvent>
+```csharp
+executionManager.IsRunning("payment-123");
+executionManager.IsPending("payment-123");
+executionManager.Cancel("payment-123");
+executionManager.Retry("payment-123");  // re-enqueue a failed job
+```
+
+## Custom Display Name (Dashboard)
+
+```csharp
+public class NotificationEvent : ICustomNameEvent
 {
-    public Task HandleAsync(FlowContext<ProcessOrderEvent> context, CancellationToken cancellationToken)
-    {
-        context.SetCustomId($"order-{context.Event.OrderId}");
-        context.Log.Info($"Processing order {context.Event.OrderId} for ${context.Event.Amount}");
-        return Task.CompletedTask;
-    }
+    public string UserId { get; set; }
+    public string CustomName => $"Notify user {UserId}";
 }
 ```
 
-### Querying Jobs by Custom ID
+## Deduplication
 
-Use `IExecutionManager` (injected via DI or created manually) to query and manage jobs:
+Prevent duplicate jobs for the same `CustomId`:
 
 ```csharp
-app.MapGet("/api/orders/{orderId}/status", (string orderId, IExecutionManager manager) =>
-{
-    var customId = $"order-{orderId}";
-
-    if (manager.IsRunning(customId))
-        return Results.Ok(new { status = "processing" });
-
-    if (manager.IsPending(customId))
-        return Results.Ok(new { status = "enqueued" });
-
-    return Results.Ok(new { status = "not found" });
-});
-
-app.MapDelete("/api/orders/{orderId}", (string orderId, IExecutionManager manager) =>
-{
-    manager.Cancel($"order-{orderId}");
-    return Results.Ok(new { message = "Job cancelled." });
-});
+options.DeduplicationBehavior = DeduplicationBehavior.SkipIfExists;
 ```
 
-## Execution Manager
-
-`IExecutionManager` provides methods to query and manage job state:
+| Behavior | When duplicate exists |
+|---|---|
+| `Disabled` (default) | Always enqueues |
+| `SkipIfExists` | Returns `Enqueued = false` |
+| `ReplaceExisting` | Cancels existing, enqueues new |
 
 ```csharp
-public interface IExecutionManager
-{
-    bool IsRunning(string customId);                // is the job currently processing?
-    bool IsPending(string customId);                // is the job enqueued and waiting?
-    void Cancel(string customId);                   // delete/cancel the job
-    IEnumerable<JobInfo> GetJobs(JobState state);   // list jobs by state
-}
+var result = dispatcher.Publish(new PaymentEvent { OrderId = "123" });
+if (!result.Enqueued)
+    Console.WriteLine("Job already running or pending");
 ```
 
-### JobInfo
+## Lifecycle Hooks
 
-Each `JobInfo` contains:
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `JobId` | `string` | Hangfire job ID |
-| `CustomId` | `string` | Application-specific custom ID (if set) |
-| `EventTypeName` | `string` | Type name of the event class |
-| `EventType` | `Type` | Actual `Type` of the event |
-| `State` | `JobState` | Current job state |
-| `StateChangedAt` | `DateTimeOffset?` | When the state last changed |
-
-### JobState
+React to job state transitions:
 
 ```csharp
-public enum JobState
+public class JobMonitor : IOnFailed, IOnSucceeded, IOnRetrying
 {
-    Enqueued,
-    Processing,
-    Succeeded,
-    Failed,
-    Cancelled
-}
-```
+    private readonly IEventDispatcher _dispatcher;
 
-### Listing Jobs
-
-```csharp
-app.MapGet("/api/jobs/failed", (IExecutionManager manager) =>
-{
-    var failedJobs = manager.GetJobs(JobState.Failed)
-        .Select(j => new
-        {
-            j.JobId,
-            j.CustomId,
-            j.EventTypeName,
-            j.State,
-            j.StateChangedAt
-        });
-
-    return Results.Ok(failedJobs);
-});
-```
-
-## Lifecycle Events (State Handlers)
-
-ExecutionFlow fires lifecycle events when jobs transition between states. Implement any combination of the following interfaces:
-
-| Interface | Fires When | Event Type |
-|-----------|-----------|------------|
-| `IOnEnqueued` | Job is added to the queue | `ExecutionEvent` |
-| `IOnProcessing` | Job starts processing | `ExecutionEvent` |
-| `IOnSucceeded` | Job completes successfully | `ExecutionSucceededEvent` (includes `Duration`) |
-| `IOnFailed` | Job fails with an exception | `ExecutionFailedEvent` (includes `Exception`) |
-| `IOnRetrying` | Job is being retried | `ExecutionRetryingEvent` (includes `AttemptNumber`) |
-| `IOnCancelled` | Job is cancelled/deleted | `ExecutionEvent` |
-
-### Creating a State Handler
-
-```csharp
-using ExecutionFlow.Abstractions.Events;
-
-namespace YourProject.Handlers;
-
-public class JobLifecycleLogger : IOnSucceeded, IOnFailed, IOnRetrying
-{
-    public void OnSucceeded(ExecutionSucceededEvent e)
-    {
-        Console.WriteLine($"[OK] Job {e.JobId} ({e.HandlerType.Name}) completed in {e.Duration.TotalSeconds:F1}s");
-    }
+    public JobMonitor(IEventDispatcher dispatcher) => _dispatcher = dispatcher;
 
     public void OnFailed(ExecutionFailedEvent e)
     {
-        Console.WriteLine($"[FAIL] Job {e.JobId} ({e.HandlerType.Name}): {e.Exception.Message}");
+        // e.Exception, e.Duration, e.JobId, e.CustomId, e.HandlerType
+        _dispatcher.Publish(new AlertAdminEvent { Error = e.Exception.Message });
+    }
+
+    public void OnSucceeded(ExecutionSucceededEvent e)
+    {
+        // e.Duration - how long the job took
     }
 
     public void OnRetrying(ExecutionRetryingEvent e)
     {
-        Console.WriteLine($"[RETRY] Job {e.JobId} ({e.HandlerType.Name}) attempt #{e.AttemptNumber}");
+        // e.AttemptNumber, e.Duration
     }
+}
+
+// Register
+options.AddStateHandler<JobMonitor>();
+```
+
+Available hooks: `IOnEnqueued`, `IOnProcessing`, `IOnSucceeded`, `IOnFailed`, `IOnRetrying`, `IOnCancelled`.
+
+All events include `Duration` (time since processing started).
+
+## Recurring Job Control
+
+```csharp
+options.GlobalRecurringAutoRun = true;                    // default: auto-start all
+options.SetJobAutoRun<DataSyncHandler>(false);            // disable specific handler
+options.DisableRecurringRetries = true;                   // default: no retries for recurring
+options.RemoveOrphanRecurringJobs = true;                 // clean up jobs not in code
+```
+
+Manual trigger:
+
+```csharp
+trigger.Trigger(typeof(DataSyncHandler));
+trigger.Trigger("my-job-id");
+```
+
+## Hangfire Native Attributes
+
+Hangfire attributes on handlers are propagated automatically:
+
+```csharp
+[Queue("critical")]
+[AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 60, 300, 900 })]
+[DisableConcurrentExecution(300)]
+[Timeout("00:10:00")]
+public class ImportHandler : IHandler<ImportEvent> { ... }
+```
+
+## Flow Parameters
+
+Handlers can read infrastructure parameters and set custom ones during execution:
+
+```csharp
+public async Task HandleAsync(FlowContext<MyEvent> context, CancellationToken ct)
+{
+    context.Parameters["CorrelationId"] = Guid.NewGuid().ToString();
+    context.Parameters["LogType"] = "Audit";
+
+    // Infrastructure parameters are read-only
+    // context.Parameters["PerformContext"] = null; // throws InvalidOperationException
 }
 ```
 
-### Registering State Handlers
+## Scan with Filter
 
 ```csharp
-// With DI
-builder.Services.AddHangfireToExecutionFlow(options =>
-{
-    options.Scan(typeof(IHandlerMark).Assembly);
-    options.AddStateHandler<JobLifecycleLogger>();
-});
+options.Scan(assembly, type => type.Namespace.StartsWith("MyApp.Handlers"));
+```
 
-// Without DI
+## Console Logging & Progress Bars
+
+```csharp
+options.ConfigureConsole();
+
+// In handler
+context.Log.Info("Starting...");
+context.Log.Warning("Something odd");
+context.Log.Error("Failed!");
+context.Log.Success("Done!");
+
+var bar = context.CreateProgressBar("Processing");
+for (int i = 0; i < total; i++)
+    bar.SetValue(i, total);
+bar.Complete();
+```
+
+## Execution Manager
+
+```csharp
+executionManager.IsRunning("order-123");
+executionManager.IsPending("order-123");
+executionManager.Cancel("order-123");
+executionManager.Retry("order-123");
+
+var failedJobs = executionManager.GetJobs(JobState.Failed);
+```
+
+## Producer-Only (Isolated)
+
+Publish jobs to a separate database without affecting an existing Hangfire instance in the same process. No global filters, recurring jobs, or server are registered.
+
+**With DI:**
+
+```csharp
+var separateStorage = new SqlServerStorage("Server=...;Database=SeparateDb;...");
+
+// Uses a separate storage - does not interfere with existing Hangfire
+builder.Services.AddExecutionFlowDispatcher(_ => separateStorage);
+
+// Or resolve storage from DI (when JobStorage is already registered)
+builder.Services.AddExecutionFlowDispatcher();
+```
+
+**Without DI:**
+
+```csharp
+var storage = new SqlServerStorage("Server=...;Database=SeparateDb;...");
+
 var setup = new HangfireSetup();
-setup.Configure(options =>
-{
-    options.Scan(typeof(IHandlerMark).Assembly);
-    options.AddStateHandler<JobLifecycleLogger>();
-});
+setup.Configure(options => { });
+var dispatcher = setup.BuildDispatcherOnly(storage);
+
+dispatcher.Publish(new MyEvent());
+dispatcher.Schedule(new MyEvent(), TimeSpan.FromHours(1));
 ```
 
-### ExecutionEvent Properties
+No global state is modified. The existing Hangfire in the process is not affected.
 
-All lifecycle events share these base properties:
+## Configuration Reference
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `JobId` | `string` | Hangfire job ID |
-| `CustomId` | `string` | Custom tracking ID (if set) |
-| `HandlerType` | `Type` | The handler class that processed the job |
+| Option | Default | Description |
+|---|---|---|
+| `GlobalRecurringAutoRun` | `true` | Auto-start recurring jobs |
+| `RemoveOrphanRecurringJobs` | `false` | Delete recurring jobs not in code |
+| `DisableRecurringRetries` | `true` | No retries for recurring jobs |
+| `DeduplicationBehavior` | `Disabled` | Duplicate job handling strategy |
 
-## Auto-Run Control
+## Project Structure
 
-Control whether recurring jobs execute automatically or are registered only (useful for staging/debug environments).
-
-### Global Setting
-
-```csharp
-builder.Services.AddHangfireToExecutionFlow(options =>
-{
-    options.Scan(typeof(IHandlerMark).Assembly);
-    options.AutoRunRecurring = false; // register recurring jobs but don't execute them
-});
 ```
-
-### Per-Job Setting
-
-```csharp
-builder.Services.AddHangfireToExecutionFlow(options =>
-{
-    options.Scan(typeof(IHandlerMark).Assembly);
-    options.AutoRunRecurring = true;                     // global: allow execution
-    options.SetJobAutoRun<HeartbeatHandler>(false);       // disable only HeartbeatHandler
-});
+Src/
+  ExecutionFlow/                              Core abstractions
+  ExecutionFlow.Hangfire/                     Hangfire integration
+  ExecutionFlow.Hangfire.Console/             Console logging + progress bars
+  ExecutionFlow.Hangfire.DependencyInjection/ Microsoft DI integration
+Examples/
+  ExecutionFlow.Examples.Producer/            Web API that publishes events
+  ExecutionFlow.Examples.Consumer/            Hangfire server with DI
+  ExecutionFlow.Examples.ConsumerWithoutDi/   Hangfire server without DI
 ```
-
-> Both `AutoRunRecurring` (global) and `SetJobAutoRun<T>()` (per-job) must be `true` for a recurring job to execute. If either is `false`, the job is blocked.
-
-### Orphan Job Cleanup
-
-When handlers are removed from the codebase, their recurring jobs remain in Hangfire storage. Enable cleanup:
-
-```csharp
-options.RemoveOrphanRecurringJobs = true;
-```
-
-This removes any recurring job from Hangfire that is no longer registered in ExecutionFlow.
-
-## Progress Bars (Hangfire.Console)
-
-Display progress bars on the Hangfire dashboard using the `ExecutionFlow.Hangfire.Console` package.
-
-```shell
-dotnet add package ExecutionFlow.Hangfire.Console
-```
-
-### Usage in a Handler
-
-```csharp
-using ExecutionFlow.Abstractions;
-using ExecutionFlow.Hangfire.Console;
-
-namespace YourProject.Handlers;
-
-public class DataImportHandler : IHandler<DataImportEvent>
-{
-    public async Task HandleAsync(FlowContext<DataImportEvent> context, CancellationToken cancellationToken)
-    {
-        var items = context.Event.Items;
-        var progressBar = context.CreateProgressBar("Importing data");
-
-        for (int i = 0; i < items.Count; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            await ProcessItem(items[i]);
-            progressBar.SetValue(i + 1, items.Count); // updates percentage automatically
-        }
-
-        progressBar.Complete(); // sets to 100%
-        context.Log.Success($"Imported {items.Count} items.");
-    }
-
-    private Task ProcessItem(object item) => Task.CompletedTask;
-}
-```
-
-### ProgressBar API
-
-| Method | Description |
-|--------|-------------|
-| `context.CreateProgressBar()` | Create a progress bar (no title) |
-| `context.CreateProgressBar("title")` | Create a progress bar with a title |
-| `SetValue(float percentage)` | Set progress by percentage (0–100) |
-| `SetValue(int current, int total)` | Set progress by item count (auto-calculates percentage) |
-| `Complete()` | Set progress to 100% |
-
-> **Note:** Progress bars require `Hangfire.Console` to be configured in your Hangfire setup: `config.UseConsole()`.
-
-## Handler Registration
-
-### Assembly Scanning (recommended)
-
-Auto-discover all `IHandler` and `IHandler<TEvent>` implementations in an assembly:
-
-```csharp
-options.Scan(typeof(IHandlerMark).Assembly);
-```
-
-The scanner:
-- Finds all concrete classes implementing `IHandler` or `IHandler<TEvent>`
-- Reads `[Recurring("cron")]` attributes for recurring job schedules
-- Reads `[DisplayName("name")]` attributes for dashboard display names
-- Ignores abstract classes and interfaces
-
-### Manual Registration
-
-Register individual handler types explicitly:
-
-```csharp
-options.Add(typeof(SendMessageHandler));
-options.Add(typeof(HeartbeatHandler));
-```
-
-### Combining Both
-
-```csharp
-options.Scan(typeof(IHandlerMark).Assembly);
-options.Add(typeof(SomeOtherHandler)); // from a different assembly
-```
-
-## API Reference
-
-### Core Abstractions (`ExecutionFlow`)
-
-| Type | Description |
-|------|-------------|
-| `IHandler<TEvent>` | Async event handler — `HandleAsync(FlowContext<TEvent>, CancellationToken)` |
-| `IHandler` | Async recurring handler — `HandleAsync(FlowContext, CancellationToken)` |
-| `IDispatcher` | Enqueue events — `Enqueue<TEvent>(TEvent): string` |
-| `IExecutionManager` | Query/cancel jobs — `IsRunning`, `IsPending`, `Cancel`, `GetJobs` |
-| `IExecutionLogger` | Logging — `Info`, `Success`, `Warning`, `Error` |
-| `ICustomIdEvent` | Custom ID on events — `GetCustomId(): string` |
-| `FlowContext<TEvent>` | Execution context with `Event`, `Log`, `Items`, `SetCustomId` |
-| `FlowContext` | Base execution context with `Log`, `Items` |
-| `JobInfo` | Job metadata — `JobId`, `CustomId`, `EventTypeName`, `EventType`, `State`, `StateChangedAt` |
-| `JobState` | Enum — `Enqueued`, `Processing`, `Succeeded`, `Failed`, `Cancelled` |
-| `[Recurring("cron")]` | Attribute to mark a handler as recurring with a cron schedule |
-
-### Lifecycle Events (`ExecutionFlow.Abstractions.Events`)
-
-| Type | Description |
-|------|-------------|
-| `IOnEnqueued` | `void OnEnqueued(ExecutionEvent)` |
-| `IOnProcessing` | `void OnProcessing(ExecutionEvent)` |
-| `IOnSucceeded` | `void OnSucceeded(ExecutionSucceededEvent)` — includes `Duration` |
-| `IOnFailed` | `void OnFailed(ExecutionFailedEvent)` — includes `Exception` |
-| `IOnRetrying` | `void OnRetrying(ExecutionRetryingEvent)` — includes `AttemptNumber` |
-| `IOnCancelled` | `void OnCancelled(ExecutionEvent)` |
-
-### Hangfire Integration (`ExecutionFlow.Hangfire`)
-
-| Type | Description |
-|------|-------------|
-| `HangfireSetup` | Manual setup — `Configure()`, `ConfigureActivator()`, `Build()`, `GetName(Job)` |
-| `HangfireOptions` | Configuration — `AutoRunRecurring`, `RemoveOrphanRecurringJobs`, `AddStateHandler<T>()`, `SetJobAutoRun<T>()` |
-| `IHangfireJobName` | Dashboard name resolver — `GetName(Job): string` |
-
-### Dependency Injection (`ExecutionFlow.Hangfire.DependencyInjection`)
-
-| Type | Description |
-|------|-------------|
-| `AddHangfireToExecutionFlow()` | Extension on `IServiceCollection` — registers handlers, dispatcher, and execution manager |
-
-### Console (`ExecutionFlow.Hangfire.Console`)
-
-| Type | Description |
-|------|-------------|
-| `context.CreateProgressBar()` | Extension on `FlowContext` — creates a dashboard progress bar |
-| `ExecutionProgressBar` | Progress bar — `SetValue(float)`, `SetValue(int, int)`, `Complete()` |

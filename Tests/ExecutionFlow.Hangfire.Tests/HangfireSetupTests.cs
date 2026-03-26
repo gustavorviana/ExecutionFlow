@@ -116,16 +116,15 @@ public class HangfireSetupTests
     }
 
     [Fact]
-    public void Build_Returns_SameInstance_When_Called_Twice()
+    public void Build_Throws_When_Called_Twice()
     {
         var setup = new HangfireSetup();
         setup.Configure(opts => { });
         var (storage, _, jobClient) = CreateHangfireMocks();
 
-        var first = setup.Build(jobClient, storage);
-        var second = setup.Build(jobClient, storage);
+        setup.Build(jobClient, storage);
 
-        Assert.Same(first, second);
+        Assert.Throws<InvalidOperationException>(() => setup.Build(jobClient, storage));
     }
 
     [Fact]
@@ -152,6 +151,81 @@ public class HangfireSetupTests
         setup.ConfigureActivator();
 
         Assert.IsType<FlowEngineJobActivator>(JobActivator.Current);
+    }
+
+    // --- BuildDispatcherOnly tests ---
+
+    [Fact]
+    public void BuildDispatcherOnly_Returns_NonNull_Dispatcher()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, jobClient) = CreateHangfireMocks();
+
+        var dispatcher = setup.BuildDispatcherOnly(jobClient, storage);
+
+        Assert.NotNull(dispatcher);
+        Assert.IsAssignableFrom<IEventDispatcher>(dispatcher);
+    }
+
+    [Fact]
+    public void BuildDispatcherOnly_Throws_When_Called_Twice()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, jobClient) = CreateHangfireMocks();
+
+        setup.BuildDispatcherOnly(jobClient, storage);
+
+        Assert.Throws<InvalidOperationException>(() => setup.BuildDispatcherOnly(jobClient, storage));
+    }
+
+    [Fact]
+    public void BuildDispatcherOnly_Throws_ForNullJobClient()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, _) = CreateHangfireMocks();
+
+        Assert.Throws<ArgumentNullException>(() => setup.BuildDispatcherOnly((IBackgroundJobClient)null!, storage));
+    }
+
+    [Fact]
+    public void BuildDispatcherOnly_Throws_ForNullStorage()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (_, _, jobClient) = CreateHangfireMocks();
+
+        Assert.Throws<ArgumentNullException>(() => setup.BuildDispatcherOnly(jobClient, (JobStorage)null!));
+    }
+
+    [Fact]
+    public void BuildDispatcherOnly_WithStorageOnly_Returns_Dispatcher()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, _) = CreateHangfireMocks();
+
+        var dispatcher = setup.BuildDispatcherOnly(storage);
+
+        Assert.NotNull(dispatcher);
+        Assert.IsAssignableFrom<IEventDispatcher>(dispatcher);
+    }
+
+    [Fact]
+    public void BuildDispatcherOnly_CanPublish()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(OrderCreatedHandler)));
+        var (storage, _, jobClient) = CreateHangfireMocks();
+        jobClient.Create(default, default).ReturnsForAnyArgs("job-1");
+
+        var dispatcher = setup.BuildDispatcherOnly(jobClient, storage);
+        var result = dispatcher.Publish(new OrderCreatedEvent());
+
+        Assert.True(result.Enqueued);
+        Assert.Equal("job-1", result.JobId);
     }
 
     // --- Test types ---

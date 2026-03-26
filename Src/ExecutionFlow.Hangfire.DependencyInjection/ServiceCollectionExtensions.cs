@@ -62,6 +62,37 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
 
             return services;
         }
+        public static IServiceCollection AddExecutionFlowDispatcher(
+            this IServiceCollection services,
+            Action<HangfireOptions> configure = null)
+        {
+            return AddExecutionFlowDispatcher(services, sp => sp.GetRequiredService<JobStorage>(), configure);
+        }
+
+        /// <summary>
+        /// Registers a producer-only dispatcher that publishes jobs to a separate storage
+        /// without affecting any existing Hangfire configuration in the process.
+        /// No global filters, recurring jobs, or server are registered.
+        /// </summary>
+        public static IServiceCollection AddExecutionFlowDispatcher(
+            this IServiceCollection services,
+            Func<IServiceProvider, JobStorage> storageCall,
+            Action<HangfireOptions> configure = null)
+        {
+
+            var setup = new HangfireSetup();
+            if (configure != null)
+                setup.Configure(configure);
+
+            services.AddSingleton(typeof(IJobIdGenerator), setup.Options.JobIdGeneratorType);
+            services.AddSingleton(typeof(IHangfireJobName), setup.Options.JobNameType);
+            services.AddSingleton<IExecutionFlowRegistry>(setup);
+
+            services.AddSingleton(sp =>
+                setup.BuildDispatcherOnly(storageCall(sp), sp));
+
+            return services;
+        }
 
         /// <summary>
         /// Forces the DI container to resolve <see cref="IEventDispatcher"/> during application startup,
