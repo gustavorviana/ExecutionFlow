@@ -11,7 +11,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 {
     /// <summary>
     /// Manages Hangfire job execution state, providing methods to query, cancel, and retry
-    /// both event jobs (by custom ID) and recurring jobs (by handler type).
+    /// both event jobs (by Hangfire ID or custom ID) and recurring jobs (by handler type).
     /// </summary>
     public class HangfireExecutionManager : IExecutionManager
     {
@@ -25,18 +25,19 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Determines whether an event job with the specified custom ID is currently being processed.
+        /// Determines whether an event job with the specified ID is currently being processed.
+        /// Matches against the Hangfire job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier to search for.</param>
-        /// <returns><c>true</c> if a job with the given custom ID is processing; otherwise, <c>false</c>.</returns>
-        public bool IsRunning(string customId)
+        /// <param name="jobId">The job identifier to search for (Hangfire ID or custom ID).</param>
+        /// <returns><c>true</c> if a matching job is processing; otherwise, <c>false</c>.</returns>
+        public bool IsRunning(string jobId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())
                 return InfraUtils
                     .ReadAll(monitoringApi.ProcessingJobs)
-                    .Any(x => GetCustomId(connection, x.Key) == customId);
+                    .Any(x => MatchesId(connection, x.Key, jobId));
         }
 
         /// <summary>
@@ -54,11 +55,12 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Determines whether an event job with the specified custom ID is enqueued and waiting to be processed.
+        /// Determines whether an event job with the specified ID is enqueued and waiting to be processed.
+        /// Matches against the Hangfire job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier to search for.</param>
-        /// <returns><c>true</c> if a job with the given custom ID is enqueued; otherwise, <c>false</c>.</returns>
-        public bool IsPending(string customId)
+        /// <param name="jobId">The job identifier to search for (Hangfire ID or custom ID).</param>
+        /// <returns><c>true</c> if a matching job is enqueued; otherwise, <c>false</c>.</returns>
+        public bool IsPending(string jobId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
             var queues = monitoringApi.Queues();
@@ -66,7 +68,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             using (var connection = _jobStorage.GetConnection())
                 return queues
                     .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
-                    .Any(x => GetCustomId(connection, x.Key) == customId);
+                    .Any(x => MatchesId(connection, x.Key, jobId));
         }
 
         /// <summary>
@@ -85,14 +87,15 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Cancels (deletes) a running or pending event job that matches the specified custom ID.
+        /// Cancels (deletes) a running or pending event job that matches the specified ID.
+        /// Matches against the Hangfire job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier of the job to cancel.</param>
-        public void Cancel(string customId)
+        /// <param name="jobId">The job identifier to cancel (Hangfire ID or custom ID).</param>
+        public void Cancel(string jobId)
         {
-            var jobId = FindJobId(customId);
-            if (jobId != null)
-                _jobClient.Delete(jobId);
+            var hangfireJobId = FindHangfireJobId(jobId);
+            if (hangfireJobId != null)
+                _jobClient.Delete(hangfireJobId);
         }
 
         /// <summary>
@@ -107,11 +110,12 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Retries a failed event job that matches the specified custom ID by re-enqueuing it.
+        /// Retries a failed event job that matches the specified ID by re-enqueuing it.
+        /// Matches against the Hangfire job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier of the failed job to retry.</param>
+        /// <param name="jobId">The job identifier to retry (Hangfire ID or custom ID).</param>
         /// <returns><c>true</c> if the job was found and re-enqueued; otherwise, <c>false</c>.</returns>
-        public bool Retry(string customId)
+        public bool Retry(string jobId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
@@ -119,7 +123,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             {
                 var failedJobId = InfraUtils
                     .ReadAll(monitoringApi.FailedJobs)
-                    .FirstOrDefault(x => GetCustomId(connection, x.Key) == customId)
+                    .FirstOrDefault(x => MatchesId(connection, x.Key, jobId))
                     .Key;
 
                 if (string.IsNullOrEmpty(failedJobId))
@@ -149,24 +153,24 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return _jobClient.Requeue(failedJobId);
         }
 
-        private string FindJobId(string customId)
+        private string FindHangfireJobId(string jobId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())
             {
-                var processingID = InfraUtils
+                var processingId = InfraUtils
                     .ReadAll(monitoringApi.ProcessingJobs)
-                    .FirstOrDefault(x => GetCustomId(connection, x.Key) == customId)
+                    .FirstOrDefault(x => MatchesId(connection, x.Key, jobId))
                     .Key;
 
-                if (!string.IsNullOrEmpty(processingID))
-                    return processingID;
+                if (!string.IsNullOrEmpty(processingId))
+                    return processingId;
 
                 var queues = monitoringApi.Queues();
                 return queues
                     .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
-                    .FirstOrDefault(x => GetCustomId(connection, x.Key) == customId)
+                    .FirstOrDefault(x => MatchesId(connection, x.Key, jobId))
                     .Key;
             }
         }
@@ -188,6 +192,18 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
                 .FirstOrDefault(x => x.Value.Job.IsRecurringOfType(handlerType))
                 .Key;
+        }
+
+        /// <summary>
+        /// Checks if a Hangfire job matches the given ID. Compares the Hangfire job ID first,
+        /// then falls back to the custom ID stored as a job parameter.
+        /// </summary>
+        private static bool MatchesId(IStorageConnection connection, string hangfireJobId, string id)
+        {
+            if (hangfireJobId == id)
+                return true;
+
+            return GetCustomId(connection, hangfireJobId) == id;
         }
 
         /// <summary>

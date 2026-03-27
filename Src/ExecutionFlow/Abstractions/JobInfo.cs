@@ -7,7 +7,7 @@ namespace ExecutionFlow.Abstractions
     /// </summary>
     public class JobInfo
     {
-        /// <summary>Gets the Hangfire job identifier.</summary>
+        /// <summary>Gets the background job identifier.</summary>
         public string JobId { get; }
 
         /// <summary>Gets the custom business identifier, if set via <see cref="ICustomIdEvent"/>.</summary>

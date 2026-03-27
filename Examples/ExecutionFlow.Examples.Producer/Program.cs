@@ -46,9 +46,9 @@ app.MapPost("/api/messages", (MessageRequest request, IEventDispatcher dispatche
         SentAt = DateTime.UtcNow
     };
 
-    var jobId = dispatcher.Publish(@event);
+    var result = dispatcher.Publish(@event);
 
-    return Results.Ok(new { jobId, message = "Message enqueued successfully." });
+    return Results.Ok(new { result.JobId, result.Enqueued, message = "Message enqueued successfully." });
 });
 
 app.MapRazorComponents<App>()

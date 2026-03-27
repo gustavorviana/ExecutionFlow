@@ -37,13 +37,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         public PublishResult Publish<TEvent>(TEvent @event)
         {
-            var dedup = CheckDeduplication(@event);
-            if (dedup != null) return dedup;
+            if (!CheckDeduplication(@event))
+                return new PublishResult(null, false);
 
             var customName = GetCustomName(@event);
             var jobId = _jobClient.Enqueue<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default));
             SetCustomId(@event, jobId);
-            return new PublishResult(jobId, true);
+            return new PublishResult(ResolveJobId(@event, jobId), true);
         }
 
         /// <summary>
@@ -55,13 +55,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         public PublishResult Schedule<TEvent>(TEvent @event, TimeSpan delay)
         {
-            var dedup = CheckDeduplication(@event);
-            if (dedup != null) return dedup;
+            if (!CheckDeduplication(@event))
+                return new PublishResult(null, false);
 
             var customName = GetCustomName(@event);
             var jobId = _jobClient.Schedule<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default), delay);
             SetCustomId(@event, jobId);
-            return new PublishResult(jobId, true);
+            return new PublishResult(ResolveJobId(@event, jobId), true);
         }
 
         /// <summary>
@@ -73,13 +73,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         public PublishResult Schedule<TEvent>(TEvent @event, DateTimeOffset enqueueAt)
         {
-            var dedup = CheckDeduplication(@event);
-            if (dedup != null) return dedup;
+            if (!CheckDeduplication(@event))
+                return new PublishResult(null, false);
 
             var customName = GetCustomName(@event);
             var jobId = _jobClient.Schedule<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default), enqueueAt);
             SetCustomId(@event, jobId);
-            return new PublishResult(jobId, true);
+            return new PublishResult(ResolveJobId(@event, jobId), true);
         }
 
         /// <summary>
@@ -109,27 +109,36 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _recurringJobManager.Trigger(jobId);
         }
 
-        private PublishResult CheckDeduplication<TEvent>(TEvent @event)
+        /// <returns><c>true</c> if the event should be enqueued; <c>false</c> if it should be skipped.</returns>
+        private bool CheckDeduplication<TEvent>(TEvent @event)
         {
             if (_deduplicationBehavior == DeduplicationBehavior.Disabled)
-                return null;
+                return true;
 
             if (!(@event is ICustomIdEvent customIdEvent))
-                return null;
+                return true;
 
             var customId = customIdEvent.CustomId;
             var manager = _executionManager.Value;
             var exists = manager.IsRunning(customId) || manager.IsPending(customId);
 
             if (!exists)
-                return null;
+                return true;
 
             if (_deduplicationBehavior == DeduplicationBehavior.SkipIfExists)
-                return new PublishResult(null, false);
+                return false;
 
             // ReplaceExisting: cancel and let the caller proceed with enqueue
             manager.Cancel(customId);
-            return null;
+            return true;
+        }
+
+        private static string ResolveJobId<TEvent>(TEvent @event, string hangfireJobId)
+        {
+            if (@event is ICustomIdEvent customIdEvent && !string.IsNullOrEmpty(customIdEvent.CustomId))
+                return customIdEvent.CustomId;
+
+            return hangfireJobId;
         }
 
         private static string GetCustomName<TEvent>(TEvent @event)

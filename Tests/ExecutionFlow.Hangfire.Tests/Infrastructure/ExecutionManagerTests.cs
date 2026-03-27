@@ -52,7 +52,18 @@ public class ExecutionManagerTests
     }
 
     [Fact]
-    public void IsRunning_ReturnsTrue_WhenMatchingJobFound()
+    public void IsRunning_ReturnsTrue_WhenMatchingByHangfireJobId()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
+
+        var result = _manager.IsRunning("job-1");
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IsRunning_ReturnsTrue_WhenMatchingByCustomId()
     {
         _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));

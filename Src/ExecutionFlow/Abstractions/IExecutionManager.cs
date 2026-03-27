@@ -5,16 +5,18 @@ namespace ExecutionFlow.Abstractions
 {
     /// <summary>
     /// Provides methods to query, cancel, and retry background jobs.
-    /// Event jobs are identified by custom ID; recurring jobs are identified by handler type.
+    /// Event jobs are identified by job ID (matches the internal job ID first, then custom ID);
+    /// recurring jobs are identified by handler type.
     /// </summary>
     public interface IExecutionManager
     {
         /// <summary>
-        /// Checks whether an event job with the specified custom ID is currently processing.
+        /// Checks whether an event job with the specified ID is currently processing.
+        /// Matches against the internal job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier to search for.</param>
+        /// <param name="jobId">The job identifier to search for.</param>
         /// <returns><c>true</c> if a matching job is processing; otherwise, <c>false</c>.</returns>
-        bool IsRunning(string customId);
+        bool IsRunning(string jobId);
 
         /// <summary>
         /// Checks whether a recurring job with the specified handler type is currently processing.
@@ -24,11 +26,12 @@ namespace ExecutionFlow.Abstractions
         bool IsRunning(Type handlerType);
 
         /// <summary>
-        /// Checks whether an event job with the specified custom ID is enqueued and waiting to be processed.
+        /// Checks whether an event job with the specified ID is enqueued and waiting to be processed.
+        /// Matches against the internal job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier to search for.</param>
+        /// <param name="jobId">The job identifier to search for.</param>
         /// <returns><c>true</c> if a matching job is pending; otherwise, <c>false</c>.</returns>
-        bool IsPending(string customId);
+        bool IsPending(string jobId);
 
         /// <summary>
         /// Checks whether a recurring job with the specified handler type is enqueued and waiting to be processed.
@@ -38,10 +41,11 @@ namespace ExecutionFlow.Abstractions
         bool IsPending(Type handlerType);
 
         /// <summary>
-        /// Cancels a pending or processing event job with the specified custom ID.
+        /// Cancels a pending or processing event job with the specified ID.
+        /// Matches against the internal job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier of the job to cancel.</param>
-        void Cancel(string customId);
+        /// <param name="jobId">The job identifier to cancel.</param>
+        void Cancel(string jobId);
 
         /// <summary>
         /// Cancels a pending or processing recurring job with the specified handler type.
@@ -50,11 +54,12 @@ namespace ExecutionFlow.Abstractions
         void Cancel(Type handlerType);
 
         /// <summary>
-        /// Re-enqueues a failed event job with the specified custom ID for reprocessing.
+        /// Re-enqueues a failed event job with the specified ID for reprocessing.
+        /// Matches against the internal job ID first, then falls back to custom ID.
         /// </summary>
-        /// <param name="customId">The custom identifier of the failed job to retry.</param>
+        /// <param name="jobId">The job identifier to retry.</param>
         /// <returns><c>true</c> if the job was found and re-enqueued; otherwise, <c>false</c>.</returns>
-        bool Retry(string customId);
+        bool Retry(string jobId);
 
         /// <summary>
         /// Re-enqueues a failed recurring job with the specified handler type for reprocessing.

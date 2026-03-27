@@ -56,7 +56,7 @@ public class DispatcherTests
     }
 
     [Fact]
-    public void Publish_ReturnsJobIdAndEnqueuedTrue()
+    public void Publish_ReturnsHangfireJobId_WhenNoCustomId()
     {
         _jobClient.Create(default, default).ReturnsForAnyArgs("job-42");
         var dispatcher = CreateDispatcher();
@@ -67,10 +67,22 @@ public class DispatcherTests
         Assert.True(result.Enqueued);
     }
 
+    [Fact]
+    public void Publish_ReturnsCustomId_WhenEventImplementsICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-42");
+        var dispatcher = CreateDispatcher();
+
+        var result = dispatcher.Publish(new TestNamedEvent());
+
+        Assert.Equal("named-job-1", result.JobId);
+        Assert.True(result.Enqueued);
+    }
+
     // --- Schedule with TimeSpan ---
 
     [Fact]
-    public void Schedule_TimeSpan_ReturnsJobIdAndEnqueuedTrue()
+    public void Schedule_TimeSpan_ReturnsHangfireJobId_WhenNoCustomId()
     {
         _jobClient.Create(default, default).ReturnsForAnyArgs("job-50");
         var dispatcher = CreateDispatcher();
@@ -78,6 +90,18 @@ public class DispatcherTests
         var result = dispatcher.Schedule(new TestEvent(), TimeSpan.FromMinutes(30));
 
         Assert.Equal("job-50", result.JobId);
+        Assert.True(result.Enqueued);
+    }
+
+    [Fact]
+    public void Schedule_TimeSpan_ReturnsCustomId_WhenEventImplementsICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-50");
+        var dispatcher = CreateDispatcher();
+
+        var result = dispatcher.Schedule(new TestNamedEvent(), TimeSpan.FromMinutes(30));
+
+        Assert.Equal("named-job-1", result.JobId);
         Assert.True(result.Enqueued);
     }
 
@@ -106,7 +130,7 @@ public class DispatcherTests
     // --- Schedule with DateTimeOffset ---
 
     [Fact]
-    public void Schedule_DateTimeOffset_ReturnsJobIdAndEnqueuedTrue()
+    public void Schedule_DateTimeOffset_ReturnsHangfireJobId_WhenNoCustomId()
     {
         _jobClient.Create(default, default).ReturnsForAnyArgs("job-60");
         var dispatcher = CreateDispatcher();
@@ -114,6 +138,18 @@ public class DispatcherTests
         var result = dispatcher.Schedule(new TestEvent(), DateTimeOffset.UtcNow.AddDays(1));
 
         Assert.Equal("job-60", result.JobId);
+        Assert.True(result.Enqueued);
+    }
+
+    [Fact]
+    public void Schedule_DateTimeOffset_ReturnsCustomId_WhenEventImplementsICustomIdEvent()
+    {
+        _jobClient.Create(default, default).ReturnsForAnyArgs("job-60");
+        var dispatcher = CreateDispatcher();
+
+        var result = dispatcher.Schedule(new TestNamedEvent(), DateTimeOffset.UtcNow.AddDays(1));
+
+        Assert.Equal("named-job-1", result.JobId);
         Assert.True(result.Enqueued);
     }
 
@@ -176,7 +212,7 @@ public class DispatcherTests
         var result = dispatcher.Publish(new TestNamedEvent());
 
         Assert.True(result.Enqueued);
-        Assert.Equal("job-new", result.JobId);
+        Assert.Equal("named-job-1", result.JobId);
     }
 
     [Fact]
@@ -212,7 +248,7 @@ public class DispatcherTests
         var result = dispatcher.Publish(new TestNamedEvent());
 
         Assert.True(result.Enqueued);
-        Assert.Equal("new-job", result.JobId);
+        Assert.Equal("named-job-1", result.JobId);
     }
 
     // --- Deduplication: Disabled ---
@@ -227,7 +263,7 @@ public class DispatcherTests
         var result = dispatcher.Publish(new TestNamedEvent());
 
         Assert.True(result.Enqueued);
-        Assert.Equal("job-80", result.JobId);
+        Assert.Equal("named-job-1", result.JobId);
     }
 
     // Test types

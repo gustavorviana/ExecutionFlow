@@ -65,7 +65,7 @@ using var server = new BackgroundJobServer();
 
 ```csharp
 var result = dispatcher.Publish(new SendEmailEvent { To = "user@mail.com", Subject = "Hello" });
-// result.JobId = "abc-123"
+// result.JobId   = Hangfire job ID (or custom ID if event implements ICustomIdEvent)
 // result.Enqueued = true
 ```
 
@@ -119,9 +119,11 @@ All `Publish`/`Schedule` methods return `PublishResult`:
 
 ```csharp
 var result = dispatcher.Publish(event);
-result.JobId;    // Hangfire job ID (null if skipped by dedup)
+result.JobId;    // custom ID if available, otherwise internal job ID (null if skipped)
 result.Enqueued; // true if job was actually enqueued
 ```
+
+`Enqueued` is `false` only when the event implements `ICustomIdEvent`, deduplication is enabled, and a job with the same custom ID is already running or pending.
 
 ## Custom ID (Job Tracking)
 
