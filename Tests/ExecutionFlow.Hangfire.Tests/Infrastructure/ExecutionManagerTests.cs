@@ -511,6 +511,70 @@ public class ExecutionManagerTests
         Assert.False(result);
     }
 
+    // --- CountJobs ---
+
+    private StatisticsDto CreateStats(long enqueued = 0, long processing = 0, long succeeded = 0, long failed = 0, long deleted = 0)
+    {
+        return new StatisticsDto { Enqueued = enqueued, Processing = processing, Succeeded = succeeded, Failed = failed, Deleted = deleted };
+    }
+
+    [Theory]
+    [InlineData(JobState.Enqueued, 5)]
+    [InlineData(JobState.Processing, 3)]
+    [InlineData(JobState.Succeeded, 10)]
+    [InlineData(JobState.Failed, 2)]
+    [InlineData(JobState.Cancelled, 7)]
+    public void CountJobs_ReturnsCorrectCount(JobState state, long expected)
+    {
+        _monitoringApi.GetStatistics().Returns(CreateStats(enqueued: 5, processing: 3, succeeded: 10, failed: 2, deleted: 7));
+
+        var result = _manager.CountJobs(state);
+
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void CountJobs_ReturnsZero_WhenNoJobs()
+    {
+        _monitoringApi.GetStatistics().Returns(CreateStats());
+
+        Assert.Equal(0, _manager.CountJobs(JobState.Enqueued));
+        Assert.Equal(0, _manager.CountJobs(JobState.Processing));
+        Assert.Equal(0, _manager.CountJobs(JobState.Succeeded));
+        Assert.Equal(0, _manager.CountJobs(JobState.Failed));
+        Assert.Equal(0, _manager.CountJobs(JobState.Cancelled));
+    }
+
+    // --- GetStateSummary ---
+
+    [Fact]
+    public void GetStateSummary_ReturnsAllCounts()
+    {
+        _monitoringApi.GetStatistics().Returns(CreateStats(enqueued: 1, processing: 2, succeeded: 3, failed: 4, deleted: 5));
+
+        var summary = _manager.GetStateSummary();
+
+        Assert.Equal(1, summary.Enqueued);
+        Assert.Equal(2, summary.Processing);
+        Assert.Equal(3, summary.Succeeded);
+        Assert.Equal(4, summary.Failed);
+        Assert.Equal(5, summary.Cancelled);
+    }
+
+    [Fact]
+    public void GetStateSummary_ReturnsZeros_WhenNoJobs()
+    {
+        _monitoringApi.GetStatistics().Returns(CreateStats());
+
+        var summary = _manager.GetStateSummary();
+
+        Assert.Equal(0, summary.Enqueued);
+        Assert.Equal(0, summary.Processing);
+        Assert.Equal(0, summary.Succeeded);
+        Assert.Equal(0, summary.Failed);
+        Assert.Equal(0, summary.Cancelled);
+    }
+
     public class TestEvent { }
     public class TestRecurringHandler : IHandler
     {

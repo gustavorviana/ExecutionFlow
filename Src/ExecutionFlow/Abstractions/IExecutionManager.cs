@@ -69,5 +69,18 @@ namespace ExecutionFlow.Abstractions
         /// <param name="state">The job state to filter by.</param>
         /// <returns>A collection of <see cref="JobInfo"/> matching the specified state.</returns>
         IEnumerable<JobInfo> GetJobs(JobState state);
+
+        /// <summary>
+        /// Returns the number of background jobs in the specified state.
+        /// </summary>
+        /// <param name="state">The job state to count.</param>
+        /// <returns>The total number of jobs in the given state.</returns>
+        long CountJobs(JobState state);
+
+        /// <summary>
+        /// Returns a summary with the job count for every <see cref="JobState"/>.
+        /// </summary>
+        /// <returns>A <see cref="JobStateSummary"/> containing counts for all states.</returns>
+        JobStateSummary GetStateSummary();
     }
 }

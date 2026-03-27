@@ -269,6 +269,42 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return new JobInfo(jobId, customId, eventTypeName, eventType, isRecurring, state, stateChangedAt);
         }
 
+        /// <summary>
+        /// Returns the number of background jobs in the specified state.
+        /// </summary>
+        /// <param name="state">The job state to count.</param>
+        /// <returns>The total number of jobs in the given state.</returns>
+        public long CountJobs(JobState state)
+        {
+            var stats = _jobStorage.GetMonitoringApi().GetStatistics();
+
+            switch (state)
+            {
+                case JobState.Enqueued: return stats.Enqueued;
+                case JobState.Processing: return stats.Processing;
+                case JobState.Succeeded: return stats.Succeeded;
+                case JobState.Failed: return stats.Failed;
+                case JobState.Cancelled: return stats.Deleted;
+                default: return 0;
+            }
+        }
+
+        /// <summary>
+        /// Returns a summary with the job count for every <see cref="JobState"/>.
+        /// </summary>
+        /// <returns>A <see cref="JobStateSummary"/> containing counts for all states.</returns>
+        public JobStateSummary GetStateSummary()
+        {
+            var stats = _jobStorage.GetMonitoringApi().GetStatistics();
+
+            return new JobStateSummary(
+                enqueued: stats.Enqueued,
+                processing: stats.Processing,
+                succeeded: stats.Succeeded,
+                failed: stats.Failed,
+                cancelled: stats.Deleted);
+        }
+
         private static string GetCustomId(IStorageConnection connection, string jobId)
         {
             try
