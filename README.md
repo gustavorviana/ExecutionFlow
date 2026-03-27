@@ -1,15 +1,19 @@
 # ExecutionFlow
 
+[![.NET](https://github.com/gustavorviana/ExecutionFlow/actions/workflows/dotnet.yml/badge.svg)](https://github.com/gustavorviana/ExecutionFlow/actions/workflows/dotnet.yml)
+[![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.svg)](https://www.nuget.org/packages/ExecutionFlow)
+[![License](https://img.shields.io/github/license/gustavorviana/ExecutionFlow)](https://github.com/gustavorviana/ExecutionFlow/blob/main/LICENSE)
+
 A lightweight abstraction layer over [Hangfire](https://www.hangfire.io/) for structured background job execution with handler-based architecture, lifecycle hooks, and built-in logging.
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| **ExecutionFlow** | Core abstractions - zero external dependencies |
-| **ExecutionFlow.Hangfire** | Hangfire integration - dispatching, filters, execution manager |
-| **ExecutionFlow.Hangfire.DependencyInjection** | ASP.NET Core DI extensions |
-| **ExecutionFlow.Hangfire.Console** | Console logging + progress bars (requires [Hangfire.Console](https://github.com/pieceofsummer/Hangfire.Console)) |
+| Package | Version | Description |
+|---------|---------|-------------|
+| **ExecutionFlow** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.svg)](https://www.nuget.org/packages/ExecutionFlow) | Core abstractions - zero external dependencies |
+| **ExecutionFlow.Hangfire** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire) | Hangfire integration - dispatching, filters, execution manager |
+| **ExecutionFlow.Hangfire.DependencyInjection** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.DependencyInjection.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.DependencyInjection) | ASP.NET Core DI extensions |
+| **ExecutionFlow.Hangfire.Console** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.Console.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.Console) | Console logging + progress bars (requires [Hangfire.Console](https://github.com/pieceofsummer/Hangfire.Console)) |
 
 ## Quick Start
 
