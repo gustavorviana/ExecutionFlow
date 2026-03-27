@@ -18,6 +18,6 @@
     <ProjectReference Include="..\ExecutionFlow.Examples.Aspire\ExecutionFlow.Examples.Aspire.ServiceDefaults\ExecutionFlow.Examples.ServiceDefaults.csproj" />
     <ProjectReference Include="..\ExecutionFlow.Examples.Handlers\ExecutionFlow.Examples.Handlers.csproj" />
     <ProjectReference Include="..\ExecutionFlow.Examples.Shared\ExecutionFlow.Examples.Shared.csproj" />
-    <ProjectReference Include="..\..\src\ExecutionFlow.Hangfire\ExecutionFlow.Hangfire.csproj" />
+    <ProjectReference Include="..\..\Src\ExecutionFlow.Hangfire\ExecutionFlow.Hangfire.csproj" />
   </ItemGroup>
 </Project>
