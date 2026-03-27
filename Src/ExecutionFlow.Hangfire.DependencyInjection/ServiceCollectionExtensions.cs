@@ -9,8 +9,18 @@ using System.Threading.Tasks;
 
 namespace ExecutionFlow.Hangfire.DependencyInjection
 {
+    /// <summary>
+    /// Extension methods for <see cref="IServiceCollection"/> that register ExecutionFlow with Hangfire into the dependency injection container.
+    /// </summary>
     public static class ServiceCollectionExtensions
     {
+        /// <summary>
+        /// Registers the full ExecutionFlow pipeline with Hangfire, including recurring jobs, event handlers,
+        /// state handlers, filters, and a hosted service that triggers initialization at startup.
+        /// </summary>
+        /// <param name="services">The service collection.</param>
+        /// <param name="configure">An optional action to configure <see cref="HangfireOptions"/>.</param>
+        /// <returns>The service collection for chaining.</returns>
         public static IServiceCollection AddHangfireToExecutionFlow(
             this IServiceCollection services,
             Action<HangfireOptions> configure = null)
@@ -62,6 +72,13 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
 
             return services;
         }
+        /// <summary>
+        /// Registers a producer-only dispatcher using the default <see cref="JobStorage"/> from the service provider.
+        /// No global filters, recurring jobs, or server are registered.
+        /// </summary>
+        /// <param name="services">The service collection.</param>
+        /// <param name="configure">An optional action to configure <see cref="HangfireOptions"/>.</param>
+        /// <returns>The service collection for chaining.</returns>
         public static IServiceCollection AddExecutionFlowDispatcher(
             this IServiceCollection services,
             Action<HangfireOptions> configure = null)
@@ -74,6 +91,10 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
         /// without affecting any existing Hangfire configuration in the process.
         /// No global filters, recurring jobs, or server are registered.
         /// </summary>
+        /// <param name="services">The service collection.</param>
+        /// <param name="storageCall">A factory function that resolves the <see cref="JobStorage"/> from the service provider.</param>
+        /// <param name="configure">An optional action to configure <see cref="HangfireOptions"/>.</param>
+        /// <returns>The service collection for chaining.</returns>
         public static IServiceCollection AddExecutionFlowDispatcher(
             this IServiceCollection services,
             Func<IServiceProvider, JobStorage> storageCall,

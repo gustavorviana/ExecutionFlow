@@ -313,5 +313,211 @@ public class ExecutionManagerTests
         Assert.False(result);
     }
 
+    // --- Recurring by Type: IsRunning ---
+
+    private static Job CreateRecurringJob(Type handlerType)
+    {
+        return Job.FromExpression<HangfireJobDispatcher>(
+            x => x.DispatchRecurringAsync(null, handlerType, default));
+    }
+
+    [Fact]
+    public void IsRunning_Type_ReturnsTrue_WhenMatchingRecurringJobProcessing()
+    {
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new ProcessingJobDto { Job = job };
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("rjob-1", dto)));
+
+        var result = _manager.IsRunning(typeof(TestRecurringHandler));
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IsRunning_Type_ReturnsFalse_WhenDifferentHandlerType()
+    {
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new ProcessingJobDto { Job = job };
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("rjob-2", dto)));
+
+        var result = _manager.IsRunning(typeof(OtherRecurringHandler));
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsRunning_Type_ReturnsFalse_WhenNoProcessingJobs()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
+
+        var result = _manager.IsRunning(typeof(TestRecurringHandler));
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsRunning_Type_ReturnsFalse_WhenJobIsEventNotRecurring()
+    {
+        var job = CreateGenericJob<TestEvent>();
+        var dto = new ProcessingJobDto { Job = job };
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("rjob-3", dto)));
+
+        var result = _manager.IsRunning(typeof(TestRecurringHandler));
+
+        Assert.False(result);
+    }
+
+    // --- Recurring by Type: IsPending ---
+
+    [Fact]
+    public void IsPending_Type_ReturnsTrue_WhenMatchingRecurringJobEnqueued()
+    {
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new EnqueuedJobDto { Job = job };
+        var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
+        _monitoringApi.Queues().Returns(queues);
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(
+            EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("rjob-4", dto)));
+
+        var result = _manager.IsPending(typeof(TestRecurringHandler));
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void IsPending_Type_ReturnsFalse_WhenDifferentHandlerType()
+    {
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new EnqueuedJobDto { Job = job };
+        var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
+        _monitoringApi.Queues().Returns(queues);
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(
+            EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("rjob-5", dto)));
+
+        var result = _manager.IsPending(typeof(OtherRecurringHandler));
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsPending_Type_ReturnsFalse_WhenNoEnqueuedJobs()
+    {
+        var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
+        _monitoringApi.Queues().Returns(queues);
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(EnqueuedJobList());
+
+        var result = _manager.IsPending(typeof(TestRecurringHandler));
+
+        Assert.False(result);
+    }
+
+    // --- Recurring by Type: Cancel ---
+
+    [Fact]
+    public void Cancel_Type_DeletesProcessingRecurringJob()
+    {
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new ProcessingJobDto { Job = job };
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("rjob-6", dto)));
+
+        _manager.Cancel(typeof(TestRecurringHandler));
+
+        _jobClient.Received(1).ChangeState("rjob-6", Arg.Any<global::Hangfire.States.IState>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public void Cancel_Type_DeletesEnqueuedRecurringJob_WhenNotProcessing()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
+
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new EnqueuedJobDto { Job = job };
+        var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
+        _monitoringApi.Queues().Returns(queues);
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(
+            EnqueuedJobList(new KeyValuePair<string, EnqueuedJobDto>("rjob-7", dto)));
+
+        _manager.Cancel(typeof(TestRecurringHandler));
+
+        _jobClient.Received(1).ChangeState("rjob-7", Arg.Any<global::Hangfire.States.IState>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public void Cancel_Type_DoesNothing_WhenNoMatchingJob()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
+        var queues = new List<QueueWithTopEnqueuedJobsDto> { new() { Name = "default" } };
+        _monitoringApi.Queues().Returns(queues);
+        _monitoringApi.EnqueuedJobs("default", 0, 10).Returns(EnqueuedJobList());
+
+        _manager.Cancel(typeof(TestRecurringHandler));
+
+        _jobClient.DidNotReceive().ChangeState(Arg.Any<string>(), Arg.Any<global::Hangfire.States.IState>(), Arg.Any<string>());
+    }
+
+    // --- Recurring by Type: Retry ---
+
+    [Fact]
+    public void Retry_Type_RequeuesFailedRecurringJob_ReturnsTrue()
+    {
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new FailedJobDto { Job = job };
+        _monitoringApi.FailedJobs(0, 10).Returns(
+            FailedJobList(new KeyValuePair<string, FailedJobDto>("rjob-8", dto)));
+        _jobClient.ChangeState(Arg.Any<string>(), Arg.Any<global::Hangfire.States.IState>(), Arg.Any<string>()).Returns(true);
+
+        var result = _manager.Retry(typeof(TestRecurringHandler));
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void Retry_Type_ReturnsFalse_WhenNoFailedRecurringJob()
+    {
+        _monitoringApi.FailedJobs(0, 10).Returns(FailedJobList());
+
+        var result = _manager.Retry(typeof(TestRecurringHandler));
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void Retry_Type_ReturnsFalse_WhenDifferentHandlerType()
+    {
+        var job = CreateRecurringJob(typeof(TestRecurringHandler));
+        var dto = new FailedJobDto { Job = job };
+        _monitoringApi.FailedJobs(0, 10).Returns(
+            FailedJobList(new KeyValuePair<string, FailedJobDto>("rjob-9", dto)));
+
+        var result = _manager.Retry(typeof(OtherRecurringHandler));
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void Retry_Type_ReturnsFalse_WhenFailedJobIsEventNotRecurring()
+    {
+        var job = CreateGenericJob<TestEvent>();
+        var dto = new FailedJobDto { Job = job };
+        _monitoringApi.FailedJobs(0, 10).Returns(
+            FailedJobList(new KeyValuePair<string, FailedJobDto>("rjob-10", dto)));
+
+        var result = _manager.Retry(typeof(TestRecurringHandler));
+
+        Assert.False(result);
+    }
+
     public class TestEvent { }
+    public class TestRecurringHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+    public class OtherRecurringHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
 }

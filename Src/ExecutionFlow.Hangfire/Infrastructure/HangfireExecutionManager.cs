@@ -9,6 +9,10 @@ using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
+    /// <summary>
+    /// Manages Hangfire job execution state, providing methods to query, cancel, and retry
+    /// both event jobs (by custom ID) and recurring jobs (by handler type).
+    /// </summary>
     public class HangfireExecutionManager : IExecutionManager
     {
         private readonly IBackgroundJobClient _jobClient;
@@ -20,6 +24,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _jobStorage = jobStorage ?? throw new ArgumentNullException(nameof(jobStorage));
         }
 
+        /// <summary>
+        /// Determines whether an event job with the specified custom ID is currently being processed.
+        /// </summary>
+        /// <param name="customId">The custom identifier to search for.</param>
+        /// <returns><c>true</c> if a job with the given custom ID is processing; otherwise, <c>false</c>.</returns>
         public bool IsRunning(string customId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
@@ -30,6 +39,25 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                     .Any(x => GetCustomId(connection, x.Key) == customId);
         }
 
+        /// <summary>
+        /// Determines whether a recurring job with the specified handler type is currently being processed.
+        /// </summary>
+        /// <param name="handlerType">The recurring handler type to search for.</param>
+        /// <returns><c>true</c> if a matching recurring job is processing; otherwise, <c>false</c>.</returns>
+        public bool IsRunning(Type handlerType)
+        {
+            var monitoringApi = _jobStorage.GetMonitoringApi();
+
+            return InfraUtils
+                .ReadAll(monitoringApi.ProcessingJobs)
+                .Any(x => x.Value.Job.IsRecurringOfType(handlerType));
+        }
+
+        /// <summary>
+        /// Determines whether an event job with the specified custom ID is enqueued and waiting to be processed.
+        /// </summary>
+        /// <param name="customId">The custom identifier to search for.</param>
+        /// <returns><c>true</c> if a job with the given custom ID is enqueued; otherwise, <c>false</c>.</returns>
         public bool IsPending(string customId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
@@ -41,6 +69,25 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                     .Any(x => GetCustomId(connection, x.Key) == customId);
         }
 
+        /// <summary>
+        /// Determines whether a recurring job with the specified handler type is enqueued and waiting to be processed.
+        /// </summary>
+        /// <param name="handlerType">The recurring handler type to search for.</param>
+        /// <returns><c>true</c> if a matching recurring job is enqueued; otherwise, <c>false</c>.</returns>
+        public bool IsPending(Type handlerType)
+        {
+            var monitoringApi = _jobStorage.GetMonitoringApi();
+            var queues = monitoringApi.Queues();
+
+            return queues
+                .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
+                .Any(x => x.Value.Job.IsRecurringOfType(handlerType));
+        }
+
+        /// <summary>
+        /// Cancels (deletes) a running or pending event job that matches the specified custom ID.
+        /// </summary>
+        /// <param name="customId">The custom identifier of the job to cancel.</param>
         public void Cancel(string customId)
         {
             var jobId = FindJobId(customId);
@@ -48,6 +95,22 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 _jobClient.Delete(jobId);
         }
 
+        /// <summary>
+        /// Cancels (deletes) a running or pending recurring job that matches the specified handler type.
+        /// </summary>
+        /// <param name="handlerType">The recurring handler type of the job to cancel.</param>
+        public void Cancel(Type handlerType)
+        {
+            var jobId = FindRecurringJobId(handlerType);
+            if (jobId != null)
+                _jobClient.Delete(jobId);
+        }
+
+        /// <summary>
+        /// Retries a failed event job that matches the specified custom ID by re-enqueuing it.
+        /// </summary>
+        /// <param name="customId">The custom identifier of the failed job to retry.</param>
+        /// <returns><c>true</c> if the job was found and re-enqueued; otherwise, <c>false</c>.</returns>
         public bool Retry(string customId)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
@@ -64,6 +127,26 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
                 return _jobClient.Requeue(failedJobId);
             }
+        }
+
+        /// <summary>
+        /// Retries a failed recurring job that matches the specified handler type by re-enqueuing it.
+        /// </summary>
+        /// <param name="handlerType">The recurring handler type of the failed job to retry.</param>
+        /// <returns><c>true</c> if the job was found and re-enqueued; otherwise, <c>false</c>.</returns>
+        public bool Retry(Type handlerType)
+        {
+            var monitoringApi = _jobStorage.GetMonitoringApi();
+
+            var failedJobId = InfraUtils
+                .ReadAll(monitoringApi.FailedJobs)
+                .FirstOrDefault(x => x.Value.Job.IsRecurringOfType(handlerType))
+                .Key;
+
+            if (string.IsNullOrEmpty(failedJobId))
+                return false;
+
+            return _jobClient.Requeue(failedJobId);
         }
 
         private string FindJobId(string customId)
@@ -88,6 +171,30 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             }
         }
 
+        private string FindRecurringJobId(Type handlerType)
+        {
+            var monitoringApi = _jobStorage.GetMonitoringApi();
+
+            var processingId = InfraUtils
+                .ReadAll(monitoringApi.ProcessingJobs)
+                .FirstOrDefault(x => x.Value.Job.IsRecurringOfType(handlerType))
+                .Key;
+
+            if (!string.IsNullOrEmpty(processingId))
+                return processingId;
+
+            var queues = monitoringApi.Queues();
+            return queues
+                .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
+                .FirstOrDefault(x => x.Value.Job.IsRecurringOfType(handlerType))
+                .Key;
+        }
+
+        /// <summary>
+        /// Retrieves all background jobs in the specified state, including both event and recurring jobs.
+        /// </summary>
+        /// <param name="state">The job state to filter by.</param>
+        /// <returns>A collection of <see cref="JobInfo"/> representing the matching jobs.</returns>
         public IEnumerable<JobInfo> GetJobs(JobState state)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
@@ -131,6 +238,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         private static JobInfo BuildJobInfo(IStorageConnection connection, string jobId, Job job, InvocationData invocationData, JobState state, DateTime? timestamp)
         {
             var customId = GetCustomId(connection, jobId);
+            var isRecurring = job?.IsRecurring() == true;
 
             string eventTypeName = null;
             Type eventType = null;
@@ -158,7 +266,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 ? new DateTimeOffset(timestamp.Value)
                 : (DateTimeOffset?)null;
 
-            return new JobInfo(jobId, customId, eventTypeName, eventType, state, stateChangedAt);
+            return new JobInfo(jobId, customId, eventTypeName, eventType, isRecurring, state, stateChangedAt);
         }
 
         private static string GetCustomId(IStorageConnection connection, string jobId)

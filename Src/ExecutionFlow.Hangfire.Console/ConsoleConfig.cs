@@ -5,6 +5,9 @@ using System.Collections.Generic;
 
 namespace ExecutionFlow.Hangfire.Console
 {
+    /// <summary>
+    /// Configuration for the Hangfire Console integration, including log level colors and custom message formatting.
+    /// </summary>
     public class ConsoleConfig
     {
         private readonly Dictionary<HandlerLogType, ConsoleTextColor> _colors = new Dictionary<HandlerLogType, ConsoleTextColor>
@@ -18,13 +21,24 @@ namespace ExecutionFlow.Hangfire.Console
             { HandlerLogType.Success, ConsoleTextColor.Green }
         };
 
+        /// <summary>Gets or sets an optional custom formatter for log messages. When <c>null</c>, the default format is used.</summary>
         public Func<HandlerLogType, string, object[], string> Formatter { get; set; }
 
+        /// <summary>
+        /// Gets the console text color associated with the specified log level.
+        /// </summary>
+        /// <param name="logType">The log level.</param>
+        /// <returns>The <see cref="ConsoleTextColor"/> for the log level.</returns>
         public ConsoleTextColor GetColor(HandlerLogType logType)
         {
             return _colors.TryGetValue(logType, out var color) ? color : ConsoleTextColor.White;
         }
 
+        /// <summary>
+        /// Sets the console text color for a specific log level.
+        /// </summary>
+        /// <param name="logType">The log level.</param>
+        /// <param name="color">The color to use.</param>
         public void SetColor(HandlerLogType logType, ConsoleTextColor color)
         {
             _colors[logType] = color;

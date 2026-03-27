@@ -6,26 +6,46 @@ using System.Reflection;
 
 namespace ExecutionFlow
 {
+    /// <summary>
+    /// Base configuration class for registering handlers, event types, and logger factories.
+    /// Options are locked after <see cref="Abstractions.ExecutionFlowSetup{TOptions}.Configure"/> completes.
+    /// </summary>
     public abstract class ExecutionFlowOptions
     {
         private bool _locked;
-        public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get; set; }
 
+        /// <summary>
+        /// Optional callback invoked when a <see cref="ReflectionTypeLoadException"/> occurs during assembly scanning.
+        /// </summary>
+        public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get; set; }
 
         private readonly List<Type> _loggerFactoryTypes = new List<Type>();
         private readonly Dictionary<Type, RecurringJobRegistryInfo> _recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>(new TypeEqualityComparer());
         private readonly Dictionary<Type, EventJobRegistryInfo> _eventHandlers = new Dictionary<Type, EventJobRegistryInfo>(new TypeEqualityComparer());
 
+        /// <summary>Gets the registered logger factory types.</summary>
         public IReadOnlyList<Type> LoggerFactoryTypes => _loggerFactoryTypes;
+
+        /// <summary>Gets the registered recurring handlers, keyed by handler type.</summary>
         public IReadOnlyDictionary<Type, RecurringJobRegistryInfo> RecurringHandlers => _recurringHandlers;
+
+        /// <summary>Gets the registered event handlers, keyed by event type.</summary>
         public IReadOnlyDictionary<Type, EventJobRegistryInfo> EventHandlers => _eventHandlers;
 
-
+        /// <summary>
+        /// Scans an assembly for all handler implementations and registers them.
+        /// </summary>
+        /// <param name="assembly">The assembly to scan.</param>
         public void Scan(Assembly assembly)
         {
             Scan(assembly, null);
         }
 
+        /// <summary>
+        /// Scans an assembly for handler implementations matching the predicate and registers them.
+        /// </summary>
+        /// <param name="assembly">The assembly to scan.</param>
+        /// <param name="predicate">Optional filter to include only matching types. Pass <c>null</c> to include all.</param>
         public void Scan(Assembly assembly, Func<Type, bool> predicate)
         {
             ThrowIfLocked();
@@ -63,6 +83,12 @@ namespace ExecutionFlow
                 .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IHandler<>));
         }
 
+        /// <summary>
+        /// Registers a handler type. The type must implement <see cref="IHandler"/> or <see cref="IHandler{TEvent}"/> (but not both).
+        /// </summary>
+        /// <param name="handlerType">The handler type to register.</param>
+        /// <exception cref="ArgumentException">Thrown if the type does not implement a handler interface.</exception>
+        /// <exception cref="InvalidOperationException">Thrown if the type implements both interfaces, multiple event types, or a duplicate event handler.</exception>
         public void Add(Type handlerType)
         {
             ThrowIfLocked();
@@ -85,7 +111,6 @@ namespace ExecutionFlow
                 throw new InvalidOperationException(
                     $"Type '{handlerType.FullName}' implements IHandler<TEvent> for multiple event types. A handler must handle a single event type.");
 
-            // Check for IHandler (non-generic)
             if (isRecurring)
             {
                 _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
@@ -96,7 +121,6 @@ namespace ExecutionFlow
                 return;
             }
 
-            // Check for IHandler<TEvent>
             if (eventInterfaces.Length == 1)
             {
                 var eventType = eventInterfaces[0].GetGenericArguments()[0];
@@ -117,11 +141,19 @@ namespace ExecutionFlow
                 $"Type '{handlerType.FullName}' does not implement IHandler or IHandler<TEvent>.", nameof(handlerType));
         }
 
+        /// <summary>
+        /// Registers a logger factory type.
+        /// </summary>
+        /// <typeparam name="TFactory">The logger factory type implementing <see cref="IExecutionLoggerFactory"/>.</typeparam>
         public void AddLogger<TFactory>() where TFactory : class, IExecutionLoggerFactory
         {
             AddLogger(typeof(TFactory));
         }
 
+        /// <summary>
+        /// Registers a logger factory type.
+        /// </summary>
+        /// <param name="factoryType">The type implementing <see cref="IExecutionLoggerFactory"/>.</param>
         public void AddLogger(Type factoryType)
         {
             ThrowIfLocked();
@@ -138,6 +170,9 @@ namespace ExecutionFlow
             _locked = true;
         }
 
+        /// <summary>
+        /// Throws <see cref="InvalidOperationException"/> if the options have been locked after configuration.
+        /// </summary>
         protected void ThrowIfLocked()
         {
             if (_locked)

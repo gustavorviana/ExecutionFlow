@@ -11,12 +11,22 @@ using System.Threading;
 
 namespace ExecutionFlow.Hangfire
 {
+    /// <summary>
+    /// Orchestrates the setup and initialization of ExecutionFlow with Hangfire, including handler registration,
+    /// filter configuration, and dispatcher creation.
+    /// </summary>
     public class HangfireSetup : ExecutionFlowSetup<HangfireOptions>
     {
         private bool _built;
         private readonly object _buildLock = new object();
+
+        /// <summary>Gets the registered state handler types from the options.</summary>
         public IReadOnlyList<Type> StateHandlerTypes => Options?.StateHandlerTypes;
+
+        /// <summary>Gets the job ID generator used to create recurring job identifiers.</summary>
         public IJobIdGenerator JobIdGenerator { get; internal set; }
+
+        /// <summary>Gets the job name generator used to produce display names for Hangfire jobs.</summary>
         public IHangfireJobName JobNameGenerator { get; internal set; }
 
         protected override void OnConfigured(HangfireOptions options)
@@ -30,12 +40,25 @@ namespace ExecutionFlow.Hangfire
             }
         }
 
+        /// <summary>
+        /// Sets the current <see cref="JobActivator"/> to a <see cref="FlowEngineJobActivator"/> backed by this setup,
+        /// enabling Hangfire to resolve ExecutionFlow handlers.
+        /// </summary>
+        /// <returns>This instance for chaining.</returns>
         public HangfireSetup ConfigureActivator()
         {
             JobActivator.Current = new FlowEngineJobActivator(this);
             return this;
         }
 
+        /// <summary>
+        /// Builds and initializes the full ExecutionFlow pipeline, registering global filters, recurring jobs,
+        /// and returning a dispatcher capable of publishing, scheduling, and triggering jobs.
+        /// </summary>
+        /// <param name="jobClient">The Hangfire background job client. If <c>null</c>, a default client is created.</param>
+        /// <param name="jobStorage">The Hangfire job storage. If <c>null</c>, <see cref="JobStorage.Current"/> is used.</param>
+        /// <param name="serviceProvider">The service provider for resolving dependencies. If <c>null</c>, the current job activator is used.</param>
+        /// <returns>A fully configured <see cref="IHangfireDispatcher"/>.</returns>
         public IHangfireDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, IServiceProvider serviceProvider = null)
         {
             lock (_buildLock)
@@ -65,11 +88,26 @@ namespace ExecutionFlow.Hangfire
             }
         }
 
+        /// <summary>
+        /// Builds a lightweight dispatcher that can only publish and schedule jobs, without registering
+        /// global filters or recurring jobs. Useful for producer-only scenarios.
+        /// </summary>
+        /// <param name="jobStorage">The Hangfire job storage to use.</param>
+        /// <param name="serviceProvider">Optional service provider for resolving dependencies.</param>
+        /// <returns>An <see cref="IEventDispatcher"/> for publishing jobs.</returns>
         public IEventDispatcher BuildDispatcherOnly(JobStorage jobStorage, IServiceProvider serviceProvider = null)
         {
             return BuildDispatcherOnly(new BackgroundJobClient(jobStorage), jobStorage, serviceProvider);
         }
 
+        /// <summary>
+        /// Builds a lightweight dispatcher that can only publish and schedule jobs, without registering
+        /// global filters or recurring jobs. Useful for producer-only scenarios.
+        /// </summary>
+        /// <param name="jobClient">The Hangfire background job client.</param>
+        /// <param name="jobStorage">The Hangfire job storage to use.</param>
+        /// <param name="serviceProvider">Optional service provider for resolving dependencies.</param>
+        /// <returns>An <see cref="IEventDispatcher"/> for publishing jobs.</returns>
         public IEventDispatcher BuildDispatcherOnly(IBackgroundJobClient jobClient, JobStorage jobStorage, IServiceProvider serviceProvider = null)
         {
             lock (_buildLock)

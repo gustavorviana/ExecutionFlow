@@ -6,8 +6,16 @@ using Hangfire.Server;
 
 namespace ExecutionFlow.Hangfire.Console
 {
+    /// <summary>
+    /// Extension methods for <see cref="FlowContext"/> that enable creating Hangfire Console progress bars within job execution.
+    /// </summary>
     public static class ExecutionContextExtensions
     {
+        /// <summary>
+        /// Creates a new progress bar in the Hangfire Console for the current job execution.
+        /// </summary>
+        /// <param name="context">The flow execution context.</param>
+        /// <returns>An <see cref="ExecutionProgressBar"/> that can be updated during execution.</returns>
         public static ExecutionProgressBar CreateProgressBar(this FlowContext context)
         {
             var performContext = GetPerformContext(context);
@@ -15,6 +23,12 @@ namespace ExecutionFlow.Hangfire.Console
             return new ExecutionProgressBar(progressBar);
         }
 
+        /// <summary>
+        /// Creates a new titled progress bar in the Hangfire Console for the current job execution.
+        /// </summary>
+        /// <param name="context">The flow execution context.</param>
+        /// <param name="title">The title displayed next to the progress bar.</param>
+        /// <returns>An <see cref="ExecutionProgressBar"/> that can be updated during execution.</returns>
         public static ExecutionProgressBar CreateProgressBar(this FlowContext context, string title)
         {
             var performContext = GetPerformContext(context);

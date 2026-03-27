@@ -6,6 +6,10 @@ using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure.Filters
 {
+    /// <summary>
+    /// A Hangfire filter that prevents recurring jobs from auto-running when their auto-run setting is disabled,
+    /// unless the job was manually triggered via the dashboard or recurring job manager.
+    /// </summary>
     public class HangfireAutoRunFilter : IElectStateFilter, IApplyStateFilter
     {
         private static readonly TimeSpan AutoStartNotAllowedCanceledStateExpiration = TimeSpan.FromSeconds(1);

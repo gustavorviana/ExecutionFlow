@@ -4,6 +4,10 @@ using System;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
+    /// <summary>
+    /// Dispatches event and recurring jobs to Hangfire, supporting publish, schedule, and trigger operations
+    /// with optional deduplication.
+    /// </summary>
     public class HangfireDispatcher : IHangfireDispatcher
     {
         private readonly IBackgroundJobClient _jobClient;
@@ -25,6 +29,12 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _executionManager = new Lazy<IExecutionManager>(() => new HangfireExecutionManager(jobClient, jobStorage));
         }
 
+        /// <summary>
+        /// Enqueues an event for immediate processing by its registered handler.
+        /// </summary>
+        /// <typeparam name="TEvent">The event type.</typeparam>
+        /// <param name="event">The event payload.</param>
+        /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         public PublishResult Publish<TEvent>(TEvent @event)
         {
             var dedup = CheckDeduplication(@event);
@@ -36,6 +46,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return new PublishResult(jobId, true);
         }
 
+        /// <summary>
+        /// Schedules an event for processing after the specified delay.
+        /// </summary>
+        /// <typeparam name="TEvent">The event type.</typeparam>
+        /// <param name="event">The event payload.</param>
+        /// <param name="delay">The delay before the job is enqueued.</param>
+        /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         public PublishResult Schedule<TEvent>(TEvent @event, TimeSpan delay)
         {
             var dedup = CheckDeduplication(@event);
@@ -47,6 +64,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return new PublishResult(jobId, true);
         }
 
+        /// <summary>
+        /// Schedules an event for processing at the specified date and time.
+        /// </summary>
+        /// <typeparam name="TEvent">The event type.</typeparam>
+        /// <param name="event">The event payload.</param>
+        /// <param name="enqueueAt">The date and time when the job should be enqueued.</param>
+        /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         public PublishResult Schedule<TEvent>(TEvent @event, DateTimeOffset enqueueAt)
         {
             var dedup = CheckDeduplication(@event);
@@ -58,6 +82,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return new PublishResult(jobId, true);
         }
 
+        /// <summary>
+        /// Triggers immediate execution of a registered recurring job by its handler type.
+        /// </summary>
+        /// <param name="handlerType">The recurring handler type to trigger.</param>
         public void Trigger(Type handlerType)
         {
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
@@ -70,6 +98,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _recurringJobManager.Trigger(jobId);
         }
 
+        /// <summary>
+        /// Triggers immediate execution of a recurring job by its job ID.
+        /// </summary>
+        /// <param name="jobId">The recurring job identifier.</param>
         public void Trigger(string jobId)
         {
             if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));

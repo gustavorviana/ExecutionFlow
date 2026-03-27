@@ -9,6 +9,10 @@ using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure.Filters
 {
+    /// <summary>
+    /// A Hangfire state election filter that dispatches job lifecycle events (enqueued, processing, succeeded,
+    /// failed, cancelled, retrying) to registered state handler instances.
+    /// </summary>
     public class HangfireStateFilter : IElectStateFilter
     {
         private readonly IReadOnlyList<Type> _stateHandlers;
