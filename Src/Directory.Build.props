@@ -1,0 +1,11 @@
+<Project>
+
+  <PropertyGroup>
+    <Authors>Gustavo Viana</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/gustavorviana/ExecutionFlow</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/gustavorviana/ExecutionFlow</PackageProjectUrl>
+  </PropertyGroup>
+
+</Project>

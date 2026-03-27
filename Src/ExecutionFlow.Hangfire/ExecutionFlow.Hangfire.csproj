@@ -2,7 +2,15 @@
 
 	<PropertyGroup>
 		<TargetFramework>netstandard2.0</TargetFramework>
+		<PackageId>ExecutionFlow.Hangfire</PackageId>
+		<Version>1.0.0</Version>
+		<Description>Hangfire integration for ExecutionFlow</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="README.md" Pack="true" PackagePath="\" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<ProjectReference Include="..\ExecutionFlow\ExecutionFlow.csproj" />
