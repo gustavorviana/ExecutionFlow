@@ -35,29 +35,14 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Validate tag matches project version
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          PROPS_VERSION=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Src/Directory.Build.props)
-
-          echo "Tag version:     $TAG_VERSION"
-          echo "Project version: $PROPS_VERSION"
-
-          if [ -z "$PROPS_VERSION" ]; then
-            echo "::error::Could not read <Version> from Src/Directory.Build.props"
-            exit 1
-          fi
-
-          if [ "$TAG_VERSION" != "$PROPS_VERSION" ]; then
-            echo "::error::Tag v$TAG_VERSION does not match <Version>$PROPS_VERSION</Version> in Src/Directory.Build.props. Bump the version before tagging."
-            exit 1
-          fi
+      - name: Resolve version from tag
+        run: echo "PKG_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
       - name: Restore
         run: dotnet restore
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build --no-restore --configuration Release -p:Version=$PKG_VERSION
 
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal
@@ -65,7 +50,7 @@ jobs:
       - name: Pack
         run: |
           for project in Src/*/*.csproj; do
-            dotnet pack "$project" --no-build --configuration Release --output ./artifacts
+            dotnet pack "$project" --no-build --configuration Release --output ./artifacts -p:Version=$PKG_VERSION
           done
 
       # Exchanges the GitHub OIDC token for a temporary (1h) NuGet API key.
