@@ -203,6 +203,70 @@ public class ServiceCollectionExtensionsTests
         Assert.NotNull(result);
     }
 
+    // --- Registry binding (HangfireJobDispatcher / IHangfireJobName) ---
+
+    [Fact]
+    public void Registers_HangfireJobDispatcher()
+    {
+        using var provider = BuildProvider(options => options.Add(typeof(TestEventHandler)));
+
+        var dispatcher = provider.GetService<ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher>();
+
+        Assert.NotNull(dispatcher);
+    }
+
+    [Fact]
+    public async Task HangfireJobDispatcher_UsesConfiguredRegistry_EvenWhenAnotherRegistryWinsInContainer()
+    {
+        var services = new ServiceCollection();
+        var storage = Substitute.For<JobStorage>();
+        storage.GetConnection().Returns(Substitute.For<IStorageConnection>());
+
+        services.AddSingleton(storage);
+        services.AddSingleton(Substitute.For<IBackgroundJobClient>());
+
+        services.AddHangfireToExecutionFlow(options => options.Add(typeof(TestEventHandler)));
+
+        // Simulates a second, handler-less registry registered later (e.g. AddExecutionFlowDispatcher
+        // or any stray registration) that would previously be injected into the job dispatcher.
+        services.AddSingleton(Substitute.For<IExecutionFlowRegistry>());
+
+        using var provider = services.BuildServiceProvider();
+        var dispatcher = provider.GetRequiredService<ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher>();
+
+        // Must find the handler registered in the configured setup, not throw "No handler registered".
+        var exception = await Record.ExceptionAsync(() =>
+            dispatcher.DispatchEventAsync(new TestEvent(), null, null!, CancellationToken.None));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void BothExtensions_ConsumerRegistryWins_ForJobNames()
+    {
+        var services = new ServiceCollection();
+        var storage = Substitute.For<JobStorage>();
+        storage.GetConnection().Returns(Substitute.For<IStorageConnection>());
+
+        services.AddSingleton(storage);
+        services.AddSingleton(Substitute.For<IBackgroundJobClient>());
+
+        // Producer-only registration first (empty registry), full registration after.
+        services.AddExecutionFlowDispatcher(_ => storage);
+        services.AddHangfireToExecutionFlow(options => options.Add(typeof(TestEventHandler)));
+
+        using var provider = services.BuildServiceProvider();
+
+        var registry = provider.GetRequiredService<IExecutionFlowRegistry>();
+        Assert.True(registry.EventHandlers.ContainsKey(typeof(TestEvent)));
+
+        var jobName = provider.GetRequiredService<IHangfireJobName>();
+        var job = global::Hangfire.Common.Job.FromExpression<ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher>(
+            x => x.DispatchEventAsync<TestEvent>(default!, null, null!, default));
+
+        Assert.Equal(nameof(TestEventHandler), jobName.GetName(job));
+    }
+
     // Test types
 
     public class TestEvent { }

@@ -40,12 +40,16 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <inheritdoc />
+        /// <remarks>
+        /// Falls back to the event type name when the handler is not present in the registry,
+        /// which happens on producer-only hosts that publish events without knowing the handlers.
+        /// </remarks>
         public override string GetExpectedName(IJobRegistryInfo info)
         {
             if (!string.IsNullOrEmpty(CustomJobName))
                 return CustomJobName;
 
-            return base.GetExpectedName(info);
+            return base.GetExpectedName(info) ?? GetTypeDisplayName(EventType);
         }
     }
 
@@ -79,6 +83,16 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 return eventHandler;
 
             return null;
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Falls back to the handler type carried in the job arguments when the handler
+        /// is not present in the registry (e.g. dashboards hosted on producer-only apps).
+        /// </remarks>
+        public override string GetExpectedName(IJobRegistryInfo info)
+        {
+            return base.GetExpectedName(info) ?? GetTypeDisplayName(HandlerType);
         }
 
         /// <summary>
@@ -162,6 +176,23 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         public virtual string GetExpectedName(IJobRegistryInfo info)
         {
             return string.IsNullOrEmpty(info?.DisplayName) ? info?.HandlerType?.FullName : info.DisplayName;
+        }
+
+        /// <summary>
+        /// Resolves a display name for a type: the <see cref="System.ComponentModel.DisplayNameAttribute"/>
+        /// value when present, otherwise the type's simple name.
+        /// </summary>
+        /// <param name="type">The type to name.</param>
+        /// <returns>The display name, or <c>null</c> if <paramref name="type"/> is <c>null</c>.</returns>
+        protected static string GetTypeDisplayName(Type type)
+        {
+            if (type == null)
+                return null;
+
+            var displayNameAttr = (System.ComponentModel.DisplayNameAttribute)Attribute.GetCustomAttribute(
+                type, typeof(System.ComponentModel.DisplayNameAttribute));
+
+            return string.IsNullOrEmpty(displayNameAttr?.DisplayName) ? type.Name : displayNameAttr.DisplayName;
         }
     }
 }
