@@ -67,6 +67,15 @@ options.DeduplicationBehavior = DeduplicationBehavior.SkipIfExists;
 | `SkipIfExists` | Returns `Enqueued = false` |
 | `ReplaceExisting` | Cancels existing, enqueues new |
 
+### Dashboard Job Names
+
+Show handler display names (or event custom names) in the Hangfire Dashboard instead of the internal dispatcher method:
+
+```csharp
+app.UseHangfireDashboard("/hangfire",
+    options: new DashboardOptions().UseExecutionFlowJobNames(app.Services));
+```
+
 ### Lifecycle Hooks
 
 ```csharp

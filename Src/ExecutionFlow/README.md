@@ -7,8 +7,7 @@ Core abstractions for the ExecutionFlow framework - a lightweight, handler-based
 - **Zero external dependencies** - pure .NET Standard 2.0
 - Handler-based architecture (`IHandler<TEvent>`, `IHandler`)
 - Lifecycle hooks (`IOnFailed`, `IOnSucceeded`, `IOnRetrying`, etc.)
-- Custom job IDs and display names
-- Deduplication support
+- Custom job IDs (`ICustomIdEvent`) and `[DisplayName]` support
 - Flow parameters
 
 ## Installation
