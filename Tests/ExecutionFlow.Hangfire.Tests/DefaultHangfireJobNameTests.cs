@@ -48,18 +48,33 @@ public class DefaultHangfireJobNameTests
     }
 
     [Fact]
-    public void GetName_FallsBackToIdGenerator_WhenNotRegistered()
+    public void GetName_FallsBackToHandlerTypeName_WhenNotRegistered()
     {
         var job = JobBuilder.CreateRecurringJob(typeof(TestRecurringHandler));
         _registry.RecurringHandlers.Returns(new Dictionary<Type, RecurringJobRegistryInfo>());
         _registry.EventHandlers.Returns(new Dictionary<Type, EventJobRegistryInfo>());
-        _idGenerator.GenerateId(job.Method.DeclaringType).Returns("fallback-name");
 
         var jobName = new DefaultHangfireJobName(_idGenerator, _registry);
 
         var name = jobName.GetName(job);
 
-        Assert.Equal("fallback-name", name);
+        // The recurring job carries its handler type in the args, so the name must come from
+        // the handler type itself even when the registry (e.g. on a producer host) is empty.
+        Assert.Equal(nameof(TestRecurringHandler), name);
+    }
+
+    [Fact]
+    public void GetName_FallsBackToEventTypeName_WhenEventHandlerNotRegistered()
+    {
+        var job = JobBuilder.CreateEventJob(new TestEvent());
+        _registry.RecurringHandlers.Returns(new Dictionary<Type, RecurringJobRegistryInfo>());
+        _registry.EventHandlers.Returns(new Dictionary<Type, EventJobRegistryInfo>());
+
+        var jobName = new DefaultHangfireJobName(_idGenerator, _registry);
+
+        var name = jobName.GetName(job);
+
+        Assert.Equal(nameof(TestEvent), name);
     }
 
     // Test types

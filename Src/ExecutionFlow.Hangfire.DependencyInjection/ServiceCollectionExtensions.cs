@@ -2,6 +2,7 @@ using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using System;
 using System.Threading;
@@ -47,8 +48,14 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
             services.AddSingleton<ExecutionLoggerFactory>();
 
             services.AddSingleton(typeof(IJobIdGenerator), setup.Options.JobIdGeneratorType);
-            services.AddSingleton(typeof(IHangfireJobName), setup.Options.JobNameType);
             services.AddSingleton<IExecutionFlowRegistry>(setup);
+
+            // Bind the job name generator and the internal job dispatcher to this setup's registry,
+            // so job execution and dashboard naming never depend on which IExecutionFlowRegistry
+            // happens to win in the container (e.g. when AddExecutionFlowDispatcher is also used).
+            services.AddSingleton(typeof(IHangfireJobName), sp =>
+                ActivatorUtilities.CreateInstance(sp, setup.Options.JobNameType, setup));
+            services.AddTransient(sp => new HangfireJobDispatcher(sp, setup));
 
             services.AddSingleton(sp =>
             {
@@ -105,9 +112,12 @@ namespace ExecutionFlow.Hangfire.DependencyInjection
             if (configure != null)
                 setup.Configure(configure);
 
-            services.AddSingleton(typeof(IJobIdGenerator), setup.Options.JobIdGeneratorType);
-            services.AddSingleton(typeof(IHangfireJobName), setup.Options.JobNameType);
-            services.AddSingleton<IExecutionFlowRegistry>(setup);
+            // TryAdd: if AddHangfireToExecutionFlow is also used in this container, its registry
+            // (which knows the handlers) must win over this producer-only, handler-less setup.
+            services.TryAddSingleton(typeof(IJobIdGenerator), setup.Options.JobIdGeneratorType);
+            services.TryAddSingleton(typeof(IHangfireJobName), sp =>
+                ActivatorUtilities.CreateInstance(sp, setup.Options.JobNameType, setup));
+            services.TryAddSingleton<IExecutionFlowRegistry>(setup);
 
             services.AddSingleton(sp =>
                 setup.BuildDispatcherOnly(storageCall(sp), sp));

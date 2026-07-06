@@ -19,10 +19,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
-app.UseHangfireDashboard(options: new DashboardOptions
-{
-    DisplayNameFunc = (context, job) => app.Services.GetRequiredService<IHangfireJobName>().GetName(job),
-});
+app.UseHangfireDashboard(options: new DashboardOptions().UseExecutionFlowJobNames(app.Services));
 
 app.MapDefaultEndpoints();
 

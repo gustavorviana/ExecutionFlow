@@ -129,6 +129,41 @@ public class HangfireJobInfoTests
         Assert.Equal("Fallback Name", name);
     }
 
+    [Fact]
+    public void EventJobInfo_GetExpectedName_Falls_Back_To_EventTypeName_WhenHandlerUnknown()
+    {
+        var job = CreateEventJob<TestEvent>(null);
+        var info = new HangfireEventJobInfo(job);
+
+        var name = info.GetExpectedName((IJobRegistryInfo?)null);
+
+        Assert.Equal(nameof(TestEvent), name);
+    }
+
+    [Fact]
+    public void EventJobInfo_GetExpectedName_Uses_EventDisplayNameAttribute_WhenHandlerUnknown()
+    {
+        var job = CreateEventJob<NamedEvent>(null);
+        var info = new HangfireEventJobInfo(job);
+
+        var name = info.GetExpectedName((IJobRegistryInfo?)null);
+
+        Assert.Equal("Pretty Event", name);
+    }
+
+    [Fact]
+    public void EventJobInfo_GetExpectedName_Falls_Back_To_EventTypeName_WhenRegistryEmpty()
+    {
+        var job = CreateEventJob<TestEvent>(null);
+        var info = new HangfireEventJobInfo(job);
+        var registry = Substitute.For<IExecutionFlowRegistry>();
+        registry.EventHandlers.Returns(new Dictionary<Type, EventJobRegistryInfo>());
+
+        var name = info.GetExpectedName(registry);
+
+        Assert.Equal(nameof(TestEvent), name);
+    }
+
     // --- HangfireRecurringJobInfo ---
 
     [Fact]
@@ -167,6 +202,19 @@ public class HangfireJobInfoTests
         var handler = info.GetHandler(registry);
 
         Assert.Null(handler);
+    }
+
+    [Fact]
+    public void RecurringJobInfo_GetExpectedName_Falls_Back_To_HandlerTypeName_WhenRegistryEmpty()
+    {
+        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
+        var info = new HangfireRecurringJobInfo(job);
+        var registry = Substitute.For<IExecutionFlowRegistry>();
+        registry.RecurringHandlers.Returns(new Dictionary<Type, RecurringJobRegistryInfo>());
+
+        var name = info.GetExpectedName(registry);
+
+        Assert.Equal(nameof(TestHandler), name);
     }
 
     [Fact]
@@ -226,6 +274,9 @@ public class HangfireJobInfoTests
     // --- Test types ---
 
     public class TestEvent { }
+
+    [System.ComponentModel.DisplayName("Pretty Event")]
+    public class NamedEvent { }
 
     public class TestHandler : IHandler
     {
