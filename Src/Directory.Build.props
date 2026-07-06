@@ -1,6 +1,9 @@
 <Project>
 
   <PropertyGroup>
+    <!-- Single version for all packages (lockstep). Bump here; the publish
+         workflow only runs when a matching v<Version> tag is pushed. -->
+    <Version>1.1.0</Version>
     <Authors>Gustavo Viana</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/gustavorviana/ExecutionFlow</RepositoryUrl>

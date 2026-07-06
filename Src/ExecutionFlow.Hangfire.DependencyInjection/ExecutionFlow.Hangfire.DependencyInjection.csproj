@@ -3,7 +3,6 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>ExecutionFlow.Hangfire.DependencyInjection</PackageId>
-    <Version>1.0.0</Version>
     <Description>Dependency injection extensions for ExecutionFlow.Hangfire</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>

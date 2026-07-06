@@ -3,7 +3,6 @@
 	<PropertyGroup>
 		<TargetFramework>netstandard2.0</TargetFramework>
 		<PackageId>ExecutionFlow.Hangfire</PackageId>
-		<Version>1.0.1</Version>
 		<Description>Hangfire integration for ExecutionFlow</Description>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 	</PropertyGroup>
