@@ -1,0 +1,84 @@
+# Publishes all packages to NuGet when a version tag is pushed.
+#
+# Release flow:
+#   1. Bump <Version> in Src/Directory.Build.props via PR and merge to main.
+#   2. Create and push the matching tag: git tag v1.2.3 && git push origin v1.2.3
+#   3. This workflow validates tag == csproj version, builds, tests, packs and pushes.
+#
+# Authentication uses NuGet Trusted Publishing (OIDC) — no long-lived API key.
+# Setup required on nuget.org (username menu → Trusted Publishing → add policy):
+#   Repository Owner: gustavorviana
+#   Repository:       ExecutionFlow
+#   Workflow File:    nuget-publish.yml
+# And the NUGET_USER repository secret with the nuget.org profile name (not email).
+
+name: Publish NuGet
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # GitHub OIDC token issuance for NuGet/login
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate tag matches project version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PROPS_VERSION=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' Src/Directory.Build.props)
+
+          echo "Tag version:     $TAG_VERSION"
+          echo "Project version: $PROPS_VERSION"
+
+          if [ -z "$PROPS_VERSION" ]; then
+            echo "::error::Could not read <Version> from Src/Directory.Build.props"
+            exit 1
+          fi
+
+          if [ "$TAG_VERSION" != "$PROPS_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION does not match <Version>$PROPS_VERSION</Version> in Src/Directory.Build.props. Bump the version before tagging."
+            exit 1
+          fi
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
+      - name: Pack
+        run: |
+          for project in Src/*/*.csproj; do
+            dotnet pack "$project" --no-build --configuration Release --output ./artifacts
+          done
+
+      # Exchanges the GitHub OIDC token for a temporary (1h) NuGet API key.
+      # Runs right before push so the key cannot expire mid-workflow.
+      - name: NuGet login (OIDC → temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push "./artifacts/*.nupkg" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
