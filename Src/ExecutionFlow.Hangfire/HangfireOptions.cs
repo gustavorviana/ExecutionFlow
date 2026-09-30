@@ -24,6 +24,13 @@ namespace ExecutionFlow.Hangfire
         public bool DisableRecurringRetries { get; set; } = true;
 
         /// <summary>
+        /// Gets or sets a callback that receives exceptions thrown by lifecycle hooks (<c>IOn*</c> state handlers).
+        /// Hook exceptions never affect the job or the other hooks; when this is <c>null</c> (default) they are
+        /// written with <see cref="System.Diagnostics.Trace.TraceWarning(string)"/>.
+        /// </summary>
+        public Action<ExecutionFlow.Abstractions.Events.HookErrorContext> HookErrorHandler { get; set; }
+
+        /// <summary>
         /// Gets or sets whether event jobs whose event type has no registered handler on the executing host are retried.
         /// Default is <c>false</c>: such jobs fail without automatic retries. Set to <c>true</c> when consumers with
         /// different handlers share a queue, so another consumer can pick the job up on retry.

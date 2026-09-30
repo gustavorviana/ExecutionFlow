@@ -42,6 +42,30 @@ public class HangfireSetupGlobalFiltersTests
     }
 
     [Fact]
+    public void Build_RegistersStateFilter_AfterHangfireRetryFilter()
+    {
+        var before = GlobalJobFilters.Filters.Select(f => f.Instance).ToList();
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var storage = Substitute.For<JobStorage>();
+        storage.GetConnection().Returns(Substitute.For<IStorageConnection>());
+
+        try
+        {
+            setup.Build(Substitute.For<IBackgroundJobClient>(), storage, new ExecutionFlow.Hangfire.Infrastructure.FlowEngineJobActivator(setup));
+
+            var stateFilter = GlobalJobFilters.Filters.Single(f => f.Instance is HangfireStateFilter && !before.Contains(f.Instance));
+            var retryFilter = GlobalJobFilters.Filters.Single(f => f.Instance is AutomaticRetryAttribute);
+            Assert.Equal(HangfireStateFilter.FilterOrder, stateFilter.Order);
+            Assert.True(stateFilter.Order > retryFilter.Order);
+        }
+        finally
+        {
+            RemoveAddedFilters(before);
+        }
+    }
+
+    [Fact]
     public void BuildDispatcherOnly_DoesNotRegisterDeduplicationCleanupFilter()
     {
         var before = GlobalJobFilters.Filters.Select(f => f.Instance).ToList();

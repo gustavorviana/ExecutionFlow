@@ -54,23 +54,12 @@ public class ExecutionEventTests
         Assert.Equal(3, evt.AttemptNumber);
     }
 
-    // --- Duration on base ExecutionEvent ---
+    // --- Duration only on attempt-related events (lifecycle-hooks REQ-003) ---
 
     [Fact]
-    public void ExecutionEvent_Duration_DefaultsToZero()
+    public void ExecutionEvent_HasNoDuration()
     {
-        var evt = new ExecutionEvent("job-1", null, typeof(object));
-
-        Assert.Equal(TimeSpan.Zero, evt.Duration);
-    }
-
-    [Fact]
-    public void ExecutionEvent_Duration_CanBeSet()
-    {
-        var duration = TimeSpan.FromMinutes(2);
-        var evt = new ExecutionEvent("job-1", null, typeof(object), duration);
-
-        Assert.Equal(duration, evt.Duration);
+        Assert.Null(typeof(ExecutionEvent).GetProperty("Duration"));
     }
 
     [Fact]
@@ -86,8 +75,17 @@ public class ExecutionEventTests
     public void ExecutionRetryingEvent_StoresDuration()
     {
         var duration = TimeSpan.FromSeconds(30);
-        var evt = new ExecutionRetryingEvent("job-1", null, typeof(object), 2, duration);
+        var evt = new ExecutionRetryingEvent("job-1", null, typeof(object), 2, duration: duration);
 
         Assert.Equal(duration, evt.Duration);
+    }
+
+    [Fact]
+    public void ExecutionRetryingEvent_StoresException()
+    {
+        var exception = new InvalidOperationException("boom");
+        var evt = new ExecutionRetryingEvent("job-1", null, typeof(object), 2, exception);
+
+        Assert.Same(exception, evt.Exception);
     }
 }

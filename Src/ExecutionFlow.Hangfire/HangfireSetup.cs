@@ -114,7 +114,7 @@ namespace ExecutionFlow.Hangfire
 
                 InitGenerators(serviceProvider);
 
-                GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes));
+                GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes, Options.HookErrorHandler), HangfireStateFilter.FilterOrder);
                 GlobalJobFilters.Filters.Add(new DeduplicationCleanupFilter());
                 JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this, Options));
                 RegisterRecurring(jobStorage);

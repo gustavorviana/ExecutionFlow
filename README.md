@@ -243,18 +243,18 @@ public class JobMonitor : IOnFailed, IOnSucceeded, IOnRetrying
 
     public void OnFailed(ExecutionFailedEvent e)
     {
-        // e.Exception, e.Duration, e.JobId, e.CustomId, e.HandlerType
+        // The job failed for good (no retry follows): e.Exception, e.Duration, e.JobId, e.CustomId, e.HandlerType
         _dispatcher.Publish(new AlertAdminEvent { Error = e.Exception.Message });
     }
 
     public void OnSucceeded(ExecutionSucceededEvent e)
     {
-        // e.Duration - how long the job took
+        // e.Duration - how long the successful attempt took
     }
 
     public void OnRetrying(ExecutionRetryingEvent e)
     {
-        // e.AttemptNumber, e.Duration
+        // A failed attempt will run again: e.AttemptNumber, e.Exception, e.Duration
     }
 }
 
@@ -262,9 +262,27 @@ public class JobMonitor : IOnFailed, IOnSucceeded, IOnRetrying
 options.AddStateHandler<JobMonitor>();
 ```
 
-Available hooks: `IOnEnqueued`, `IOnProcessing`, `IOnSucceeded`, `IOnFailed`, `IOnRetrying`, `IOnCancelled`.
+| Hook | Fires when | Extra data |
+|---|---|---|
+| `IOnEnqueued` | The job is enqueued (not a retry) | — |
+| `IOnProcessing` | A worker starts the job | — |
+| `IOnSucceeded` | The job succeeds | `Duration` |
+| `IOnRetrying` | A failed attempt is scheduled to run again (once per retry), or a failed job is requeued manually | `AttemptNumber`, `Exception` (null for manual requeue), `Duration` |
+| `IOnFailed` | The job fails **for good**: no retries left (including when the retry policy deletes it) | `Exception`, `Duration` |
+| `IOnCancelled` | The job is deleted (cancelled) | — |
 
-All events include `Duration` (time since processing started).
+Things to know:
+- **Where hooks run.** Hooks run inside Hangfire's state transition, in the process where it happens. `OnEnqueued` for a publish runs in the **producer**. Producer-only hosts (`BuildDispatcherOnly` / `AddExecutionFlowDispatcher`) fire **no** hooks. All other hooks run on the server processing the job.
+- **Scheduled jobs.** A job created with `Schedule(...)` fires no hook until it's due (`OnEnqueued`). To record the schedule itself, use the `PublishResult` returned by `Schedule`.
+- **Keep hooks fast.** They run inside the state transition. Hand heavy work to `Publish`, as in the example above.
+- **Hook errors never affect the job.** Each hook runs in isolation: if it throws, the other hooks still run and the job's state change goes on. Errors are written with `Trace.TraceWarning`, or sent to your own handler:
+
+```csharp
+options.HookErrorHandler = error =>
+    logger.LogError(error.Exception, "Hook {Hook} failed for job {JobId}", error.HookType.Name, error.Event.JobId);
+```
+
+To veto or change a job's state, write a Hangfire filter instead of a hook.
 
 ## Recurring Job Control
 
