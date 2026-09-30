@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // These tests cover the obsolete FlowContext.SetCustomId.
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
@@ -108,6 +109,140 @@ public class HangfireJobDispatcherTests
             dispatcher.DispatchEventAsync(new TestEvent(), null, CreatePerformContext(), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task WithoutDI_DispatchEventAsync_Throws_WhenHandlerNotResolvable()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(TestEventHandler)));
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(TestEventHandler)).Returns(null);
+        serviceProvider.GetService(typeof(ExecutionLoggerFactory)).Returns(new ExecutionLoggerFactory(Array.Empty<IExecutionLoggerFactory>()));
+
+        var dispatcher = new HangfireJobDispatcher(serviceProvider, setup);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.DispatchEventAsync(new TestEvent(), null, CreatePerformContext(), CancellationToken.None));
+        Assert.Contains("Could not activate handler instance", ex.Message);
+    }
+
+    // --- handlers-and-context REQ-002: job facts and typed Hangfire access ---
+
+    private async Task<FlowContext> RunContextCapture(PerformContext performContext)
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(ContextCaptureHandler)));
+        var activator = new FlowEngineJobActivator(setup);
+        activator.RegisterLoggerFactory(setup.LoggerFactoryTypes);
+
+        await new HangfireJobDispatcher(activator, setup)
+            .DispatchEventAsync(new ContextCaptureEvent(), null, performContext, CancellationToken.None);
+
+        return ContextCaptureHandler.Captured!;
+    }
+
+    [Fact]
+    public async Task DispatchEventAsync_ExposesJobIdAndFirstAttempt()
+    {
+        var context = await RunContextCapture(CreatePerformContext());
+
+        Assert.Equal("test-job-1", context.JobId);
+        Assert.Equal(1, context.AttemptNumber);
+    }
+
+    [Fact]
+    public async Task DispatchEventAsync_ExposesAttemptNumber_OnRetry()
+    {
+        var performContext = CreatePerformContext();
+        performContext.Connection.GetJobParameter("test-job-1", "RetryCount").Returns("2");
+
+        var context = await RunContextCapture(performContext);
+
+        Assert.Equal(3, context.AttemptNumber);
+    }
+
+    [Fact]
+    public async Task GetPerformContext_ReturnsHangfiresContext()
+    {
+        var performContext = CreatePerformContext();
+
+        var context = await RunContextCapture(performContext);
+
+        Assert.Same(performContext, context.GetPerformContext());
+    }
+
+    [Fact]
+    public void GetPerformContext_ReturnsNull_OutsideHangfire()
+    {
+        var context = new FlowContextBuilder(new ExecutionLoggerFactory(Array.Empty<IExecutionLoggerFactory>())).Build();
+
+        Assert.Null(context.GetPerformContext());
+    }
+
+    [Fact]
+    public async Task WithoutDI_DispatchEventAsync_ExposesCustomNameParameter()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(CustomNameCaptureHandler)));
+
+        var activator = new FlowEngineJobActivator(setup);
+        activator.RegisterLoggerFactory(setup.LoggerFactoryTypes);
+
+        var dispatcher = new HangfireJobDispatcher(activator, setup);
+
+        await dispatcher.DispatchEventAsync(new CustomNameCaptureEvent(), "Custom job name", CreatePerformContext(), CancellationToken.None);
+
+        Assert.Equal("Custom job name", CustomNameCaptureHandler.ReceivedName);
+    }
+
+    [Fact]
+    public async Task WithoutDI_DispatchEventAsync_ClearsCustomId_WhenHandlerSetsNull()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(ClearCustomIdHandler)));
+
+        var activator = new FlowEngineJobActivator(setup);
+        activator.RegisterLoggerFactory(setup.LoggerFactoryTypes);
+
+        var dispatcher = new HangfireJobDispatcher(activator, setup);
+        var performContext = CreatePerformContext();
+        string? stored = null;
+        performContext.Connection.When(c => c.SetJobParameter("test-job-1", ContextConsts.CustomId, Arg.Any<string>()))
+            .Do(ci => stored = ci.ArgAt<string>(2));
+        performContext.Connection.GetJobParameter("test-job-1", ContextConsts.CustomId).Returns(_ => stored);
+
+        await dispatcher.DispatchEventAsync(new ClearCustomIdEvent(), null, performContext, CancellationToken.None);
+
+        Assert.Null(JobParameters.ReadCustomId(performContext.Connection, "test-job-1"));
+    }
+
+    // RN-001: handlers are routed by the compile-time TEvent, not by the runtime event type.
+    [Fact]
+    public async Task WithoutDI_DispatchEventAsync_RoutesByCompileTimeType()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(TestEventHandler)));
+
+        var activator = new FlowEngineJobActivator(setup);
+        activator.RegisterLoggerFactory(setup.LoggerFactoryTypes);
+
+        var dispatcher = new HangfireJobDispatcher(activator, setup);
+
+        // Derived instance published through the base type runs the base handler.
+        await dispatcher.DispatchEventAsync<TestEvent>(new DerivedTestEvent { Message = "derived" }, null, CreatePerformContext(), CancellationToken.None);
+        Assert.True(TestEventHandler.WasCalled);
+        Assert.Equal("derived", TestEventHandler.ReceivedMessage);
+
+        // The same instance published as its own type has no handler.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.DispatchEventAsync(new DerivedTestEvent(), null, CreatePerformContext(), CancellationToken.None));
+
+        // Published through object: no handler for System.Object.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.DispatchEventAsync<object>(new TestEvent(), null, CreatePerformContext(), CancellationToken.None));
+        Assert.Contains("System.Object", ex.Message);
+    }
+
     // ==========================================
     // WITH DI (Microsoft.Extensions.DependencyInjection)
     // ==========================================
@@ -185,6 +320,7 @@ public class HangfireJobDispatcherTests
         public string Message { get; set; } = "";
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public static bool WasCalled;
@@ -227,6 +363,50 @@ public class HangfireJobDispatcherTests
         public Task HandleAsync(FlowContext<CustomIdEvent> context, CancellationToken ct)
         {
             ReceivedCustomId = context.CustomId;
+            return Task.CompletedTask;
+        }
+    }
+
+    public class DerivedTestEvent : TestEvent { }
+
+    public class ClearCustomIdEvent : ICustomIdEvent
+    {
+        public string CustomId => "initial-id";
+    }
+
+    public class ClearCustomIdHandler : IHandler<ClearCustomIdEvent>
+    {
+        public Task HandleAsync(FlowContext<ClearCustomIdEvent> context, CancellationToken ct)
+        {
+            context.SetCustomId(null!);
+            return Task.CompletedTask;
+        }
+    }
+
+    public class ContextCaptureEvent { }
+
+    public class ContextCaptureHandler : IHandler<ContextCaptureEvent>
+    {
+        public static FlowContext? Captured;
+
+        public Task HandleAsync(FlowContext<ContextCaptureEvent> context, CancellationToken ct)
+        {
+            Captured = context;
+            return Task.CompletedTask;
+        }
+    }
+
+    public class CustomNameCaptureEvent { }
+
+    public class CustomNameCaptureHandler : IHandler<CustomNameCaptureEvent>
+    {
+        public static object? ReceivedName;
+
+        public CustomNameCaptureHandler() => ReceivedName = null;
+
+        public Task HandleAsync(FlowContext<CustomNameCaptureEvent> context, CancellationToken ct)
+        {
+            ReceivedName = context.Parameters[ContextConsts.EventName];
             return Task.CompletedTask;
         }
     }

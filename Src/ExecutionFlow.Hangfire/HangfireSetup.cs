@@ -20,6 +20,23 @@ namespace ExecutionFlow.Hangfire
         private bool _built;
         private readonly object _buildLock = new object();
 
+        // Hangfire's filters and activator are process-wide, so only one full setup can be active per process:
+        // the last Build() wins and removes the previous setup's global registrations (Hangfire only; other processors
+        // aren't limited by this).
+        private static readonly object GlobalStateLock = new object();
+        private static HangfireSetup _activeFullSetup;
+
+        private FlowEngineJobActivator _activator;
+        private HangfireStateFilter _stateFilter;
+        private DeduplicationCleanupFilter _cleanupFilter;
+        private HandlerJobFilterProvider _filterProvider;
+
+        /// <summary>
+        /// Gets the execution manager bound to this setup's storage, available after <see cref="Build"/> or
+        /// <see cref="BuildDispatcherOnly(IBackgroundJobClient, JobStorage, IServiceProvider)"/>.
+        /// </summary>
+        public IExecutionManager ExecutionManager { get; private set; }
+
         /// <summary>Gets the registered state handler types from the options.</summary>
         public IReadOnlyList<Type> StateHandlerTypes => Options?.StateHandlerTypes;
 
@@ -38,6 +55,41 @@ namespace ExecutionFlow.Hangfire
                     throw new InvalidOperationException(
                         $"SetJobAutoRun references type '{handlerType.FullName}' which is not registered as a recurring handler.");
             }
+
+            foreach (var handlerType in options.RecurringTimeZones.Keys)
+            {
+                if (!RecurringHandlers.ContainsKey(handlerType))
+                    throw new InvalidOperationException(
+                        $"SetJobTimeZone references type '{handlerType.FullName}' which is not registered as a recurring handler.");
+            }
+
+            ValidateTimeZone(options.RecurringTimeZone, "RecurringTimeZone");
+
+            foreach (var registration in RecurringHandlers.Values)
+            {
+                if (string.IsNullOrWhiteSpace(registration.Cron))
+                    throw new InvalidOperationException(
+                        $"Recurring handler '{registration.HandlerType.FullName}' has no schedule. Add [Recurring(\"<cron>\")] to the class.");
+
+                ValidateTimeZone(RecurringJobResolver.ResolveTimeZoneId(registration, options), registration.HandlerType.FullName);
+            }
+        }
+
+        private static void ValidateTimeZone(string timeZoneId, string source)
+        {
+            if (timeZoneId == null)
+                return;
+
+            try
+            {
+                TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            }
+            catch (Exception ex) when (ex is TimeZoneNotFoundException || ex is InvalidTimeZoneException)
+            {
+                throw new InvalidOperationException(
+                    $"Time zone '{timeZoneId}' configured for {source} was not found on this host. " +
+                    "On .NET Framework only Windows time zone IDs are available.", ex);
+            }
         }
 
         /// <summary>
@@ -47,8 +99,14 @@ namespace ExecutionFlow.Hangfire
         /// <returns>This instance for chaining.</returns>
         public HangfireSetup ConfigureActivator()
         {
-            JobActivator.Current = new FlowEngineJobActivator(this);
+            JobActivator.Current = GetOrCreateActivator();
             return this;
+        }
+
+        /// <summary>This setup's own activator: the one <see cref="ConfigureActivator"/> installed, or a new one.</summary>
+        private FlowEngineJobActivator GetOrCreateActivator()
+        {
+            return _activator ?? (_activator = new FlowEngineJobActivator(this));
         }
 
         /// <summary>
@@ -65,8 +123,9 @@ namespace ExecutionFlow.Hangfire
             {
                 ThrowIfBuilt();
 
+                // Never reuse another setup's activator (JobActivator.Current may belong to a different setup).
                 if (serviceProvider == null)
-                    serviceProvider = (JobActivator.Current as FlowEngineJobActivator) ?? new FlowEngineJobActivator(this);
+                    serviceProvider = GetOrCreateActivator();
 
                 if (jobStorage == null)
                     jobStorage = JobStorage.Current;
@@ -79,9 +138,7 @@ namespace ExecutionFlow.Hangfire
 
                 InitGenerators(serviceProvider);
 
-                GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes));
-                GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(this, Options));
-                JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this, Options));
+                RegisterGlobalFilters(serviceProvider);
                 RegisterRecurring(jobStorage);
 
                 return CreateDispatcher(jobClient, jobStorage, serviceProvider);
@@ -131,11 +188,46 @@ namespace ExecutionFlow.Hangfire
         {
             var dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this, Options);
 
+            // Available in both modes: the manager only needs the storage and client, not the handlers.
+            ExecutionManager = new HangfireExecutionManager(jobClient, jobStorage);
+
             if (serviceProvider is IFlowServiceRegistry serviceRegistry)
                 RegisterDispatcher(serviceRegistry, dispatcher);
 
             _built = true;
             return dispatcher;
+        }
+
+        /// <summary>
+        /// Registers this setup's filters in Hangfire's process-wide collections, replacing those of the previously
+        /// active full setup (the last full build wins).
+        /// </summary>
+        private void RegisterGlobalFilters(IServiceProvider serviceProvider)
+        {
+            lock (GlobalStateLock)
+            {
+                _activeFullSetup?.RemoveGlobalFilters();
+
+                _stateFilter = new HangfireStateFilter(this, serviceProvider, StateHandlerTypes, Options.HookErrorHandler);
+                _cleanupFilter = new DeduplicationCleanupFilter();
+                _filterProvider = new HandlerJobFilterProvider(this, Options);
+
+                GlobalJobFilters.Filters.Add(_stateFilter, HangfireStateFilter.FilterOrder);
+                GlobalJobFilters.Filters.Add(_cleanupFilter);
+                JobFilterProviders.Providers.Add(_filterProvider);
+
+                _activeFullSetup = this;
+            }
+        }
+
+        private void RemoveGlobalFilters()
+        {
+            if (_stateFilter != null)
+                GlobalJobFilters.Filters.Remove(_stateFilter);
+            if (_cleanupFilter != null)
+                GlobalJobFilters.Filters.Remove(_cleanupFilter);
+            if (_filterProvider != null)
+                JobFilterProviders.Providers.Remove(_filterProvider);
         }
 
         private void ThrowIfBuilt()
@@ -159,8 +251,7 @@ namespace ExecutionFlow.Hangfire
                 .AddSingleton(() => jobStorage)
                 .RegisterLoggerFactory(Options.LoggerFactoryTypes)
                 .AddSingleton<IHangfireJobName>(Options.JobNameType)
-                .AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType)
-                .AddSingleton<IExecutionManager>(typeof(HangfireExecutionManager));
+                .AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType);
         }
 
         private void RegisterDispatcher(IFlowServiceRegistry serviceRegistry, HangfireDispatcher dispatcher)
@@ -168,23 +259,31 @@ namespace ExecutionFlow.Hangfire
             serviceRegistry
                 .AddSingleton(dispatcher)
                 .AddSingleton<IRecurringTrigger>(dispatcher)
-                .AddSingleton<IEventDispatcher>(dispatcher);
+                .AddSingleton<IEventDispatcher>(dispatcher)
+                .AddSingleton(ExecutionManager);
         }
 
         private void RegisterRecurring(JobStorage jobStorage)
         {
             var recurringJobManager = new RecurringJobManager(jobStorage);
-            var registeredIds = new HashSet<string>(StringComparer.Ordinal);
+            var registeredIds = new Dictionary<string, Type>(StringComparer.Ordinal);
 
             foreach (var registration in RecurringHandlers.Values)
             {
-                var jobId = JobIdGenerator.GenerateId(registration.HandlerType);
-                registeredIds.Add(jobId);
+                var jobId = RecurringJobResolver.ResolveId(registration, JobIdGenerator);
+                if (registeredIds.TryGetValue(jobId, out var otherHandler))
+                    throw new InvalidOperationException(
+                        $"Recurring handlers '{otherHandler.FullName}' and '{registration.HandlerType.FullName}' resolve to the same job ID '{jobId}'.");
+                registeredIds.Add(jobId, registration.HandlerType);
+
+                // A handler that doesn't auto-run never fires on its own; it still runs through Trigger.
+                var cron = RecurringJobResolver.IsAutoRun(registration.HandlerType, Options) ? registration.Cron : Cron.Never();
 
                 recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(
                     jobId,
                     dispatcher => dispatcher.DispatchRecurringAsync(null, registration.HandlerType, CancellationToken.None),
-                    registration.Cron);
+                    cron,
+                    new RecurringJobOptions { TimeZone = RecurringJobResolver.ResolveTimeZone(registration, Options) });
             }
 
             if (!Options.RemoveOrphanRecurringJobs)
@@ -192,9 +291,8 @@ namespace ExecutionFlow.Hangfire
 
             using (var connection = jobStorage.GetConnection())
             {
-                var existingJobs = connection.GetRecurringJobs();
-                foreach (var job in existingJobs)
-                    if (!registeredIds.Contains(job.Id))
+                foreach (var job in connection.GetRecurringJobs())
+                    if (!registeredIds.ContainsKey(job.Id) && job.Job.IsRecurring())
                         recurringJobManager.RemoveIfExists(job.Id);
             }
         }

@@ -1,6 +1,12 @@
 using ExecutionFlow.Abstractions;
+using ExecutionFlow.Attributes;
 using Hangfire;
+using Hangfire.Common;
+using Hangfire.States;
+using Hangfire.Storage;
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
@@ -15,8 +21,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         private readonly IExecutionFlowRegistry _registry;
         private readonly JobStorage _jobStorage;
         private readonly RecurringJobManager _recurringJobManager;
-        private readonly DeduplicationBehavior _deduplicationBehavior;
-        private readonly Lazy<IExecutionManager> _executionManager;
+        private readonly HangfireOptions _options;
 
         public HangfireDispatcher(IBackgroundJobClient jobClient, JobStorage jobStorage, IJobIdGenerator jobIdGenerator, IExecutionFlowRegistry registry, HangfireOptions options)
         {
@@ -25,61 +30,45 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _jobIdGenerator = jobIdGenerator ?? throw new ArgumentNullException(nameof(jobIdGenerator));
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             _recurringJobManager = new RecurringJobManager(jobStorage);
-            _deduplicationBehavior = options?.DeduplicationBehavior ?? DeduplicationBehavior.Disabled;
-            _executionManager = new Lazy<IExecutionManager>(() => new HangfireExecutionManager(jobClient, jobStorage));
+            _options = options ?? new HangfireOptions();
         }
 
         /// <summary>
         /// Enqueues an event for immediate processing by its registered handler.
         /// </summary>
-        /// <typeparam name="TEvent">The event type.</typeparam>
+        /// <typeparam name="TEvent">The event type. The handler is resolved by this type, not by the runtime type of <paramref name="event"/>.</typeparam>
         /// <param name="event">The event payload.</param>
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="event"/> is <c>null</c>.</exception>
         public PublishResult Publish<TEvent>(TEvent @event)
         {
-            if (!CheckDeduplication(@event))
-                return new PublishResult(null, false);
-
-            var customName = GetCustomName(@event);
-            var jobId = _jobClient.Enqueue<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default));
-            SetCustomId(@event, jobId);
-            return new PublishResult(ResolveJobId(@event, jobId), true);
+            return Dispatch(@event, new EnqueuedState());
         }
 
         /// <summary>
         /// Schedules an event for processing after the specified delay.
         /// </summary>
-        /// <typeparam name="TEvent">The event type.</typeparam>
+        /// <typeparam name="TEvent">The event type. The handler is resolved by this type, not by the runtime type of <paramref name="event"/>.</typeparam>
         /// <param name="event">The event payload.</param>
         /// <param name="delay">The delay before the job is enqueued.</param>
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="event"/> is <c>null</c>.</exception>
         public PublishResult Schedule<TEvent>(TEvent @event, TimeSpan delay)
         {
-            if (!CheckDeduplication(@event))
-                return new PublishResult(null, false);
-
-            var customName = GetCustomName(@event);
-            var jobId = _jobClient.Schedule<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default), delay);
-            SetCustomId(@event, jobId);
-            return new PublishResult(ResolveJobId(@event, jobId), true);
+            return Dispatch(@event, new ScheduledState(delay));
         }
 
         /// <summary>
         /// Schedules an event for processing at the specified date and time.
         /// </summary>
-        /// <typeparam name="TEvent">The event type.</typeparam>
+        /// <typeparam name="TEvent">The event type. The handler is resolved by this type, not by the runtime type of <paramref name="event"/>.</typeparam>
         /// <param name="event">The event payload.</param>
         /// <param name="enqueueAt">The date and time when the job should be enqueued.</param>
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="event"/> is <c>null</c>.</exception>
         public PublishResult Schedule<TEvent>(TEvent @event, DateTimeOffset enqueueAt)
         {
-            if (!CheckDeduplication(@event))
-                return new PublishResult(null, false);
-
-            var customName = GetCustomName(@event);
-            var jobId = _jobClient.Schedule<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default), enqueueAt);
-            SetCustomId(@event, jobId);
-            return new PublishResult(ResolveJobId(@event, jobId), true);
+            return Dispatch(@event, new ScheduledState(enqueueAt.UtcDateTime));
         }
 
         /// <summary>
@@ -90,11 +79,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         {
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
 
-            if (!_registry.RecurringHandlers.ContainsKey(handlerType))
+            if (!_registry.RecurringHandlers.TryGetValue(handlerType, out var registration))
                 throw new InvalidOperationException(
                     $"No recurring handler registered for type '{handlerType.FullName}'.");
 
-            var jobId = _jobIdGenerator.GenerateId(handlerType);
+            var jobId = RecurringJobResolver.ResolveId(registration, _jobIdGenerator);
             _recurringJobManager.Trigger(jobId);
         }
 
@@ -109,52 +98,93 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _recurringJobManager.Trigger(jobId);
         }
 
-        /// <returns><c>true</c> if the event should be enqueued; <c>false</c> if it should be skipped.</returns>
-        private bool CheckDeduplication<TEvent>(TEvent @event)
+        private PublishResult Dispatch<TEvent>(TEvent @event, IState state)
         {
-            if (_deduplicationBehavior == DeduplicationBehavior.Disabled)
-                return true;
+            if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-            if (!(@event is ICustomIdEvent customIdEvent))
-                return true;
+            var customName = GetCustomName(@event);
+            var job = Job.FromExpression<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default));
 
-            var customId = customIdEvent.CustomId;
-            var manager = _executionManager.Value;
-            var exists = manager.IsRunning(customId) || manager.IsPending(customId);
+            if (!JobParameters.TryGetCustomId(@event, out var customId))
+                return new PublishResult(CreateJob(job, state, null), true);
 
-            if (!exists)
-                return true;
+            var behavior = GetDeduplicationBehavior(@event);
+            if (behavior == DeduplicationBehavior.Disabled)
+            {
+                CreateJob(job, state, customId);
+                return new PublishResult(customId, true);
+            }
 
-            if (_deduplicationBehavior == DeduplicationBehavior.SkipIfExists)
-                return false;
-
-            // ReplaceExisting: cancel and let the caller proceed with enqueue
-            manager.Cancel(customId);
-            return true;
+            return DispatchDeduplicated(job, state, customId, behavior);
         }
 
-        private static string ResolveJobId<TEvent>(TEvent @event, string hangfireJobId)
+        private PublishResult DispatchDeduplicated(Job job, IState state, string customId, DeduplicationBehavior behavior)
         {
-            if (@event is ICustomIdEvent customIdEvent && !string.IsNullOrEmpty(customIdEvent.CustomId))
-                return customIdEvent.CustomId;
+            using (var connection = _jobStorage.GetConnection())
+            {
+                IDisposable distributedLock;
+                try
+                {
+                    distributedLock = connection.AcquireDistributedLock(DeduplicationStore.GetLockResource(customId), _options.DeduplicationLockTimeout);
+                }
+                catch (DistributedLockTimeoutException) when (_options.CreateOnDeduplicationLockTimeout)
+                {
+                    Trace.TraceWarning("ExecutionFlow: deduplication lock for custom ID '{0}' timed out; creating the job without deduplication.", customId);
+                    CreateJob(job, state, customId);
+                    return new PublishResult(customId, true);
+                }
 
-            return hangfireJobId;
+                using (distributedLock)
+                {
+                    var activeJobId = DeduplicationStore.FindActiveJobId(connection, customId);
+                    if (activeJobId != null)
+                    {
+                        if (behavior == DeduplicationBehavior.SkipIfExists)
+                            return new PublishResult(null, false);
+
+                        _jobClient.Delete(activeJobId);
+                    }
+
+                    var jobId = CreateJob(job, state, customId);
+                    DeduplicationStore.Reserve(connection, customId, jobId, GetReservationExpiration(state));
+                    return new PublishResult(customId, true);
+                }
+            }
+        }
+
+        private DeduplicationBehavior GetDeduplicationBehavior(object @event)
+        {
+            var attribute = (DeduplicationAttribute)Attribute.GetCustomAttribute(@event.GetType(), typeof(DeduplicationAttribute), inherit: true);
+            return attribute?.Behavior ?? _options.DeduplicationBehavior;
+        }
+
+        private static TimeSpan GetReservationExpiration(IState state)
+        {
+            if (state is ScheduledState scheduled && scheduled.EnqueueAt > DateTime.UtcNow)
+                return DeduplicationStore.BaseExpiration + (scheduled.EnqueueAt - DateTime.UtcNow);
+
+            return DeduplicationStore.BaseExpiration;
+        }
+
+        private string CreateJob(Job job, IState state, string customId)
+        {
+            if (customId == null)
+                return _jobClient.Create(job, state);
+
+            // V2 persists the job and its parameters in one storage transaction.
+            if (_jobClient is IBackgroundJobClientV2 clientV2)
+                return clientV2.Create(job, state, new Dictionary<string, object> { [ContextConsts.CustomId] = customId });
+
+            var jobId = _jobClient.Create(job, state);
+            using (var connection = _jobStorage.GetConnection())
+                JobParameters.WriteCustomId(connection, jobId, customId);
+
+            return jobId;
         }
 
         private static string GetCustomName<TEvent>(TEvent @event)
         {
             return @event is ICustomNameEvent customNameEvent ? customNameEvent.CustomName : null;
-        }
-
-        private void SetCustomId<TEvent>(TEvent @event, string jobId)
-        {
-            if (@event is ICustomIdEvent customIdEvent)
-            {
-                using (var connection = _jobStorage.GetConnection())
-                {
-                    connection.SetJobParameter(jobId, ContextConsts.CustomId, customIdEvent.CustomId);
-                }
-            }
         }
     }
 }

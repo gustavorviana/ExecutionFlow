@@ -41,17 +41,19 @@ namespace ExecutionFlow.Abstractions
         bool IsPending(Type handlerType);
 
         /// <summary>
-        /// Cancels a pending or processing event job with the specified ID.
+        /// Cancels (deletes) a scheduled, enqueued or processing event job with the specified ID.
         /// Matches against the internal job ID first, then falls back to custom ID.
         /// </summary>
         /// <param name="jobId">The job identifier to cancel.</param>
-        void Cancel(string jobId);
+        /// <returns><c>true</c> if a job was found and deleted; otherwise, <c>false</c>.</returns>
+        bool Cancel(string jobId);
 
         /// <summary>
-        /// Cancels a pending or processing recurring job with the specified handler type.
+        /// Cancels (deletes) a scheduled, enqueued or processing recurring job with the specified handler type.
         /// </summary>
         /// <param name="handlerType">The recurring handler type of the job to cancel.</param>
-        void Cancel(Type handlerType);
+        /// <returns><c>true</c> if a job was found and deleted; otherwise, <c>false</c>.</returns>
+        bool Cancel(Type handlerType);
 
         /// <summary>
         /// Re-enqueues a failed event job with the specified ID for reprocessing.
@@ -69,10 +71,21 @@ namespace ExecutionFlow.Abstractions
         bool Retry(Type handlerType);
 
         /// <summary>
-        /// Retrieves all background jobs in the specified state, including both event and recurring jobs.
+        /// Enumerates the ExecutionFlow jobs (event and recurring) in the specified state. Jobs created outside
+        /// ExecutionFlow are not included.
         /// </summary>
+        /// <remarks>
+        /// The result is lazy: jobs are read from storage page by page as you enumerate, so memory stays bounded.
+        /// Use <c>Skip</c>/<c>Take</c> to page. Keep in mind:
+        /// <list type="bullet">
+        /// <item>Enumerating twice queries the storage twice; call <c>ToList()</c> to reuse the result.</item>
+        /// <item>A storage connection stays open while the enumeration runs, until it ends or the loop exits.
+        /// If each item needs slow processing, call <c>ToList()</c> first.</item>
+        /// <item>The result isn't a snapshot: jobs changing state during the enumeration may be skipped or repeated.</item>
+        /// </list>
+        /// </remarks>
         /// <param name="state">The job state to filter by.</param>
-        /// <returns>A collection of <see cref="JobInfo"/> matching the specified state.</returns>
+        /// <returns>A lazily evaluated sequence of <see cref="JobInfo"/> in the specified state.</returns>
         IEnumerable<JobInfo> GetJobs(JobState state);
 
         /// <summary>

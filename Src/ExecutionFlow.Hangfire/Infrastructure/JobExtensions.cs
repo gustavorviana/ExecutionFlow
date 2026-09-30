@@ -23,5 +23,14 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return job.Method.DeclaringType == typeof(HangfireJobDispatcher) &&
                 job.Method.Name == nameof(HangfireJobDispatcher.DispatchRecurringAsync);
         }
+
+        public static bool IsEvent(this Job job)
+        {
+            if (job?.Method == null)
+                return false;
+
+            return job.Method.DeclaringType == typeof(HangfireJobDispatcher) &&
+                job.Method.Name == nameof(HangfireJobDispatcher.DispatchEventAsync);
+        }
     }
 }

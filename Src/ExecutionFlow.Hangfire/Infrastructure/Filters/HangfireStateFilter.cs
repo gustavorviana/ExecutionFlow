@@ -1,10 +1,10 @@
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
-using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.States;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 
 namespace ExecutionFlow.Hangfire.Infrastructure.Filters
@@ -13,17 +13,32 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
     /// A Hangfire state election filter that dispatches job lifecycle events (enqueued, processing, succeeded,
     /// failed, cancelled, retrying) to registered state handler instances.
     /// </summary>
+    /// <remarks>
+    /// Register it with <see cref="FilterOrder"/> so it runs after Hangfire's <c>AutomaticRetryAttribute</c> (order 20)
+    /// and sees the final decision: a candidate <see cref="FailedState"/> is then a final failure, and a retry shows up as a
+    /// <see cref="ScheduledState"/> with the failed state in <see cref="ElectStateContext.TraversedStates"/>.
+    /// </remarks>
     public class HangfireStateFilter : IElectStateFilter
     {
+        /// <summary>The filter order used by <see cref="HangfireSetup"/>: after the retry filter, before continuations.</summary>
+        public const int FilterOrder = 100;
+
         private readonly IReadOnlyList<Type> _stateHandlers;
         private readonly IExecutionFlowRegistry _handlerRegistry;
         private readonly IServiceProvider _serviceProvider;
+        private readonly Action<HookErrorContext> _hookErrorHandler;
 
         public HangfireStateFilter(IExecutionFlowRegistry handlerRegistry, IServiceProvider serviceProvider, IReadOnlyList<Type> stateHandlers)
+            : this(handlerRegistry, serviceProvider, stateHandlers, null)
+        {
+        }
+
+        public HangfireStateFilter(IExecutionFlowRegistry handlerRegistry, IServiceProvider serviceProvider, IReadOnlyList<Type> stateHandlers, Action<HookErrorContext> hookErrorHandler)
         {
             _serviceProvider = serviceProvider;
             _stateHandlers = stateHandlers;
             _handlerRegistry = handlerRegistry;
+            _hookErrorHandler = hookErrorHandler;
         }
 
         public void OnStateElection(ElectStateContext context)
@@ -32,68 +47,101 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             var jobId = context.BackgroundJob.Id;
             var customId = GetCustomId(context, jobId);
             var handlerType = HangfireJobInfo.Create(context.BackgroundJob.Job)?.GetHandlerType(_handlerRegistry);
+            var traversedFailure = context.TraversedStates?.OfType<FailedState>().LastOrDefault();
 
-            if (candidateState is EnqueuedState)
+            if (candidateState is FailedState failedState)
             {
-                if (IsRetry(context))
-                {
-                    var duration = GetDuration(context);
-                    var attemptNumber = GetAttemptNumber(context);
-                    var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber, duration);
-                    foreach (var handler in GetAllInstancesOf<IOnRetrying>())
-                        handler.OnRetrying(retryEvent);
-                }
-                else
-                {
-                    var executionEvent = new ExecutionEvent(jobId, customId, handlerType);
-                    foreach (var handler in GetAllInstancesOf<IOnEnqueued>())
-                        handler.OnEnqueued(executionEvent);
-                }
+                var failedEvent = new ExecutionFailedEvent(jobId, customId, handlerType, failedState.Exception, GetDuration(context));
+                Invoke<IOnFailed>(failedEvent, (h, e) => h.OnFailed(e));
             }
-            else if (candidateState is ProcessingState)
+            else if (candidateState is DeletedState && traversedFailure != null)
             {
-                var executionEvent = new ExecutionEvent(jobId, customId, handlerType);
-                foreach (var handler in GetAllInstancesOf<IOnProcessing>())
-                    handler.OnProcessing(executionEvent);
-            }
-            else if (candidateState is SucceededState)
-            {
-                var duration = GetDuration(context);
-                var succeededEvent = new ExecutionSucceededEvent(jobId, customId, handlerType, duration);
-                foreach (var handler in GetAllInstancesOf<IOnSucceeded>())
-                    handler.OnSucceeded(succeededEvent);
-            }
-            else if (candidateState is FailedState failedState)
-            {
-                var duration = GetDuration(context);
-                var failedEvent = new ExecutionFailedEvent(jobId, customId, handlerType, failedState.Exception, duration);
-                foreach (var handler in GetAllInstancesOf<IOnFailed>())
-                    handler.OnFailed(failedEvent);
+                // The retry filter gave up and deletes the job (OnAttemptsExceeded = Delete): a final failure.
+                var failedEvent = new ExecutionFailedEvent(jobId, customId, handlerType, traversedFailure.Exception, GetDuration(context));
+                Invoke<IOnFailed>(failedEvent, (h, e) => h.OnFailed(e));
             }
             else if (candidateState is DeletedState)
             {
-                var executionEvent = new ExecutionEvent(jobId, customId, handlerType);
-                foreach (var handler in GetAllInstancesOf<IOnCancelled>())
-                    handler.OnCancelled(executionEvent);
+                Invoke<IOnCancelled>(new ExecutionEvent(jobId, customId, handlerType), (h, e) => h.OnCancelled(e));
             }
-            else if (candidateState is ScheduledState && IsRetry(context))
+            else if (candidateState is ScheduledState && traversedFailure != null)
             {
-                var duration = GetDuration(context);
-                var attemptNumber = GetAttemptNumber(context);
-                var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, attemptNumber, duration);
-                foreach (var handler in GetAllInstancesOf<IOnRetrying>())
-                    handler.OnRetrying(retryEvent);
+                // A failed attempt that the retry filter scheduled to run again.
+                var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, GetAttemptNumber(context), traversedFailure.Exception, GetDuration(context));
+                Invoke<IOnRetrying>(retryEvent, (h, e) => h.OnRetrying(e));
+            }
+            else if (candidateState is EnqueuedState && context.CurrentState == FailedState.StateName)
+            {
+                // A failed job requeued manually (IExecutionManager.Retry or the dashboard).
+                var retryEvent = new ExecutionRetryingEvent(jobId, customId, handlerType, GetAttemptNumber(context));
+                Invoke<IOnRetrying>(retryEvent, (h, e) => h.OnRetrying(e));
+            }
+            else if (candidateState is EnqueuedState && context.CurrentState == ScheduledState.StateName && GetRetryCount(context) > 0)
+            {
+                // A scheduled retry becoming due: OnRetrying already fired when it was scheduled.
+            }
+            else if (candidateState is EnqueuedState)
+            {
+                Invoke<IOnEnqueued>(new ExecutionEvent(jobId, customId, handlerType), (h, e) => h.OnEnqueued(e));
+            }
+            else if (candidateState is ProcessingState)
+            {
+                Invoke<IOnProcessing>(new ExecutionEvent(jobId, customId, handlerType), (h, e) => h.OnProcessing(e));
+            }
+            else if (candidateState is SucceededState)
+            {
+                var succeededEvent = new ExecutionSucceededEvent(jobId, customId, handlerType, GetDuration(context));
+                Invoke<IOnSucceeded>(succeededEvent, (h, e) => h.OnSucceeded(e));
             }
         }
 
-        private IEnumerable<TState> GetAllInstancesOf<TState>()
+        /// <summary>
+        /// Resolves and calls each registered hook for <typeparamref name="THook"/> in isolation:
+        /// an exception in one hook is reported and never reaches Hangfire or the other hooks.
+        /// </summary>
+        private void Invoke<THook>(ExecutionEvent executionEvent, Action<THook, ExecutionEvent> call) where THook : class
         {
-            var stateType = typeof(TState);
-            return _stateHandlers
-                .Where(stateType.IsAssignableFrom)
-                .Select(_serviceProvider.GetService)
-                .Where(x => x != null)
-                .Cast<TState>();
+            var hookInterface = typeof(THook);
+            foreach (var hookType in _stateHandlers.Where(hookInterface.IsAssignableFrom))
+            {
+                try
+                {
+                    if (_serviceProvider.GetService(hookType) is THook hook)
+                        call(hook, executionEvent);
+                }
+                catch (Exception ex)
+                {
+                    ReportHookError(new HookErrorContext(hookType, hookInterface, executionEvent, ex));
+                }
+            }
+        }
+
+        private void Invoke<THook>(ExecutionFailedEvent e, Action<THook, ExecutionFailedEvent> call) where THook : class
+            => Invoke<THook>((ExecutionEvent)e, (h, ev) => call(h, (ExecutionFailedEvent)ev));
+
+        private void Invoke<THook>(ExecutionRetryingEvent e, Action<THook, ExecutionRetryingEvent> call) where THook : class
+            => Invoke<THook>((ExecutionEvent)e, (h, ev) => call(h, (ExecutionRetryingEvent)ev));
+
+        private void Invoke<THook>(ExecutionSucceededEvent e, Action<THook, ExecutionSucceededEvent> call) where THook : class
+            => Invoke<THook>((ExecutionEvent)e, (h, ev) => call(h, (ExecutionSucceededEvent)ev));
+
+        private void ReportHookError(HookErrorContext error)
+        {
+            if (_hookErrorHandler != null)
+            {
+                try
+                {
+                    _hookErrorHandler(error);
+                    return;
+                }
+                catch (Exception handlerException)
+                {
+                    Trace.TraceWarning("ExecutionFlow: HookErrorHandler threw while reporting a hook error: {0}", handlerException.Message);
+                }
+            }
+
+            Trace.TraceWarning("ExecutionFlow: Hook '{0}' ({1}) failed for job '{2}': {3}",
+                error.HookType.FullName, error.HookInterface.Name, error.Event.JobId, error.Exception);
         }
 
         private static T SafeExecute<T>(string operation, string jobId, Func<T> action, T defaultValue = default)
@@ -112,13 +160,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
         private static string GetCustomId(ElectStateContext context, string jobId)
         {
             return SafeExecute("get custom ID", jobId,
-                () => context.Connection.GetJobParameter(jobId, ContextConsts.CustomId));
-        }
-
-        private static bool IsRetry(ElectStateContext context)
-        {
-            return context.CurrentState == FailedState.StateName ||
-                   (context.CurrentState == ScheduledState.StateName && GetRetryCount(context) > 0);
+                () => JobParameters.ReadCustomId(context.Connection, jobId));
         }
 
         private static int GetRetryCount(ElectStateContext context)
@@ -136,6 +178,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             return retryCount > 0 ? retryCount : 1;
         }
 
+        /// <summary>
+        /// Time since the current Processing state started. Hangfire stores <c>StartedAt</c> in UTC ("o" format),
+        /// so it's parsed as UTC: a plain <see cref="DateTime.TryParse(string, out DateTime)"/> would convert it to local time.
+        /// </summary>
         private static TimeSpan GetDuration(ElectStateContext context)
         {
             return SafeExecute("get duration", context.BackgroundJob.Id, () =>
@@ -146,7 +192,8 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
 
                 if (processingState?.Data != null &&
                     processingState.Data.TryGetValue(ContextConsts.StartedAt, out var startedAtStr) &&
-                    DateTime.TryParse(startedAtStr, out var startedAt))
+                    DateTime.TryParse(startedAtStr, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var startedAt))
                 {
                     return DateTime.UtcNow - startedAt;
                 }

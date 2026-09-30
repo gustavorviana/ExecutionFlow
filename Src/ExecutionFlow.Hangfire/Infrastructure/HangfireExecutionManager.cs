@@ -1,6 +1,7 @@
 using ExecutionFlow.Abstractions;
 using Hangfire;
 using Hangfire.Common;
+using Hangfire.States;
 using Hangfire.Storage;
 using System;
 using System.Collections.Generic;
@@ -32,10 +33,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <returns><c>true</c> if a matching job is processing; otherwise, <c>false</c>.</returns>
         public bool IsRunning(string jobId)
         {
+            if (string.IsNullOrEmpty(jobId))
+                return false;
+
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())
-                return InfraUtils
+                return IsReservedJobInState(connection, jobId, ProcessingState.StateName) || InfraUtils
                     .ReadAll(monitoringApi.ProcessingJobs)
                     .Any(x => MatchesId(connection, x.Key, jobId));
         }
@@ -62,11 +66,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <returns><c>true</c> if a matching job is enqueued; otherwise, <c>false</c>.</returns>
         public bool IsPending(string jobId)
         {
+            if (string.IsNullOrEmpty(jobId))
+                return false;
+
             var monitoringApi = _jobStorage.GetMonitoringApi();
-            var queues = monitoringApi.Queues();
 
             using (var connection = _jobStorage.GetConnection())
-                return queues
+                return IsReservedJobInState(connection, jobId, EnqueuedState.StateName) || monitoringApi.Queues()
                     .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
                     .Any(x => MatchesId(connection, x.Key, jobId));
         }
@@ -87,26 +93,26 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Cancels (deletes) a running or pending event job that matches the specified ID.
+        /// Cancels (deletes) a scheduled, enqueued or processing event job that matches the specified ID.
         /// Matches against the Hangfire job ID first, then falls back to custom ID.
         /// </summary>
         /// <param name="jobId">The job identifier to cancel (Hangfire ID or custom ID).</param>
-        public void Cancel(string jobId)
+        /// <returns><c>true</c> if a job was found and deleted; otherwise, <c>false</c>.</returns>
+        public bool Cancel(string jobId)
         {
-            var hangfireJobId = FindHangfireJobId(jobId);
-            if (hangfireJobId != null)
-                _jobClient.Delete(hangfireJobId);
+            var hangfireJobId = FindActiveJobId(jobId);
+            return hangfireJobId != null && _jobClient.Delete(hangfireJobId);
         }
 
         /// <summary>
-        /// Cancels (deletes) a running or pending recurring job that matches the specified handler type.
+        /// Cancels (deletes) a scheduled, enqueued or processing recurring job that matches the specified handler type.
         /// </summary>
         /// <param name="handlerType">The recurring handler type of the job to cancel.</param>
-        public void Cancel(Type handlerType)
+        /// <returns><c>true</c> if a job was found and deleted; otherwise, <c>false</c>.</returns>
+        public bool Cancel(Type handlerType)
         {
             var jobId = FindRecurringJobId(handlerType);
-            if (jobId != null)
-                _jobClient.Delete(jobId);
+            return jobId != null && _jobClient.Delete(jobId);
         }
 
         /// <summary>
@@ -153,25 +159,69 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return _jobClient.Requeue(failedJobId);
         }
 
-        private string FindHangfireJobId(string jobId)
+        /// <summary>
+        /// Fast path: when <paramref name="customId"/> has a deduplication reservation key, checks the reserved job's state
+        /// without scanning. A miss falls back to the scan, which also covers jobs published without deduplication.
+        /// </summary>
+        private static bool IsReservedJobInState(IStorageConnection connection, string customId, string stateName)
         {
+            var reservedJobId = DeduplicationStore.GetReservedJobId(connection, customId);
+            return reservedJobId != null && DeduplicationStore.IsInState(connection, reservedJobId, stateName);
+        }
+
+        /// <summary>
+        /// Finds an active (scheduled, enqueued, awaiting or processing) job for <paramref name="jobId"/>:
+        /// an exact Hangfire job ID first (no scan), then the deduplication reservation key, then a scan of
+        /// Processing, each queue and Scheduled matching the Hangfire ID or custom ID.
+        /// </summary>
+        private string FindActiveJobId(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId))
+                return null;
+
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())
             {
+                if (IsActiveJob(connection, jobId))
+                    return jobId;
+
+                var reservedJobId = DeduplicationStore.GetReservedJobId(connection, jobId);
+                if (reservedJobId != null && IsActiveJob(connection, reservedJobId))
+                    return reservedJobId;
+
                 var processingId = InfraUtils
                     .ReadAll(monitoringApi.ProcessingJobs)
                     .FirstOrDefault(x => MatchesId(connection, x.Key, jobId))
                     .Key;
-
                 if (!string.IsNullOrEmpty(processingId))
                     return processingId;
 
-                var queues = monitoringApi.Queues();
-                return queues
+                var enqueuedId = monitoringApi.Queues()
                     .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
                     .FirstOrDefault(x => MatchesId(connection, x.Key, jobId))
                     .Key;
+                if (!string.IsNullOrEmpty(enqueuedId))
+                    return enqueuedId;
+
+                return InfraUtils
+                    .ReadAll(monitoringApi.ScheduledJobs)
+                    .FirstOrDefault(x => MatchesId(connection, x.Key, jobId))
+                    .Key;
+            }
+        }
+
+        private static bool IsActiveJob(IStorageConnection connection, string jobId)
+        {
+            try
+            {
+                return DeduplicationStore.IsActive(connection, jobId);
+            }
+            catch (Exception ex)
+            {
+                // Some storages throw for IDs that aren't in their job ID format (e.g. a custom ID).
+                Trace.TraceWarning("ExecutionFlow: Failed to read the state of job '{0}': {1}", jobId, ex.Message);
+                return false;
             }
         }
 
@@ -183,13 +233,18 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 .ReadAll(monitoringApi.ProcessingJobs)
                 .FirstOrDefault(x => x.Value.Job.IsRecurringOfType(handlerType))
                 .Key;
-
             if (!string.IsNullOrEmpty(processingId))
                 return processingId;
 
-            var queues = monitoringApi.Queues();
-            return queues
+            var enqueuedId = monitoringApi.Queues()
                 .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
+                .FirstOrDefault(x => x.Value.Job.IsRecurringOfType(handlerType))
+                .Key;
+            if (!string.IsNullOrEmpty(enqueuedId))
+                return enqueuedId;
+
+            return InfraUtils
+                .ReadAll(monitoringApi.ScheduledJobs)
                 .FirstOrDefault(x => x.Value.Job.IsRecurringOfType(handlerType))
                 .Key;
         }
@@ -200,6 +255,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// </summary>
         private static bool MatchesId(IStorageConnection connection, string hangfireJobId, string id)
         {
+            // An empty ID never matches; otherwise it would match every job without a custom ID.
+            if (string.IsNullOrEmpty(id))
+                return false;
+
             if (hangfireJobId == id)
                 return true;
 
@@ -207,82 +266,92 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Retrieves all background jobs in the specified state, including both event and recurring jobs.
+        /// Enumerates the ExecutionFlow jobs in the specified state, lazily (see <see cref="IExecutionManager.GetJobs"/>).
         /// </summary>
         /// <param name="state">The job state to filter by.</param>
-        /// <returns>A collection of <see cref="JobInfo"/> representing the matching jobs.</returns>
+        /// <returns>A lazily evaluated sequence of <see cref="JobInfo"/>.</returns>
         public IEnumerable<JobInfo> GetJobs(JobState state)
         {
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())
             {
-                switch (state)
+                foreach (var row in ReadRows(monitoringApi, state))
                 {
-                    case JobState.Enqueued:
-                        return monitoringApi
-                            .Queues()
-                            .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
-                            .Select(job => BuildJobInfo(connection, job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.EnqueuedAt))
-                            .ToList();
-                    case JobState.Processing:
-                        return InfraUtils
-                            .ReadAll(monitoringApi.ProcessingJobs)
-                            .Select(job => BuildJobInfo(connection, job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.StartedAt))
-                            .ToList();
-                    case JobState.Succeeded:
-                        return InfraUtils
-                            .ReadAll(monitoringApi.SucceededJobs)
-                            .Select(job => BuildJobInfo(connection, job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.SucceededAt))
-                            .ToList();
-                    case JobState.Failed:
-                        return InfraUtils
-                            .ReadAll(monitoringApi.FailedJobs)
-                            .Select(job => BuildJobInfo(connection, job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.FailedAt))
-                            .ToList();
-                    case JobState.Cancelled:
-                        return InfraUtils
-                            .ReadAll(monitoringApi.DeletedJobs)
-                            .Select(job => BuildJobInfo(connection, job.Key, job.Value.Job, job.Value.InvocationData, state, job.Value.DeletedAt))
-                            .ToList();
-                    default:
-                        return Array.Empty<JobInfo>();
+                    if (IsExecutionFlowJob(row.Job, row.InvocationData))
+                        yield return BuildJobInfo(connection, row.JobId, row.Job, state, row.Timestamp);
                 }
             }
         }
 
-        private static JobInfo BuildJobInfo(IStorageConnection connection, string jobId, Job job, InvocationData invocationData, JobState state, DateTime? timestamp)
+        private static IEnumerable<(string JobId, Job Job, InvocationData InvocationData, DateTime? Timestamp)> ReadRows(IMonitoringApi monitoringApi, JobState state)
+        {
+            switch (state)
+            {
+                case JobState.Enqueued:
+                    return monitoringApi.Queues()
+                        .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
+                        .Select(x => (x.Key, x.Value.Job, x.Value.InvocationData, x.Value.EnqueuedAt));
+                case JobState.Processing:
+                    return InfraUtils.ReadAll(monitoringApi.ProcessingJobs)
+                        .Select(x => (x.Key, x.Value.Job, x.Value.InvocationData, x.Value.StartedAt));
+                case JobState.Succeeded:
+                    return InfraUtils.ReadAll(monitoringApi.SucceededJobs)
+                        .Select(x => (x.Key, x.Value.Job, x.Value.InvocationData, x.Value.SucceededAt));
+                case JobState.Failed:
+                    return InfraUtils.ReadAll(monitoringApi.FailedJobs)
+                        .Select(x => (x.Key, x.Value.Job, x.Value.InvocationData, x.Value.FailedAt));
+                case JobState.Cancelled:
+                    return InfraUtils.ReadAll(monitoringApi.DeletedJobs)
+                        .Select(x => (x.Key, x.Value.Job, x.Value.InvocationData, x.Value.DeletedAt));
+                case JobState.Scheduled:
+                    return InfraUtils.ReadAll(monitoringApi.ScheduledJobs)
+                        .Select(x => (x.Key, x.Value.Job, x.Value.InvocationData, (DateTime?)x.Value.ScheduledAt));
+                default:
+                    return Enumerable.Empty<(string, Job, InvocationData, DateTime?)>();
+            }
+        }
+
+        /// <summary>
+        /// A loaded job is an ExecutionFlow job when it runs <see cref="HangfireJobDispatcher"/>. A job that can't be loaded
+        /// (e.g. its event type no longer exists) is recognized by the dispatcher type recorded in its invocation data.
+        /// </summary>
+        private static bool IsExecutionFlowJob(Job job, InvocationData invocationData)
+        {
+            if (job != null)
+                return job.IsEvent() || job.IsRecurring();
+
+            return invocationData?.Type != null
+                && invocationData.Type.StartsWith(typeof(HangfireJobDispatcher).FullName + ",", StringComparison.Ordinal);
+        }
+
+        private static JobInfo BuildJobInfo(IStorageConnection connection, string jobId, Job job, JobState state, DateTime? timestamp)
         {
             var customId = GetCustomId(connection, jobId);
             var isRecurring = job?.IsRecurring() == true;
 
-            string eventTypeName = null;
             Type eventType = null;
+            Type handlerType = null;
 
-            if (job != null && job.Method.IsGenericMethod)
-            {
-                var genericArgs = job.Method.GetGenericArguments();
-                if (genericArgs.Length > 0)
-                {
-                    eventType = genericArgs[0];
-                    eventTypeName = eventType.Name;
-                }
-            }
+            if (isRecurring)
+                handlerType = new HangfireRecurringJobInfo(job).HandlerType;
+            else if (job != null && job.Method.IsGenericMethod)
+                eventType = job.Method.GetGenericArguments()[0];
 
-            if (eventTypeName == null && invocationData != null)
-            {
-                var typeString = invocationData.Method;
-                if (!string.IsNullOrEmpty(typeString))
-                {
-                    eventTypeName = typeString;
-                }
-            }
+            return new JobInfo(jobId, customId, eventType?.Name, eventType, handlerType, isRecurring, state, ToUtcOffset(timestamp));
+        }
 
-            DateTimeOffset? stateChangedAt = timestamp.HasValue
-                ? new DateTimeOffset(timestamp.Value)
-                : (DateTimeOffset?)null;
+        /// <summary>Storages may return timestamps with <see cref="DateTimeKind.Unspecified"/>; Hangfire stores them in UTC.</summary>
+        private static DateTimeOffset? ToUtcOffset(DateTime? timestamp)
+        {
+            if (!timestamp.HasValue)
+                return null;
 
-            return new JobInfo(jobId, customId, eventTypeName, eventType, isRecurring, state, stateChangedAt);
+            var value = timestamp.Value.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(timestamp.Value, DateTimeKind.Utc)
+                : timestamp.Value.ToUniversalTime();
+
+            return new DateTimeOffset(value);
         }
 
         /// <summary>
@@ -301,6 +370,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 case JobState.Succeeded: return stats.Succeeded;
                 case JobState.Failed: return stats.Failed;
                 case JobState.Cancelled: return stats.Deleted;
+                case JobState.Scheduled: return stats.Scheduled;
                 default: return 0;
             }
         }
@@ -318,14 +388,15 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 processing: stats.Processing,
                 succeeded: stats.Succeeded,
                 failed: stats.Failed,
-                cancelled: stats.Deleted);
+                cancelled: stats.Deleted,
+                scheduled: stats.Scheduled);
         }
 
         private static string GetCustomId(IStorageConnection connection, string jobId)
         {
             try
             {
-                return connection.GetJobParameter(jobId, ContextConsts.CustomId);
+                return JobParameters.ReadCustomId(connection, jobId);
             }
             catch (Exception ex)
             {

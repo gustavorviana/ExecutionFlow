@@ -107,11 +107,13 @@ public class HangfireOptionsTests
 
     // Test types
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class UnregisteredHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;

@@ -29,7 +29,8 @@ namespace ExecutionFlow.Hangfire
         /// <summary>
         /// Sets <see cref="DashboardOptions.DisplayNameFunc"/> using the <see cref="IHangfireJobName"/>
         /// resolved from the given service provider. Resolution is deferred until the first
-        /// dashboard render, so this can be called before the provider is fully built.
+        /// dashboard render, so this can be called before the provider is fully built. If no <see cref="IHangfireJobName"/>
+        /// is registered, jobs keep Hangfire's default names.
         /// </summary>
         /// <param name="options">The dashboard options.</param>
         /// <param name="serviceProvider">The service provider containing an <see cref="IHangfireJobName"/> registration.</param>
@@ -41,13 +42,11 @@ namespace ExecutionFlow.Hangfire
 
             options.DisplayNameFunc = (context, job) =>
             {
+                // Without a registered IHangfireJobName, keep Hangfire's default names instead of breaking the page.
                 var jobName = (IHangfireJobName)serviceProvider.GetService(typeof(IHangfireJobName));
-                if (jobName == null)
-                    throw new InvalidOperationException(
-                        $"No {nameof(IHangfireJobName)} is registered in the service provider. " +
-                        "Register ExecutionFlow via AddHangfireToExecutionFlow/AddExecutionFlowDispatcher or provide an IHangfireJobName instance.");
-
-                return jobName.GetName(job);
+                return jobName != null
+                    ? jobName.GetName(job)
+                    : DefaultHangfireJobName.GetHangfireDefaultName(job);
             };
 
             return options;

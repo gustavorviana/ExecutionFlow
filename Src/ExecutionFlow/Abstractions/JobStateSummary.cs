@@ -1,7 +1,8 @@
 namespace ExecutionFlow.Abstractions
 {
     /// <summary>
-    /// Contains the job count for each <see cref="JobState"/>.
+    /// Contains the job count for each <see cref="JobState"/>. Counts cover the whole storage,
+    /// including jobs that weren't created by ExecutionFlow.
     /// </summary>
     public class JobStateSummary
     {
@@ -20,16 +21,28 @@ namespace ExecutionFlow.Abstractions
         /// <summary>Gets the number of jobs that were cancelled or deleted.</summary>
         public long Cancelled { get; }
 
+        /// <summary>Gets the number of jobs scheduled to be enqueued later.</summary>
+        public long Scheduled { get; }
+
         /// <summary>
         /// Initializes a new instance of <see cref="JobStateSummary"/>.
         /// </summary>
         public JobStateSummary(long enqueued, long processing, long succeeded, long failed, long cancelled)
+            : this(enqueued, processing, succeeded, failed, cancelled, 0)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of <see cref="JobStateSummary"/>.
+        /// </summary>
+        public JobStateSummary(long enqueued, long processing, long succeeded, long failed, long cancelled, long scheduled)
         {
             Enqueued = enqueued;
             Processing = processing;
             Succeeded = succeeded;
             Failed = failed;
             Cancelled = cancelled;
+            Scheduled = scheduled;
         }
     }
 }

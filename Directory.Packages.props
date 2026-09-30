@@ -9,9 +9,9 @@
     <PackageVersion Include="Aspire.Hosting.SqlServer" Version="13.1.2" />
 
     <!-- Hangfire -->
-    <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.*" />
-    <PackageVersion Include="Hangfire.Console" Version="1.4.*" />
-    <PackageVersion Include="Hangfire.Core" Version="1.8.*" />
+    <PackageVersion Include="Hangfire.AspNetCore" Version="1.8.23" />
+    <PackageVersion Include="Hangfire.Console" Version="1.4.3" />
+    <PackageVersion Include="Hangfire.Core" Version="1.8.23" />
     <PackageVersion Include="Hangfire.SqlServer" Version="1.8.23" />
 
     <!-- Microsoft -->
@@ -20,6 +20,7 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.*" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.*" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="6.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="9.9.0" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="9.5.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

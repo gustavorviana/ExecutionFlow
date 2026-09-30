@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // These tests cover the obsolete FlowContext.SetCustomId.
 using ExecutionFlow.Abstractions;
 using NSubstitute;
 
@@ -8,6 +9,44 @@ public class FlowContextBuilderTests
     private static ExecutionLoggerFactory CreateLoggerFactory()
     {
         return new ExecutionLoggerFactory(Array.Empty<IExecutionLoggerFactory>());
+    }
+
+    // --- handlers-and-context REQ-002: processor-neutral job facts ---
+
+    [Fact]
+    public void Build_HasNoJobId_AndFirstAttempt_ByDefault()
+    {
+        var context = new FlowContextBuilder(CreateLoggerFactory()).Build();
+
+        Assert.Null(context.JobId);
+        Assert.Equal(1, context.AttemptNumber);
+    }
+
+    [Fact]
+    public void SetJob_ExposesJobIdAndAttempt_OnBothContextKinds()
+    {
+        var recurring = new FlowContextBuilder(CreateLoggerFactory()).SetJob("job-7", 3).Build();
+        var evented = new FlowContextBuilder(CreateLoggerFactory()).SetJob("job-8", 2).Build(new TestEvent(), _ => { });
+
+        Assert.Equal("job-7", recurring.JobId);
+        Assert.Equal(3, recurring.AttemptNumber);
+        Assert.Equal("job-8", evented.JobId);
+        Assert.Equal(2, evented.AttemptNumber);
+    }
+
+    [Fact]
+    public void SetJob_Throws_ForAttemptBelowOne()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FlowContextBuilder(CreateLoggerFactory()).SetJob("job-1", 0));
+    }
+
+    [Fact]
+    public void SetJob_Throws_AfterBuild()
+    {
+        var builder = new FlowContextBuilder(CreateLoggerFactory());
+        builder.Build();
+
+        Assert.Throws<InvalidOperationException>(() => builder.SetJob("job-1", 1));
     }
 
     [Fact]

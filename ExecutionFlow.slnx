@@ -14,6 +14,7 @@
     <Project Path="Examples/ExecutionFlow.Examples.Consumer/ExecutionFlow.Examples.Consumer.csproj" />
   </Folder>
   <Folder Name="/Src/">
+    <Project Path="Src/ExecutionFlow.Extensions.Logging/ExecutionFlow.Extensions.Logging.csproj" />
     <Project Path="Src/ExecutionFlow.Hangfire.Console/ExecutionFlow.Hangfire.Console.csproj" />
     <Project Path="Src/ExecutionFlow.Hangfire/ExecutionFlow.Hangfire.csproj" />
     <Project Path="Src/ExecutionFlow/ExecutionFlow.csproj" />
@@ -22,6 +23,7 @@
   <Folder Name="/Tests/">
     <Project Path="Tests/ExecutionFlow.Hangfire.DependencyInjection.Tests/ExecutionFlow.Hangfire.DependencyInjection.Tests.csproj" Id="1265ce58-3eba-493f-be0a-877b0bd680fa" />
     <Project Path="Tests/ExecutionFlow.Hangfire.Tests/ExecutionFlow.Hangfire.Tests.csproj" Id="10804094-9766-4db6-ae28-f7bc5528cc83" />
+    <Project Path="Tests/ExecutionFlow.Extensions.Logging.Tests/ExecutionFlow.Extensions.Logging.Tests.csproj" />
     <Project Path="Tests/ExecutionFlow.Tests/ExecutionFlow.Tests.csproj" />
   </Folder>
 </Solution>

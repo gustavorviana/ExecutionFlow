@@ -167,13 +167,14 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void DispatcherOnly_DoesNotRegister_IExecutionManager()
+    public void DispatcherOnly_Registers_IExecutionManager()
     {
+        // Producer hosts (e.g. an API) can check, cancel and retry jobs; the manager only needs the storage.
         using var provider = BuildDispatcherOnlyProvider();
 
         var manager = provider.GetService<IExecutionManager>();
 
-        Assert.Null(manager);
+        Assert.NotNull(manager);
     }
 
     [Fact]
@@ -242,29 +243,48 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void BothExtensions_ConsumerRegistryWins_ForJobNames()
+    public void BothExtensions_Throw_WhenProducerOnlyIsRegisteredFirst()
     {
         var services = new ServiceCollection();
-        var storage = Substitute.For<JobStorage>();
-        storage.GetConnection().Returns(Substitute.For<IStorageConnection>());
+        services.AddExecutionFlowDispatcher(_ => Substitute.For<JobStorage>());
 
-        services.AddSingleton(storage);
-        services.AddSingleton(Substitute.For<IBackgroundJobClient>());
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddHangfireToExecutionFlow());
 
-        // Producer-only registration first (empty registry), full registration after.
-        services.AddExecutionFlowDispatcher(_ => storage);
-        services.AddHangfireToExecutionFlow(options => options.Add(typeof(TestEventHandler)));
+        Assert.Contains("Use only AddHangfireToExecutionFlow", ex.Message);
+    }
 
-        using var provider = services.BuildServiceProvider();
+    [Fact]
+    public void BothExtensions_Throw_WhenFullModeIsRegisteredFirst()
+    {
+        var services = new ServiceCollection();
+        services.AddHangfireToExecutionFlow();
 
-        var registry = provider.GetRequiredService<IExecutionFlowRegistry>();
-        Assert.True(registry.EventHandlers.ContainsKey(typeof(TestEvent)));
+        var ex = Assert.Throws<InvalidOperationException>(() => services.AddExecutionFlowDispatcher(_ => Substitute.For<JobStorage>()));
 
-        var jobName = provider.GetRequiredService<IHangfireJobName>();
-        var job = global::Hangfire.Common.Job.FromExpression<ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher>(
-            x => x.DispatchEventAsync<TestEvent>(default!, null, null!, default));
+        Assert.Contains("Remove the AddExecutionFlowDispatcher call", ex.Message);
+    }
 
-        Assert.Equal(nameof(TestEventHandler), jobName.GetName(job));
+    [Fact]
+    public void StartExecutionFlow_BuildsWithoutAHost()
+    {
+        using var provider = BuildProvider(options => options.Add(typeof(TestRecurringHandler)));
+
+        provider.StartExecutionFlow();
+
+        // Build() ran: the setup's recurring registration resolved the job ID generator.
+        var setup = (HangfireSetup)provider.GetRequiredService<IExecutionFlowRegistry>();
+        Assert.NotNull(setup.JobIdGenerator);
+    }
+
+    [Fact]
+    public void ExecutionManager_IsBoundToTheBuiltSetup()
+    {
+        using var provider = BuildProvider();
+
+        var manager = provider.GetRequiredService<IExecutionManager>();
+        var setup = (HangfireSetup)provider.GetRequiredService<IExecutionFlowRegistry>();
+
+        Assert.Same(setup.ExecutionManager, manager);
     }
 
     // Test types
@@ -277,6 +297,7 @@ public class ServiceCollectionExtensionsTests
             Task.CompletedTask;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) =>

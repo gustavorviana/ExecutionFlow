@@ -17,7 +17,15 @@ namespace ExecutionFlow
         /// <summary>
         /// Optional callback invoked when a <see cref="ReflectionTypeLoadException"/> occurs during assembly scanning.
         /// </summary>
-        public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get; set; }
+        public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get => _onTypeLoadFailure; set { ThrowIfLocked(); _onTypeLoadFailure = value; } }
+        private Action<AssemblyTypeScanContext> _onTypeLoadFailure;
+
+        /// <summary>
+        /// Gets or sets the default deduplication behavior for events with a custom ID. Default is <see cref="DeduplicationBehavior.Disabled"/>.
+        /// An event type can override it with <see cref="Attributes.DeduplicationAttribute"/>.
+        /// </summary>
+        public DeduplicationBehavior DeduplicationBehavior { get => _deduplicationBehavior; set { ThrowIfLocked(); _deduplicationBehavior = value; } }
+        private DeduplicationBehavior _deduplicationBehavior = DeduplicationBehavior.Disabled;
 
         private readonly List<Type> _loggerFactoryTypes = new List<Type>();
         private readonly Dictionary<Type, RecurringJobRegistryInfo> _recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>(new TypeEqualityComparer());
@@ -116,7 +124,9 @@ namespace ExecutionFlow
                 _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
                     handlerType: handlerType,
                     displayName: displayName,
-                    cron: cron
+                    cron: cron,
+                    id: recurringAttr?.Id,
+                    timeZone: recurringAttr?.TimeZone
                 );
                 return;
             }
@@ -162,7 +172,9 @@ namespace ExecutionFlow
             if (!typeof(IExecutionLoggerFactory).IsAssignableFrom(factoryType))
                 throw new ArgumentException($"Type '{factoryType.FullName}' does not implement IExecutionLoggerFactory.", nameof(factoryType));
 
-            _loggerFactoryTypes.Add(factoryType);
+            // Registering the same factory twice (e.g. ConfigureConsole() called twice) would write every line twice.
+            if (!_loggerFactoryTypes.Contains(factoryType))
+                _loggerFactoryTypes.Add(factoryType);
         }
 
         internal void Lock()

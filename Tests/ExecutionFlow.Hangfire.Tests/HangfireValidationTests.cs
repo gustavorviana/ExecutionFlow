@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Covers the obsolete HangfireAutoRunFilter until it is removed in 2.0.
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Infrastructure;
@@ -139,6 +140,7 @@ public class HangfireValidationTests
     [Fact]
     public void DefaultHangfireJobName_Throws_ForNullIdGenerator()
     {
+        // The ID generator is the last naming fallback, so it is required.
         Assert.Throws<ArgumentNullException>(() =>
             new DefaultHangfireJobName(null!, Substitute.For<IExecutionFlowRegistry>()));
     }
@@ -324,6 +326,7 @@ public class HangfireValidationTests
         public void OnEnqueued(ExecutionEvent e) { }
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;

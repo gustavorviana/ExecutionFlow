@@ -25,7 +25,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             var jobInfo = HangfireJobInfo.Create(job);
             var handlerType = jobInfo?.GetHandlerType(_registry);
             if (handlerType == null)
+            {
+                // A missing handler registration won't be fixed by retrying on this host.
+                if (job.IsEvent() && !_options.RetryUnregisteredEventJobs)
+                    return new[] { new JobFilter(new AutomaticRetryAttribute { Attempts = 0 }, JobFilterScope.Type, 0) };
+
                 return System.Array.Empty<JobFilter>();
+            }
 
             var filters = handlerType
                 .GetCustomAttributes(true)

@@ -13,6 +13,18 @@ namespace ExecutionFlow.Attributes
         public string Cron { get; }
 
         /// <summary>
+        /// Gets or sets an explicit, stable recurring job ID. When not set, the ID comes from the configured
+        /// job ID generator (by default the handler type's full name), so renaming the class changes the ID.
+        /// </summary>
+        public string Id { get; set; }
+
+        /// <summary>
+        /// Gets or sets the time zone ID the cron expression is evaluated in (e.g. "America/Sao_Paulo").
+        /// When not set, the global default applies (UTC unless configured).
+        /// </summary>
+        public string TimeZone { get; set; }
+
+        /// <summary>
         /// Initializes a new instance of <see cref="RecurringAttribute"/>.
         /// </summary>
         /// <param name="cron">The cron expression for scheduling.</param>
