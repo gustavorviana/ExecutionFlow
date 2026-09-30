@@ -65,7 +65,7 @@ Open ambiguities are written inline as `[NEEDS CLARIFICATION: ...]`.
 | [custom-id-and-deduplication](custom-id-and-deduplication/spec.md) | approved (v1.2.0) |
 | [recurring-jobs](recurring-jobs/spec.md) | approved (v1.2.0) |
 | [lifecycle-hooks](lifecycle-hooks/spec.md) | approved (v1.2.0) |
-| [execution-manager](execution-manager/spec.md) | not started |
+| [execution-manager](execution-manager/spec.md) | approved (v1.2.0) |
 | [job-naming-and-dashboard](job-naming-and-dashboard/spec.md) | not started |
 | [setup-and-configuration](setup-and-configuration/spec.md) | not started |
 | [handlers-and-context](handlers-and-context/spec.md) | not started |

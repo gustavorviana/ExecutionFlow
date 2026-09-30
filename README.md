@@ -370,14 +370,36 @@ bar.Complete();
 
 ## Execution Manager
 
-```csharp
-executionManager.IsRunning("order-123");
-executionManager.IsPending("order-123");
-executionManager.Cancel("order-123");
-executionManager.Retry("order-123");
+IDs can be a Hangfire job ID or a custom ID (the Hangfire ID is matched first).
 
-var failedJobs = executionManager.GetJobs(JobState.Failed);
+```csharp
+executionManager.IsRunning("order-123");            // processing?
+executionManager.IsPending("order-123");            // waiting in a queue?
+bool cancelled = executionManager.Cancel("order-123"); // deletes a scheduled, enqueued or processing job
+bool retried = executionManager.Retry("order-123");    // requeues a failed job
+
+executionManager.Cancel(typeof(DataSyncHandler));   // recurring jobs by handler type
 ```
+
+`Cancel` also cancels **scheduled** jobs, e.g. one created with `Schedule(..., TimeSpan.FromDays(3))`. Passing the exact Hangfire job ID (the `JobId` from `PublishResult` when there's no custom ID) deletes it directly, without scanning.
+
+### Listing and counting
+
+```csharp
+foreach (var job in executionManager.GetJobs(JobState.Failed).Take(50))
+    Console.WriteLine($"{job.JobId} {job.CustomId} {job.EventTypeName ?? job.HandlerType?.Name}");
+
+var summary = executionManager.GetStateSummary();   // Enqueued, Processing, Scheduled, Succeeded, Failed, Cancelled
+```
+
+`GetJobs` returns only ExecutionFlow jobs and is **lazy**: it reads from storage page by page as you enumerate, so memory stays bounded. Page with `Skip`/`Take`. Keep in mind:
+- enumerating twice queries the storage twice (call `.ToList()` to reuse the result);
+- a storage connection stays open while the enumeration runs, so if each item needs slow processing, call `.ToList()` first;
+- it isn't a snapshot: jobs changing state during the enumeration may be skipped or repeated.
+
+`CountJobs` and `GetStateSummary` come from Hangfire's statistics and cover the **whole storage**, including jobs not created by ExecutionFlow, so they can be higher than what `GetJobs` returns.
+
+For recurring jobs, `JobInfo.HandlerType` is the handler, and `EventType`/`EventTypeName` are null.
 
 ## Producer-Only (Isolated)
 

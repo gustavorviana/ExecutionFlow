@@ -257,17 +257,162 @@ public class ExecutionManagerTests
         var dto = new ProcessingJobDto
         {
             Job = null,
-            InvocationData = new InvocationData("SomeType", "SomeMethod", "[]", "[]")
+            InvocationData = new InvocationData(typeof(HangfireJobDispatcher).AssemblyQualifiedName, "DispatchEventAsync", "[]", "[]")
         };
         _monitoringApi.ProcessingJobs(0, 10).Returns(
             ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-12", dto)));
-        _connection.GetJobParameter("job-12", ContextConsts.CustomId).Returns((string)null);
+        _connection.GetJobParameter("job-12", ContextConsts.CustomId).Returns((string?)null);
 
         var results = _manager.GetJobs(JobState.Processing).ToList();
 
         Assert.Single(results);
         Assert.Null(results[0].EventType);
-        Assert.Equal("SomeMethod", results[0].EventTypeName);
+        Assert.Null(results[0].EventTypeName);
+    }
+
+    // --- execution-manager to-be (v1.2.0) ---
+
+    public static void NativeHangfireJob() { }
+
+    [Fact]
+    public void GetJobs_ExcludesNonExecutionFlowJobs_LoadedOrNot()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList(
+            new KeyValuePair<string, ProcessingJobDto>("native", new ProcessingJobDto { Job = Job.FromExpression(() => NativeHangfireJob()) }),
+            new KeyValuePair<string, ProcessingJobDto>("foreign-unloadable", new ProcessingJobDto
+            {
+                Job = null,
+                InvocationData = new InvocationData("Other.App.Job, Other.App", "Run", "[]", "[]")
+            }),
+            new KeyValuePair<string, ProcessingJobDto>("ours", new ProcessingJobDto { Job = CreateGenericJob<TestEvent>() })));
+
+        var results = _manager.GetJobs(JobState.Processing).ToList();
+
+        Assert.Equal(new[] { "ours" }, results.Select(r => r.JobId));
+    }
+
+    [Fact]
+    public void GetJobs_IsLazy_AndReadsOnlyThePagesConsumed()
+    {
+        var firstPage = Enumerable.Range(1, 10)
+            .Select(i => new KeyValuePair<string, ProcessingJobDto>($"job-{i}", new ProcessingJobDto { Job = CreateGenericJob<TestEvent>() }))
+            .ToArray();
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList(firstPage));
+
+        var sequence = _manager.GetJobs(JobState.Processing);
+        _storage.DidNotReceive().GetConnection();
+
+        var taken = sequence.Take(3).ToList();
+
+        Assert.Equal(3, taken.Count);
+        _monitoringApi.DidNotReceive().ProcessingJobs(10, 10);
+    }
+
+    [Fact]
+    public void GetJobs_Recurring_HasHandlerType_AndNoEventType()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList(
+            new KeyValuePair<string, ProcessingJobDto>("rec-1", new ProcessingJobDto { Job = Utils.JobBuilder.CreateRecurringJob(typeof(TestRecurringHandler)) })));
+
+        var result = _manager.GetJobs(JobState.Processing).Single();
+
+        Assert.True(result.IsRecurring);
+        Assert.Equal(typeof(TestRecurringHandler), result.HandlerType);
+        Assert.Null(result.EventType);
+        Assert.Null(result.EventTypeName);
+    }
+
+    [Fact]
+    public void GetJobs_Scheduled_ListsScheduledJobs()
+    {
+        var scheduledAt = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Utc);
+        _monitoringApi.ScheduledJobs(0, 10).Returns(new JobList<ScheduledJobDto>(new[]
+        {
+            new KeyValuePair<string, ScheduledJobDto>("sch-1", new ScheduledJobDto { Job = CreateGenericJob<TestEvent>(), ScheduledAt = scheduledAt })
+        }));
+
+        var result = _manager.GetJobs(JobState.Scheduled).Single();
+
+        Assert.Equal(JobState.Scheduled, result.State);
+        Assert.Equal(new DateTimeOffset(scheduledAt), result.StateChangedAt);
+    }
+
+    [Fact]
+    public void GetJobs_TreatsUnspecifiedTimestampsAsUtc()
+    {
+        var unspecified = new DateTime(2026, 9, 30, 12, 0, 0, DateTimeKind.Unspecified);
+        _monitoringApi.SucceededJobs(0, 10).Returns(new JobList<SucceededJobDto>(new[]
+        {
+            new KeyValuePair<string, SucceededJobDto>("job-1", new SucceededJobDto { Job = CreateGenericJob<TestEvent>(), SucceededAt = unspecified })
+        }));
+
+        var result = _manager.GetJobs(JobState.Succeeded).Single();
+
+        Assert.Equal(TimeSpan.Zero, result.StateChangedAt!.Value.Offset);
+        Assert.Equal(12, result.StateChangedAt.Value.Hour);
+    }
+
+    [Fact]
+    public void Cancel_DeletesExactHangfireId_WithoutScanning_EvenWhenScheduled()
+    {
+        _connection.GetStateData("job-7").Returns(new StateData { Name = "Scheduled" });
+        _jobClient.ChangeState(default!, default!, default).ReturnsForAnyArgs(true);
+
+        var cancelled = _manager.Cancel("job-7");
+
+        Assert.True(cancelled);
+        _jobClient.Received(1).ChangeState("job-7", Arg.Any<global::Hangfire.States.DeletedState>(), Arg.Any<string>());
+        _monitoringApi.DidNotReceiveWithAnyArgs().ProcessingJobs(default, default);
+    }
+
+    [Fact]
+    public void Cancel_FindsScheduledJob_ByCustomId()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
+        _monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
+        _monitoringApi.ScheduledJobs(0, 10).Returns(new JobList<ScheduledJobDto>(new[]
+        {
+            new KeyValuePair<string, ScheduledJobDto>("sch-9", new ScheduledJobDto { Job = CreateGenericJob<TestEvent>() })
+        }));
+        _connection.GetJobParameter("sch-9", ContextConsts.CustomId).Returns("reminder-42");
+        _jobClient.ChangeState(default!, default!, default).ReturnsForAnyArgs(true);
+
+        Assert.True(_manager.Cancel("reminder-42"));
+        _jobClient.Received(1).ChangeState("sch-9", Arg.Any<global::Hangfire.States.DeletedState>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public void Cancel_ReturnsFalse_WhenNothingMatches()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
+        _monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
+        _monitoringApi.ScheduledJobs(0, 10).Returns(new JobList<ScheduledJobDto>(Array.Empty<KeyValuePair<string, ScheduledJobDto>>()));
+
+        Assert.False(_manager.Cancel("unknown"));
+        _jobClient.DidNotReceiveWithAnyArgs().ChangeState(default!, default!, default);
+    }
+
+    [Fact]
+    public void Cancel_Type_FindsScheduledRecurringJob()
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(ProcessingJobList());
+        _monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
+        _monitoringApi.ScheduledJobs(0, 10).Returns(new JobList<ScheduledJobDto>(new[]
+        {
+            new KeyValuePair<string, ScheduledJobDto>("rec-retry", new ScheduledJobDto { Job = Utils.JobBuilder.CreateRecurringJob(typeof(TestRecurringHandler)) })
+        }));
+        _jobClient.ChangeState(default!, default!, default).ReturnsForAnyArgs(true);
+
+        Assert.True(_manager.Cancel(typeof(TestRecurringHandler)));
+    }
+
+    [Fact]
+    public void CountJobs_And_Summary_IncludeScheduled()
+    {
+        _monitoringApi.GetStatistics().Returns(new StatisticsDto { Scheduled = 7 });
+
+        Assert.Equal(7, _manager.CountJobs(JobState.Scheduled));
+        Assert.Equal(7, _manager.GetStateSummary().Scheduled);
     }
 
     [Fact]

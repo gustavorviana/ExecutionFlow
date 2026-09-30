@@ -14,6 +14,9 @@ namespace ExecutionFlow.Abstractions
         /// <summary>The job failed during execution.</summary>
         Failed,
         /// <summary>The job was cancelled or deleted.</summary>
-        Cancelled
+        Cancelled,
+
+        /// <summary>The job is scheduled to be enqueued later (a delayed publish, or a failed job waiting for an automatic retry).</summary>
+        Scheduled
     }
 }

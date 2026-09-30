@@ -54,6 +54,12 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return jobId != null && IsInState(connection, jobId, ActiveStates) ? jobId : null;
         }
 
+        /// <summary>Returns <c>true</c> when the job exists and is Enqueued, Scheduled, Awaiting or Processing.</summary>
+        public static bool IsActive(IStorageConnection connection, string jobId)
+        {
+            return IsInState(connection, jobId, ActiveStates);
+        }
+
         /// <summary>Returns <c>true</c> when the job's current state is <paramref name="stateName"/>.</summary>
         public static bool IsInState(IStorageConnection connection, string jobId, string stateName)
         {
