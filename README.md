@@ -357,18 +357,32 @@ public class ImportHandler : IHandler<ImportEvent> { ... }
 
 ## Flow Parameters
 
-Handlers can read infrastructure parameters and set custom ones during execution:
+Every context tells the handler which job and attempt it's running, without depending on Hangfire:
 
 ```csharp
 public async Task HandleAsync(FlowContext<MyEvent> context, CancellationToken ct)
 {
-    context.Parameters["CorrelationId"] = Guid.NewGuid().ToString();
-    context.Parameters["LogType"] = "Audit";
+    context.Log.Info($"Job {context.JobId}, attempt {context.AttemptNumber}");   // attempt 1 = first run, 2 = first retry
 
-    // Infrastructure parameters are read-only
-    // context.Parameters["PerformContext"] = null; // throws InvalidOperationException
+    // Hangfire-specific access, when you really need it (ExecutionFlow.Hangfire):
+    var performContext = context.GetPerformContext();
 }
 ```
+
+`Parameters` holds values for **this execution only**: they aren't persisted, passed to retries or shared with other jobs, and the logger sees the same instance (so they're a good place for logging hints):
+
+```csharp
+context.Parameters["CorrelationId"] = Guid.NewGuid().ToString();
+context.Parameters["LogType"] = "Audit";
+
+// Infrastructure keys are read-only, in any casing:
+// context.Parameters["CustomName"] = "x";   // throws InvalidOperationException
+// context.Parameters["customname"] = "x";   // throws too
+```
+
+For Hangfire's `PerformContext`, use `context.GetPerformContext()`. The custom name is available on the event itself (`ICustomNameEvent`).
+
+Each event type has exactly one handler. If an event needs several independent actions, publish one event per action: each gets its own job, retries and name.
 
 ## Scan with Filter
 

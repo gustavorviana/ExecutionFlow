@@ -66,7 +66,24 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             var builder = new FlowContextBuilder((ExecutionLoggerFactory)_serviceProvider.GetService(typeof(ExecutionLoggerFactory)));
             builder.AddReadOnly(ContextConsts.Context, performContext);
 
+            if (performContext?.BackgroundJob != null)
+                builder.SetJob(performContext.BackgroundJob.Id, GetRetryCount(performContext) + 1);
+
             return builder;
+        }
+
+        /// <summary>Hangfire's automatic retry filter stores the retries done so far in the "RetryCount" job parameter.</summary>
+        private static int GetRetryCount(PerformContext performContext)
+        {
+            try
+            {
+                var value = performContext.Connection?.GetJobParameter(performContext.BackgroundJob.Id, ContextConsts.RetryCount);
+                return int.TryParse(value, out var count) && count > 0 ? count : 0;
+            }
+            catch (Exception)
+            {
+                return 0;
+            }
         }
     }
 }

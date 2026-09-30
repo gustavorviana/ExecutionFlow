@@ -126,6 +126,59 @@ public class HangfireJobDispatcherTests
         Assert.Contains("Could not activate handler instance", ex.Message);
     }
 
+    // --- handlers-and-context REQ-002: job facts and typed Hangfire access ---
+
+    private async Task<FlowContext> RunContextCapture(PerformContext performContext)
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(ContextCaptureHandler)));
+        var activator = new FlowEngineJobActivator(setup);
+        activator.RegisterLoggerFactory(setup.LoggerFactoryTypes);
+
+        await new HangfireJobDispatcher(activator, setup)
+            .DispatchEventAsync(new ContextCaptureEvent(), null, performContext, CancellationToken.None);
+
+        return ContextCaptureHandler.Captured!;
+    }
+
+    [Fact]
+    public async Task DispatchEventAsync_ExposesJobIdAndFirstAttempt()
+    {
+        var context = await RunContextCapture(CreatePerformContext());
+
+        Assert.Equal("test-job-1", context.JobId);
+        Assert.Equal(1, context.AttemptNumber);
+    }
+
+    [Fact]
+    public async Task DispatchEventAsync_ExposesAttemptNumber_OnRetry()
+    {
+        var performContext = CreatePerformContext();
+        performContext.Connection.GetJobParameter("test-job-1", "RetryCount").Returns("2");
+
+        var context = await RunContextCapture(performContext);
+
+        Assert.Equal(3, context.AttemptNumber);
+    }
+
+    [Fact]
+    public async Task GetPerformContext_ReturnsHangfiresContext()
+    {
+        var performContext = CreatePerformContext();
+
+        var context = await RunContextCapture(performContext);
+
+        Assert.Same(performContext, context.GetPerformContext());
+    }
+
+    [Fact]
+    public void GetPerformContext_ReturnsNull_OutsideHangfire()
+    {
+        var context = new FlowContextBuilder(new ExecutionLoggerFactory(Array.Empty<IExecutionLoggerFactory>())).Build();
+
+        Assert.Null(context.GetPerformContext());
+    }
+
     [Fact]
     public async Task WithoutDI_DispatchEventAsync_ExposesCustomNameParameter()
     {
@@ -326,6 +379,19 @@ public class HangfireJobDispatcherTests
         public Task HandleAsync(FlowContext<ClearCustomIdEvent> context, CancellationToken ct)
         {
             context.SetCustomId(null!);
+            return Task.CompletedTask;
+        }
+    }
+
+    public class ContextCaptureEvent { }
+
+    public class ContextCaptureHandler : IHandler<ContextCaptureEvent>
+    {
+        public static FlowContext? Captured;
+
+        public Task HandleAsync(FlowContext<ContextCaptureEvent> context, CancellationToken ct)
+        {
+            Captured = context;
             return Task.CompletedTask;
         }
     }
