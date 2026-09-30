@@ -453,9 +453,30 @@ var dispatcher = setup.BuildDispatcherOnly(storage);
 
 dispatcher.Publish(new MyEvent());
 dispatcher.Schedule(new MyEvent(), TimeSpan.FromHours(1));
+
+var manager = setup.ExecutionManager;   // check, cancel or retry jobs in that storage
 ```
 
 No global state is modified. The existing Hangfire in the process is not affected.
+
+Producer-only hosts also get an `IExecutionManager` (registered by `AddExecutionFlowDispatcher`, or `setup.ExecutionManager`), so an API can cancel a scheduled job or show a job's status. Two things to know:
+- a job cancelled from a producer-only host fires **no lifecycle hooks** (hooks only run where the full setup is built);
+- the deduplication reservation key of a job cancelled there is released on the next publish of that custom ID (it's detected as stale), not immediately.
+
+Use **either** `AddHangfireToExecutionFlow` (full mode, which also publishes) **or** `AddExecutionFlowDispatcher` (producer-only) in one container. Registering both throws, telling you which one to keep.
+
+## Startup and Configuration Rules
+
+- Options are a fixed snapshot: every option (methods **and** properties) must be set inside `Configure`; changing one afterwards throws.
+- With DI, ExecutionFlow is built when the dispatcher is first resolved. Apps running a generic host (`Host.CreateApplicationBuilder`, ASP.NET Core) get that at startup automatically. Apps without a host must call it after building the provider:
+
+```csharp
+var provider = services.BuildServiceProvider();
+provider.StartExecutionFlow();   // registers Hangfire filters and recurring jobs now
+```
+
+- Hangfire's filters and job activator are process-wide, so only **one full Hangfire setup** is active per process: a second full `Build()` replaces the previous one's filters (its dispatcher keeps publishing, but its hooks stop). Producer-only setups are unlimited. This limit is Hangfire's, not ExecutionFlow's.
+- Without DI, call `setup.ConfigureActivator()` so Hangfire activates handlers through the setup; `Build()` and `ConfigureActivator()` share the same activator, in either order.
 
 ## Configuration Reference
 

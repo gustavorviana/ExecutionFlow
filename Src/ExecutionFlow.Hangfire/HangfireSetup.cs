@@ -20,6 +20,23 @@ namespace ExecutionFlow.Hangfire
         private bool _built;
         private readonly object _buildLock = new object();
 
+        // Hangfire's filters and activator are process-wide, so only one full setup can be active per process:
+        // the last Build() wins and removes the previous setup's global registrations (Hangfire only; other processors
+        // aren't limited by this).
+        private static readonly object GlobalStateLock = new object();
+        private static HangfireSetup _activeFullSetup;
+
+        private FlowEngineJobActivator _activator;
+        private HangfireStateFilter _stateFilter;
+        private DeduplicationCleanupFilter _cleanupFilter;
+        private HandlerJobFilterProvider _filterProvider;
+
+        /// <summary>
+        /// Gets the execution manager bound to this setup's storage, available after <see cref="Build"/> or
+        /// <see cref="BuildDispatcherOnly(IBackgroundJobClient, JobStorage, IServiceProvider)"/>.
+        /// </summary>
+        public IExecutionManager ExecutionManager { get; private set; }
+
         /// <summary>Gets the registered state handler types from the options.</summary>
         public IReadOnlyList<Type> StateHandlerTypes => Options?.StateHandlerTypes;
 
@@ -82,8 +99,14 @@ namespace ExecutionFlow.Hangfire
         /// <returns>This instance for chaining.</returns>
         public HangfireSetup ConfigureActivator()
         {
-            JobActivator.Current = new FlowEngineJobActivator(this);
+            JobActivator.Current = GetOrCreateActivator();
             return this;
+        }
+
+        /// <summary>This setup's own activator: the one <see cref="ConfigureActivator"/> installed, or a new one.</summary>
+        private FlowEngineJobActivator GetOrCreateActivator()
+        {
+            return _activator ?? (_activator = new FlowEngineJobActivator(this));
         }
 
         /// <summary>
@@ -100,8 +123,9 @@ namespace ExecutionFlow.Hangfire
             {
                 ThrowIfBuilt();
 
+                // Never reuse another setup's activator (JobActivator.Current may belong to a different setup).
                 if (serviceProvider == null)
-                    serviceProvider = (JobActivator.Current as FlowEngineJobActivator) ?? new FlowEngineJobActivator(this);
+                    serviceProvider = GetOrCreateActivator();
 
                 if (jobStorage == null)
                     jobStorage = JobStorage.Current;
@@ -114,9 +138,7 @@ namespace ExecutionFlow.Hangfire
 
                 InitGenerators(serviceProvider);
 
-                GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes, Options.HookErrorHandler), HangfireStateFilter.FilterOrder);
-                GlobalJobFilters.Filters.Add(new DeduplicationCleanupFilter());
-                JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this, Options));
+                RegisterGlobalFilters(serviceProvider);
                 RegisterRecurring(jobStorage);
 
                 return CreateDispatcher(jobClient, jobStorage, serviceProvider);
@@ -166,11 +188,46 @@ namespace ExecutionFlow.Hangfire
         {
             var dispatcher = new HangfireDispatcher(jobClient, jobStorage, JobIdGenerator, this, Options);
 
+            // Available in both modes: the manager only needs the storage and client, not the handlers.
+            ExecutionManager = new HangfireExecutionManager(jobClient, jobStorage);
+
             if (serviceProvider is IFlowServiceRegistry serviceRegistry)
                 RegisterDispatcher(serviceRegistry, dispatcher);
 
             _built = true;
             return dispatcher;
+        }
+
+        /// <summary>
+        /// Registers this setup's filters in Hangfire's process-wide collections, replacing those of the previously
+        /// active full setup (the last full build wins).
+        /// </summary>
+        private void RegisterGlobalFilters(IServiceProvider serviceProvider)
+        {
+            lock (GlobalStateLock)
+            {
+                _activeFullSetup?.RemoveGlobalFilters();
+
+                _stateFilter = new HangfireStateFilter(this, serviceProvider, StateHandlerTypes, Options.HookErrorHandler);
+                _cleanupFilter = new DeduplicationCleanupFilter();
+                _filterProvider = new HandlerJobFilterProvider(this, Options);
+
+                GlobalJobFilters.Filters.Add(_stateFilter, HangfireStateFilter.FilterOrder);
+                GlobalJobFilters.Filters.Add(_cleanupFilter);
+                JobFilterProviders.Providers.Add(_filterProvider);
+
+                _activeFullSetup = this;
+            }
+        }
+
+        private void RemoveGlobalFilters()
+        {
+            if (_stateFilter != null)
+                GlobalJobFilters.Filters.Remove(_stateFilter);
+            if (_cleanupFilter != null)
+                GlobalJobFilters.Filters.Remove(_cleanupFilter);
+            if (_filterProvider != null)
+                JobFilterProviders.Providers.Remove(_filterProvider);
         }
 
         private void ThrowIfBuilt()
@@ -194,8 +251,7 @@ namespace ExecutionFlow.Hangfire
                 .AddSingleton(() => jobStorage)
                 .RegisterLoggerFactory(Options.LoggerFactoryTypes)
                 .AddSingleton<IHangfireJobName>(Options.JobNameType)
-                .AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType)
-                .AddSingleton<IExecutionManager>(typeof(HangfireExecutionManager));
+                .AddSingleton<IJobIdGenerator>(Options.JobIdGeneratorType);
         }
 
         private void RegisterDispatcher(IFlowServiceRegistry serviceRegistry, HangfireDispatcher dispatcher)
@@ -203,7 +259,8 @@ namespace ExecutionFlow.Hangfire
             serviceRegistry
                 .AddSingleton(dispatcher)
                 .AddSingleton<IRecurringTrigger>(dispatcher)
-                .AddSingleton<IEventDispatcher>(dispatcher);
+                .AddSingleton<IEventDispatcher>(dispatcher)
+                .AddSingleton(ExecutionManager);
         }
 
         private void RegisterRecurring(JobStorage jobStorage)

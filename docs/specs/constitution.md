@@ -55,6 +55,5 @@ These are the non-negotiable principles for the project. A change that breaks on
 ## Open questions
 
 - Hangfire is now pinned: `Hangfire.Core` and `Hangfire.AspNetCore` are fixed at 1.8.23, the same version as `Hangfire.SqlServer`. The floating `1.8.*` had resolved to 1.8.25 and conflicted with `Hangfire.SqlServer`, which requires exactly 1.8.23 (NU1107), so the solution didn't restore. 1.8.23 is therefore the minimum Hangfire version the packages declare.
-- [NEEDS CLARIFICATION: Other library dependencies still float (`Microsoft.Extensions.* 10.0.*`, `Hangfire.Console 1.4.*` in `Directory.Packages.props`). So the minimum version a package declares depends on the day it was packed, and builds aren't reproducible. Should shipped libraries pin exact lower bounds instead?]
-- [NEEDS CLARIFICATION: `ExecutionFlow.Hangfire.DependencyInjection` references `Microsoft.Extensions.* 10.0.*`, which forces consumers on older hosts (.NET 6/8) to upgrade those abstractions. Is that intended, given P-002?]
-- [NEEDS CLARIFICATION: Is there a minimum supported Hangfire version (e.g. 1.8.0), and is it tested?]
+- Resolved (2026-09-30, setup-and-configuration F-008): shipped libraries declare pinned lower bounds. `ExecutionFlow.Hangfire.DependencyInjection` requires `Microsoft.Extensions.DependencyInjection.Abstractions` and `Microsoft.Extensions.Hosting.Abstractions` >= 6.0.0 (via `VersionOverride`, while tests and examples use 10.x), and `Hangfire.Console` is pinned to 1.4.3.
+- Resolved: the minimum supported Hangfire version is 1.8.23, the pinned version the packages declare and the tests run against. Older 1.8.x versions are not tested.

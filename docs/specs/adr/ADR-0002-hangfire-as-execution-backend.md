@@ -12,9 +12,9 @@ ExecutionFlow needs persistent fire-and-forget, delayed, and recurring execution
 3. Multiple pluggable backends: flexible, but every capability would need a lowest-common-denominator contract.
 
 ## Decision
-Option 1, and Hangfire is the only backend. It plugs in through `HangfireSetup` (`Src/ExecutionFlow.Hangfire/HangfireSetup.cs`), which installs global filters (`HangfireStateFilter`, `HangfireAutoRunFilter`), a `HandlerJobFilterProvider`, and a `FlowEngineJobActivator`.
+Option 1, and Hangfire is the only backend (as of v1.2.0; see [ADR-0007](ADR-0007-multiple-processors.md) for the intent to support other processors). It plugs in through `HangfireSetup` (`Src/ExecutionFlow.Hangfire/HangfireSetup.cs`), which installs global filters (`HangfireStateFilter`, `DeduplicationCleanupFilter`; `HangfireAutoRunFilter` until 1.2.0), a `HandlerJobFilterProvider`, and a `FlowEngineJobActivator`.
 
-The abstractions in `ExecutionFlow` (for example `IEventDispatcher`, `IExecutionManager`, `JobState`) are shaped to be backend-neutral. No second backend is planned.
+The abstractions in `ExecutionFlow` (for example `IEventDispatcher`, `IExecutionManager`, `JobState`) are shaped to be backend-neutral. ~~No second backend is planned.~~ Superseded by [ADR-0007](ADR-0007-multiple-processors.md).
 
 ## Consequences
 - Capabilities such as custom IDs, deduplication, the execution manager, and recurring control are defined by Hangfire's storage and state model.

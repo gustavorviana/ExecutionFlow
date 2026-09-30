@@ -17,13 +17,15 @@ namespace ExecutionFlow
         /// <summary>
         /// Optional callback invoked when a <see cref="ReflectionTypeLoadException"/> occurs during assembly scanning.
         /// </summary>
-        public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get; set; }
+        public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get => _onTypeLoadFailure; set { ThrowIfLocked(); _onTypeLoadFailure = value; } }
+        private Action<AssemblyTypeScanContext> _onTypeLoadFailure;
 
         /// <summary>
         /// Gets or sets the default deduplication behavior for events with a custom ID. Default is <see cref="DeduplicationBehavior.Disabled"/>.
         /// An event type can override it with <see cref="Attributes.DeduplicationAttribute"/>.
         /// </summary>
-        public DeduplicationBehavior DeduplicationBehavior { get; set; } = DeduplicationBehavior.Disabled;
+        public DeduplicationBehavior DeduplicationBehavior { get => _deduplicationBehavior; set { ThrowIfLocked(); _deduplicationBehavior = value; } }
+        private DeduplicationBehavior _deduplicationBehavior = DeduplicationBehavior.Disabled;
 
         private readonly List<Type> _loggerFactoryTypes = new List<Type>();
         private readonly Dictionary<Type, RecurringJobRegistryInfo> _recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>(new TypeEqualityComparer());

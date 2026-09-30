@@ -32,6 +32,6 @@
   - Related: RN-005
   - Resolution: fixed (REQ-003, RN-005)
 
-- F-009 global state (belongs to `setup-and-configuration`): `HangfireSetup.Build()` without a service provider reuses `JobActivator.Current` when it's a `FlowEngineJobActivator`, even if that activator belongs to **another** `HangfireSetup` (for example one that called `ConfigureActivator()`). The build then uses the other setup's generators and registrations. Found through a flaky test on 2026-09-30.
+- F-009 global state (belongs to `setup-and-configuration`, fixed there as F-001): `HangfireSetup.Build()` without a service provider reuses `JobActivator.Current` when it's a `FlowEngineJobActivator`, even if that activator belongs to **another** `HangfireSetup` (for example one that called `ConfigureActivator()`). The build then uses the other setup's generators and registrations. Found through a flaky test on 2026-09-30.
   - Related: `setup-and-configuration`
-  - Resolution: open (to be mapped in the `setup-and-configuration` spec)
+  - Resolution: fixed in setup-and-configuration (F-001)
