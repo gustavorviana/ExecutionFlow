@@ -24,7 +24,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             if (handler == null)
                 throw new InvalidOperationException($"Could not activate handler instance for type '{handlerType}'.");
 
-            await handler.HandleAsync(CreateContextBuilder(performContext).Build(), ct);
+            await handler.HandleAsync(CreateContextBuilder(performContext).SetHandler(handlerType).Build(), ct);
         }
 
         public async Task DispatchEventAsync<TEvent>(TEvent @event, string eventCustomName, PerformContext performContext, CancellationToken ct)
@@ -37,7 +37,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             if (handler == null)
                 throw new InvalidOperationException($"Could not activate handler instance for type '{handlerInfo.HandlerType}'.");
 
-            var builder = CreateContextBuilder(performContext);
+            var builder = CreateContextBuilder(performContext).SetHandler(handlerInfo.HandlerType, eventType);
             builder.AddReadOnly(ContextConsts.EventName, eventCustomName);
 
             using (var context = CreateEvent(@event, performContext, builder))

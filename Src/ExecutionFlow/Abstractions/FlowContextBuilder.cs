@@ -12,6 +12,8 @@ namespace ExecutionFlow.Abstractions
         private readonly FlowParameters _parameters = new FlowParameters();
         private string _jobId;
         private int _attemptNumber = 1;
+        private Type _handlerType;
+        private Type _eventType;
         private bool _built;
 
         /// <summary>
@@ -77,6 +79,21 @@ namespace ExecutionFlow.Abstractions
             return this;
         }
 
+        /// <summary>
+        /// Sets the handler (and event) running the job, exposed to logger factories through
+        /// <see cref="ExecutionLoggerContext"/>.
+        /// </summary>
+        /// <param name="handlerType">The handler type.</param>
+        /// <param name="eventType">The event type, or <c>null</c> for recurring jobs.</param>
+        /// <returns>This builder for chaining.</returns>
+        public FlowContextBuilder SetHandler(Type handlerType, Type eventType = null)
+        {
+            ThrowIfBuilt();
+            _handlerType = handlerType;
+            _eventType = eventType;
+            return this;
+        }
+
         private TContext WithJob<TContext>(TContext context) where TContext : FlowContext
         {
             context.JobId = _jobId;
@@ -99,7 +116,7 @@ namespace ExecutionFlow.Abstractions
 
         private IExecutionLogger CreateLogger()
         {
-            return _logFactory.CreateLogger(_parameters);
+            return _logFactory.CreateLogger(new ExecutionLoggerContext(_parameters, _jobId, _attemptNumber, _handlerType, _eventType));
         }
 
         private void ThrowIfBuilt()

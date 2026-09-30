@@ -14,6 +14,7 @@ A lightweight abstraction layer over [Hangfire](https://www.hangfire.io/) for st
 | **ExecutionFlow.Hangfire** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire) | Hangfire integration - dispatching, filters, execution manager |
 | **ExecutionFlow.Hangfire.DependencyInjection** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.DependencyInjection.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.DependencyInjection) | ASP.NET Core DI extensions |
 | **ExecutionFlow.Hangfire.Console** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.Console.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.Console) | Console logging + progress bars (requires [Hangfire.Console](https://github.com/pieceofsummer/Hangfire.Console)) |
+| **ExecutionFlow.Extensions.Logging** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Extensions.Logging.svg)](https://www.nuget.org/packages/ExecutionFlow.Extensions.Logging) | Sends `context.Log` to the application's `ILogger` (Serilog, Application Insights...) |
 
 ## Quick Start
 
@@ -393,7 +394,8 @@ options.Scan(assembly, type => type.Namespace.StartsWith("MyApp.Handlers"));
 ## Console Logging & Progress Bars
 
 ```csharp
-options.ConfigureConsole();
+GlobalConfiguration.Configuration.UseConsole();   // required by Hangfire.Console
+options.ConfigureConsole(c => c.MinimumLevel = HandlerLogType.Information);   // default: Trace
 
 // In handler
 context.Log.Info("Starting...");
@@ -406,6 +408,16 @@ for (int i = 0; i < total; i++)
     bar.SetValue(i, total);
 bar.Complete();
 ```
+
+Messages are `ILogger`-style templates (`"Order {OrderId}"` is filled by position; `{{`/`}}` are literal braces). Each logger is isolated: one that throws never fails the job, and registering the same logger twice keeps one.
+
+## Logging to ILogger
+
+```csharp
+options.AddMicrosoftLogging();   // package ExecutionFlow.Extensions.Logging
+```
+
+`context.Log` then also reaches `ILogger`: the category is the handler type, the scope carries `JobId` and `AttemptNumber`, template properties stay structured, and `Success` maps to `Information`. It works together with `ConfigureConsole()`.
 
 ## Execution Manager
 
@@ -513,6 +525,7 @@ Src/
   ExecutionFlow.Hangfire/                     Hangfire integration
   ExecutionFlow.Hangfire.Console/             Console logging + progress bars
   ExecutionFlow.Hangfire.DependencyInjection/ Microsoft DI integration
+  ExecutionFlow.Extensions.Logging/           Microsoft.Extensions.Logging (ILogger) bridge
 Examples/
   ExecutionFlow.Examples.Producer/            Web API that publishes events
   ExecutionFlow.Examples.Consumer/            Hangfire server with DI

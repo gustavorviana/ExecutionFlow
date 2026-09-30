@@ -32,6 +32,9 @@ namespace ExecutionFlow.Hangfire.Console
         /// <param name="args">Optional format arguments.</param>
         public void Log(HandlerLogType level, string message, params object[] args)
         {
+            if (!_config.IsEnabled(level))
+                return;
+
             var color = _config.GetColor(level);
             var formattedMessage = _config.FormatMessage(level, message, args);
             _performContext.WriteLine(color, formattedMessage);

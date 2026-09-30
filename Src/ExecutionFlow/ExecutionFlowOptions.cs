@@ -172,7 +172,9 @@ namespace ExecutionFlow
             if (!typeof(IExecutionLoggerFactory).IsAssignableFrom(factoryType))
                 throw new ArgumentException($"Type '{factoryType.FullName}' does not implement IExecutionLoggerFactory.", nameof(factoryType));
 
-            _loggerFactoryTypes.Add(factoryType);
+            // Registering the same factory twice (e.g. ConfigureConsole() called twice) would write every line twice.
+            if (!_loggerFactoryTypes.Contains(factoryType))
+                _loggerFactoryTypes.Add(factoryType);
         }
 
         internal void Lock()

@@ -69,6 +69,6 @@ Open ambiguities are written inline as `[NEEDS CLARIFICATION: ...]`.
 | [job-naming-and-dashboard](job-naming-and-dashboard/spec.md) | approved (v1.2.0) |
 | [setup-and-configuration](setup-and-configuration/spec.md) | approved (v1.2.0) |
 | [handlers-and-context](handlers-and-context/spec.md) | approved (v1.2.0) |
-| [logging-and-console](logging-and-console/spec.md) | not started |
+| [logging-and-console](logging-and-console/spec.md) | approved (v1.2.0) |
 
 See also: [constitution](constitution.md) and [ADRs](adr/).
