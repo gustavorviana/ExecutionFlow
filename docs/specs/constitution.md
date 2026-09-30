@@ -13,6 +13,7 @@ These are the non-negotiable principles for the project. A change that breaks on
 - **P-004: Optional integrations are separate packages.** Console output (`ExecutionFlow.Hangfire.Console`) and Microsoft DI (`ExecutionFlow.Hangfire.DependencyInjection`) are opt-in. `ExecutionFlow.Hangfire` works without a DI container.
 - **P-005: Producer-only mode mutates no global state.** `BuildDispatcherOnly` / `AddExecutionFlowDispatcher` never touches `GlobalJobFilters`, `JobFilterProviders`, `JobActivator.Current`, or recurring jobs. ([ADR-0005](adr/ADR-0005-producer-only-mode.md))
 - **P-006: Minimal public surface.** Settings users shouldn't touch are `internal`. Tests reach them through `InternalsVisibleTo`, not by making them public.
+- **P-007: Dispatch doesn't block.** `Publish`/`Schedule` never wait on other publishes, except for a short, bounded lock around O(1) storage operations. That lock is taken only when deduplication is enabled and the event has a non-empty custom ID. ([custom-id-and-deduplication](custom-id-and-deduplication/spec.md))
 
 ## Testing strategy
 

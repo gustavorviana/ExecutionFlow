@@ -52,7 +52,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             });
 
             if (JobParameters.TryGetCustomId(@event, out var eventCustomId))
+            {
+#pragma warning disable CS0618 // Internal use: exposes the publish-time custom ID on the context.
                 context.SetCustomId(eventCustomId);
+#pragma warning restore CS0618
+            }
 
             return context;
         }

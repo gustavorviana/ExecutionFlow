@@ -38,6 +38,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         internal static string Decode(string value)
         {
+            // "null" is the JSON encoding of a cleared custom ID (FlowContext.SetCustomId(null)).
+            if (value == "null")
+                return null;
+
             if (string.IsNullOrEmpty(value) || value[0] != '"')
                 return value;
 

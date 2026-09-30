@@ -1,6 +1,7 @@
 using ExecutionFlow.Abstractions;
 using Hangfire;
 using Hangfire.Common;
+using Hangfire.States;
 using Hangfire.Storage;
 using System;
 using System.Collections.Generic;
@@ -32,10 +33,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <returns><c>true</c> if a matching job is processing; otherwise, <c>false</c>.</returns>
         public bool IsRunning(string jobId)
         {
+            if (string.IsNullOrEmpty(jobId))
+                return false;
+
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())
-                return InfraUtils
+                return IsReservedJobInState(connection, jobId, ProcessingState.StateName) || InfraUtils
                     .ReadAll(monitoringApi.ProcessingJobs)
                     .Any(x => MatchesId(connection, x.Key, jobId));
         }
@@ -62,11 +66,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <returns><c>true</c> if a matching job is enqueued; otherwise, <c>false</c>.</returns>
         public bool IsPending(string jobId)
         {
+            if (string.IsNullOrEmpty(jobId))
+                return false;
+
             var monitoringApi = _jobStorage.GetMonitoringApi();
-            var queues = monitoringApi.Queues();
 
             using (var connection = _jobStorage.GetConnection())
-                return queues
+                return IsReservedJobInState(connection, jobId, EnqueuedState.StateName) || monitoringApi.Queues()
                     .SelectMany(q => InfraUtils.ReadAll(q.Name, monitoringApi.EnqueuedJobs))
                     .Any(x => MatchesId(connection, x.Key, jobId));
         }
@@ -153,12 +159,31 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return _jobClient.Requeue(failedJobId);
         }
 
+        /// <summary>
+        /// Fast path: when <paramref name="customId"/> has a deduplication reservation key, checks the reserved job's state
+        /// without scanning. A miss falls back to the scan, which also covers jobs published without deduplication.
+        /// </summary>
+        private static bool IsReservedJobInState(IStorageConnection connection, string customId, string stateName)
+        {
+            var reservedJobId = DeduplicationStore.GetReservedJobId(connection, customId);
+            return reservedJobId != null && DeduplicationStore.IsInState(connection, reservedJobId, stateName);
+        }
+
         private string FindHangfireJobId(string jobId)
         {
+            if (string.IsNullOrEmpty(jobId))
+                return null;
+
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())
             {
+                var reservedJobId = DeduplicationStore.GetReservedJobId(connection, jobId);
+                if (reservedJobId != null
+                    && (DeduplicationStore.IsInState(connection, reservedJobId, ProcessingState.StateName)
+                        || DeduplicationStore.IsInState(connection, reservedJobId, EnqueuedState.StateName)))
+                    return reservedJobId;
+
                 var processingId = InfraUtils
                     .ReadAll(monitoringApi.ProcessingJobs)
                     .FirstOrDefault(x => MatchesId(connection, x.Key, jobId))

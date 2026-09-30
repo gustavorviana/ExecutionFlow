@@ -165,11 +165,7 @@ A `null` or empty `CustomId` means the event has no custom ID: `JobId` is the in
 
 The custom ID is stored with the job in the same storage operation, so a job never exists without it. This holds for Hangfire's default `BackgroundJobClient`. A custom `IBackgroundJobClient` that doesn't implement `IBackgroundJobClientV2` falls back to storing it right after the job is created.
 
-Or set it dynamically inside the handler:
-
-```csharp
-context.SetCustomId($"payment-{context.Event.OrderId}");
-```
+> `FlowContext.SetCustomId` is obsolete since 1.2.0 and will be removed in 2.0. Set the custom ID on the event through `ICustomIdEvent`: deduplication only uses the ID given at publish time.
 
 Then track by custom ID:
 
@@ -192,23 +188,47 @@ public class NotificationEvent : ICustomNameEvent
 
 ## Deduplication
 
-Prevent duplicate jobs for the same `CustomId`:
+Prevent a second job for the same `CustomId` while one is still **active**. A job is active while it's enqueued, scheduled (including a failed job waiting for an automatic retry), awaiting or processing.
+
+Set a global default:
 
 ```csharp
+using ExecutionFlow.Abstractions;
+
 options.DeduplicationBehavior = DeduplicationBehavior.SkipIfExists;
 ```
 
-| Behavior | When duplicate exists |
+Or set it per event type. The attribute wins over the global default:
+
+```csharp
+using ExecutionFlow.Attributes;
+
+[Deduplication(DeduplicationBehavior.ReplaceExisting)]
+public class RecalculateCartEvent : ICustomIdEvent
+{
+    public string CartId { get; set; }
+    public string CustomId => $"cart-{CartId}";
+}
+```
+
+| Behavior | When an active job with the same custom ID exists |
 |---|---|
 | `Disabled` (default) | Always enqueues |
 | `SkipIfExists` | Returns `Enqueued = false` |
-| `ReplaceExisting` | Cancels existing, enqueues new |
+| `ReplaceExisting` | Deletes the active job, enqueues the new one |
 
 ```csharp
 var result = dispatcher.Publish(new PaymentEvent { OrderId = "123" });
 if (!result.Enqueued)
-    Console.WriteLine("Job already running or pending");
+    Console.WriteLine("An active job with this custom ID already exists");
 ```
+
+How it works: each custom ID gets a reservation key in Hangfire storage, checked and written under a short distributed lock per custom ID. Publishes of different custom IDs never wait on each other. If the lock isn't acquired within `DeduplicationLockTimeout` (default 1s), `Publish` throws `DistributedLockTimeoutException`, unless `CreateOnDeduplicationLockTimeout = true`, in which case the job is created without deduplication and a warning is logged.
+
+Keep in mind:
+- `ReplaceExisting` on a job that is already **processing** marks it deleted, but the running handler only stops if it observes its `CancellationToken`. Otherwise both run.
+- If the process crashes between creating the job and writing the reservation key, one duplicate is possible. Handlers that must not run twice should be idempotent.
+- Jobs created before 1.2.0 have no reservation key, so deduplication doesn't see them.
 
 ## Lifecycle Hooks
 
@@ -361,7 +381,9 @@ No global state is modified. The existing Hangfire in the process is not affecte
 | `GlobalRecurringAutoRun` | `true` | Auto-start recurring jobs |
 | `RemoveOrphanRecurringJobs` | `false` | Delete recurring jobs not in code |
 | `DisableRecurringRetries` | `true` | No retries for recurring jobs |
-| `DeduplicationBehavior` | `Disabled` | Duplicate job handling strategy |
+| `DeduplicationBehavior` | `Disabled` | Default duplicate handling (override per event with `[Deduplication]`) |
+| `DeduplicationLockTimeout` | `1s` | Max wait for the per-custom-ID deduplication lock |
+| `CreateOnDeduplicationLockTimeout` | `false` | Create the job anyway when the lock times out, instead of throwing |
 | `RetryUnregisteredEventJobs` | `false` | Retry event jobs whose event type has no handler on the consumer |
 
 ## Project Structure

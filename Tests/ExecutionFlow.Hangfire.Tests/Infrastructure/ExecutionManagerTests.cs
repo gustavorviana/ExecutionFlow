@@ -4,6 +4,7 @@ using HangfireJobDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireJobD
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.Storage;
+using Hangfire.States;
 using Hangfire.Storage.Monitoring;
 using NSubstitute;
 
@@ -76,6 +77,55 @@ public class ExecutionManagerTests
         _manager.Cancel(id!);
 
         _jobClient.DidNotReceiveWithAnyArgs().ChangeState(default!, default!, default!);
+    }
+
+    // --- Reservation key fast path (custom-id-and-deduplication REQ-003) ---
+
+    private void SetupReservation(string customId, string jobId, string stateName)
+    {
+        _connection.GetAllEntriesFromHash(DeduplicationStore.GetKey(customId))
+            .Returns(new Dictionary<string, string> { [DeduplicationStore.JobIdField] = jobId });
+        _connection.GetStateData(jobId).Returns(new StateData { Name = stateName });
+    }
+
+    [Fact]
+    public void IsRunning_ReturnsTrue_FromReservationKey_WithoutScanning()
+    {
+        SetupReservation("order-1", "job-1", "Processing");
+
+        Assert.True(_manager.IsRunning("order-1"));
+        _monitoringApi.DidNotReceiveWithAnyArgs().ProcessingJobs(default, default);
+    }
+
+    [Fact]
+    public void IsPending_ReturnsTrue_FromReservationKey_WithoutScanning()
+    {
+        SetupReservation("order-1", "job-1", "Enqueued");
+
+        Assert.True(_manager.IsPending("order-1"));
+        _monitoringApi.DidNotReceive().Queues();
+    }
+
+    [Fact]
+    public void IsRunning_FallsBackToScan_WhenReservedJobIsNotProcessing()
+    {
+        SetupReservation("order-1", "job-1", "Succeeded");
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-9", new ProcessingJobDto())));
+        _connection.GetJobParameter("job-9", ContextConsts.CustomId).Returns("order-1");
+
+        Assert.True(_manager.IsRunning("order-1"));
+    }
+
+    [Fact]
+    public void Cancel_DeletesReservedJob_WithoutScanning()
+    {
+        SetupReservation("order-1", "job-1", "Enqueued");
+
+        _manager.Cancel("order-1");
+
+        _jobClient.Received(1).ChangeState("job-1", Arg.Any<global::Hangfire.States.DeletedState>(), Arg.Any<string>());
+        _monitoringApi.DidNotReceiveWithAnyArgs().ProcessingJobs(default, default);
     }
 
     [Fact]

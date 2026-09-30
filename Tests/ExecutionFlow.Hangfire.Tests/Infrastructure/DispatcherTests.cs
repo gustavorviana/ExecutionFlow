@@ -2,6 +2,7 @@ using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire;
 using Hangfire.Storage;
+using Hangfire.States;
 using Hangfire.Storage.Monitoring;
 using NSubstitute;
 using HangfireDispatcher = ExecutionFlow.Hangfire.Infrastructure.HangfireDispatcher;
@@ -180,13 +181,7 @@ public class DispatcherTests
     [Fact]
     public void Publish_SkipIfExists_ReturnsFalse_WhenJobAlreadyRunning()
     {
-        var monitoringApi = Substitute.For<IMonitoringApi>();
-        _storage.GetMonitoringApi().Returns(monitoringApi);
-        monitoringApi.ProcessingJobs(0, 10).Returns(new JobList<ProcessingJobDto>(new List<KeyValuePair<string, ProcessingJobDto>>
-        {
-            new KeyValuePair<string, ProcessingJobDto>("existing-job", new ProcessingJobDto { Job = null })
-        }));
-        _connection.GetJobParameter("existing-job", ContextConsts.CustomId).Returns("named-job-1");
+        SetupRunningJob("existing-job", "named-job-1");
 
         var options = new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists };
         var dispatcher = CreateDispatcher(options);
@@ -233,13 +228,7 @@ public class DispatcherTests
     [Fact]
     public void Publish_ReplaceExisting_CancelsAndEnqueuesNew()
     {
-        var monitoringApi = Substitute.For<IMonitoringApi>();
-        _storage.GetMonitoringApi().Returns(monitoringApi);
-        monitoringApi.ProcessingJobs(0, 10).Returns(new JobList<ProcessingJobDto>(new List<KeyValuePair<string, ProcessingJobDto>>
-        {
-            new KeyValuePair<string, ProcessingJobDto>("old-job", new ProcessingJobDto { Job = null })
-        }));
-        _connection.GetJobParameter("old-job", ContextConsts.CustomId).Returns("named-job-1");
+        SetupRunningJob("old-job", "named-job-1");
         _jobClient.Create(default, default).ReturnsForAnyArgs("new-job");
 
         var options = new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.ReplaceExisting };
@@ -249,6 +238,7 @@ public class DispatcherTests
 
         Assert.True(result.Enqueued);
         Assert.Equal("named-job-1", result.JobId);
+        _jobClient.Received(1).ChangeState("old-job", Arg.Any<global::Hangfire.States.DeletedState>(), Arg.Any<string>());
     }
 
     // --- Deduplication: Disabled ---
@@ -399,6 +389,159 @@ public class DispatcherTests
         }));
         monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
         _connection.GetJobParameter(jobId, ContextConsts.CustomId).Returns(customId);
+
+        if (customId != null)
+            SetupReservation(customId, jobId, "Processing");
+    }
+
+    private void SetupReservation(string customId, string jobId, string stateName)
+    {
+        _connection.GetAllEntriesFromHash(DeduplicationStore.GetKey(customId))
+            .Returns(new Dictionary<string, string> { [DeduplicationStore.JobIdField] = jobId });
+        _connection.GetStateData(jobId).Returns(new StateData { Name = stateName });
+    }
+
+    // --- Reservation key (custom-id-and-deduplication REQ-007, REQ-009) ---
+
+    [Fact]
+    public void Publish_SkipIfExists_ReturnsFalse_WhenReservedJobIsScheduled()
+    {
+        SetupReservation("named-job-1", "scheduled-job", "Scheduled");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        var result = dispatcher.Publish(new TestNamedEvent());
+
+        Assert.False(result.Enqueued);
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+    }
+
+    [Theory]
+    [InlineData("Succeeded")]
+    [InlineData("Deleted")]
+    [InlineData("Failed")]
+    public void Publish_SkipIfExists_Creates_WhenReservedJobIsNoLongerActive(string stateName)
+    {
+        SetupReservation("named-job-1", "old-job", stateName);
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("new-job");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        var result = dispatcher.Publish(new TestNamedEvent());
+
+        Assert.True(result.Enqueued);
+        Assert.Equal("named-job-1", result.JobId);
+    }
+
+    [Fact]
+    public void Publish_ReplaceExisting_DeletesReservedJob()
+    {
+        SetupReservation("named-job-1", "old-job", "Enqueued");
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("new-job");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.ReplaceExisting });
+
+        var result = dispatcher.Publish(new TestNamedEvent());
+
+        Assert.True(result.Enqueued);
+        _jobClient.Received(1).ChangeState("old-job", Arg.Any<global::Hangfire.States.DeletedState>(), Arg.Any<string>());
+    }
+
+    [Fact]
+    public void Publish_WritesReservationKey_WhenDeduplicationEnabled()
+    {
+        var transaction = Substitute.For<IWriteOnlyTransaction>();
+        _connection.CreateWriteTransaction().Returns(transaction);
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-42");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        dispatcher.Publish(new TestNamedEvent());
+
+        transaction.Received(1).SetRangeInHash(DeduplicationStore.GetKey("named-job-1"),
+            Arg.Is<IEnumerable<KeyValuePair<string, string>>>(e => e.Any(kv => kv.Key == DeduplicationStore.JobIdField && kv.Value == "job-42")));
+        transaction.Received(1).Commit();
+    }
+
+    [Fact]
+    public void Publish_DoesNotLockOrReserve_WhenDeduplicationDisabled()
+    {
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-43");
+        var dispatcher = CreateDispatcher();
+
+        dispatcher.Publish(new TestNamedEvent());
+
+        _connection.DidNotReceiveWithAnyArgs().AcquireDistributedLock(default!, default);
+        _connection.DidNotReceiveWithAnyArgs().CreateWriteTransaction();
+    }
+
+    [Fact]
+    public void Publish_AcquiresLockPerCustomId_WithConfiguredTimeout()
+    {
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-44");
+        var timeout = TimeSpan.FromMilliseconds(250);
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists, DeduplicationLockTimeout = timeout });
+
+        dispatcher.Publish(new TestNamedEvent());
+
+        _connection.Received(1).AcquireDistributedLock(DeduplicationStore.GetLockResource("named-job-1"), timeout);
+    }
+
+    [Fact]
+    public void Publish_Throws_WhenLockTimesOut()
+    {
+        _connection.AcquireDistributedLock(default!, default).ReturnsForAnyArgs(_ => throw new DistributedLockTimeoutException("lock"));
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        Assert.Throws<DistributedLockTimeoutException>(() => dispatcher.Publish(new TestNamedEvent()));
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+    }
+
+    [Fact]
+    public void Publish_CreatesWithoutReservation_WhenLockTimesOutAndOptedIn()
+    {
+        _connection.AcquireDistributedLock(default!, default).ReturnsForAnyArgs(_ => throw new DistributedLockTimeoutException("lock"));
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-45");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists, CreateOnDeduplicationLockTimeout = true });
+
+        var result = dispatcher.Publish(new TestNamedEvent());
+
+        Assert.True(result.Enqueued);
+        _connection.DidNotReceiveWithAnyArgs().CreateWriteTransaction();
+    }
+
+    // --- Per-event behavior (custom-id-and-deduplication REQ-006) ---
+
+    [Fact]
+    public void Publish_UsesEventAttribute_OverGlobalBehavior()
+    {
+        SetupReservation("attr-1", "existing-job", "Processing");
+        var dispatcher = CreateDispatcher(); // global: Disabled
+
+        var result = dispatcher.Publish(new SkipIfExistsEvent());
+
+        Assert.False(result.Enqueued);
+    }
+
+    [Fact]
+    public void Publish_EventAttributeDisabled_OverridesGlobalSkipIfExists()
+    {
+        SetupReservation("attr-2", "existing-job", "Processing");
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-46");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        var result = dispatcher.Publish(new NoDeduplicationEvent());
+
+        Assert.True(result.Enqueued);
+        _connection.DidNotReceiveWithAnyArgs().AcquireDistributedLock(default!, default);
+    }
+
+    [ExecutionFlow.Attributes.Deduplication(DeduplicationBehavior.SkipIfExists)]
+    public class SkipIfExistsEvent : ICustomIdEvent
+    {
+        public string CustomId => "attr-1";
+    }
+
+    [ExecutionFlow.Attributes.Deduplication(DeduplicationBehavior.Disabled)]
+    public class NoDeduplicationEvent : ICustomIdEvent
+    {
+        public string CustomId => "attr-2";
     }
 
     // Test types

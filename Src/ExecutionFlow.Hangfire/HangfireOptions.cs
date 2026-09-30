@@ -30,8 +30,18 @@ namespace ExecutionFlow.Hangfire
         /// </summary>
         public bool RetryUnregisteredEventJobs { get; set; } = false;
 
-        /// <summary>Gets or sets the deduplication behavior for event jobs. Default is <see cref="Hangfire.DeduplicationBehavior.Disabled"/>.</summary>
-        public DeduplicationBehavior DeduplicationBehavior { get; set; } = DeduplicationBehavior.Disabled;
+        /// <summary>
+        /// Gets or sets how long a publish waits for the per-custom-ID deduplication lock. Default is 1 second.
+        /// The lock is only taken when deduplication is enabled and the event has a non-empty custom ID.
+        /// </summary>
+        public TimeSpan DeduplicationLockTimeout { get; set; } = TimeSpan.FromSeconds(1);
+
+        /// <summary>
+        /// Gets or sets whether a publish creates the job anyway (without deduplication) when the deduplication lock
+        /// isn't acquired within <see cref="DeduplicationLockTimeout"/>. Default is <c>false</c>: a
+        /// <see cref="global::Hangfire.Storage.DistributedLockTimeoutException"/> is thrown.
+        /// </summary>
+        public bool CreateOnDeduplicationLockTimeout { get; set; } = false;
 
         /// <summary>Gets the list of registered state handler types.</summary>
         public IReadOnlyList<Type> StateHandlerTypes => _stateHandlerTypes;

@@ -19,6 +19,12 @@ namespace ExecutionFlow
         /// </summary>
         public Action<AssemblyTypeScanContext> OnTypeLoadFailure { get; set; }
 
+        /// <summary>
+        /// Gets or sets the default deduplication behavior for events with a custom ID. Default is <see cref="DeduplicationBehavior.Disabled"/>.
+        /// An event type can override it with <see cref="Attributes.DeduplicationAttribute"/>.
+        /// </summary>
+        public DeduplicationBehavior DeduplicationBehavior { get; set; } = DeduplicationBehavior.Disabled;
+
         private readonly List<Type> _loggerFactoryTypes = new List<Type>();
         private readonly Dictionary<Type, RecurringJobRegistryInfo> _recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>(new TypeEqualityComparer());
         private readonly Dictionary<Type, EventJobRegistryInfo> _eventHandlers = new Dictionary<Type, EventJobRegistryInfo>(new TypeEqualityComparer());

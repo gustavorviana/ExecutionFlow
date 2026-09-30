@@ -1,9 +1,12 @@
 using ExecutionFlow.Abstractions;
+using ExecutionFlow.Attributes;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.States;
+using Hangfire.Storage;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace ExecutionFlow.Hangfire.Infrastructure
 {
@@ -18,8 +21,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         private readonly IExecutionFlowRegistry _registry;
         private readonly JobStorage _jobStorage;
         private readonly RecurringJobManager _recurringJobManager;
-        private readonly DeduplicationBehavior _deduplicationBehavior;
-        private readonly Lazy<IExecutionManager> _executionManager;
+        private readonly HangfireOptions _options;
 
         public HangfireDispatcher(IBackgroundJobClient jobClient, JobStorage jobStorage, IJobIdGenerator jobIdGenerator, IExecutionFlowRegistry registry, HangfireOptions options)
         {
@@ -28,8 +30,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             _jobIdGenerator = jobIdGenerator ?? throw new ArgumentNullException(nameof(jobIdGenerator));
             _registry = registry ?? throw new ArgumentNullException(nameof(registry));
             _recurringJobManager = new RecurringJobManager(jobStorage);
-            _deduplicationBehavior = options?.DeduplicationBehavior ?? DeduplicationBehavior.Disabled;
-            _executionManager = new Lazy<IExecutionManager>(() => new HangfireExecutionManager(jobClient, jobStorage));
+            _options = options ?? new HangfireOptions();
         }
 
         /// <summary>
@@ -101,15 +102,68 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         {
             if (@event == null) throw new ArgumentNullException(nameof(@event));
 
-            var hasCustomId = JobParameters.TryGetCustomId(@event, out var customId);
-            if (hasCustomId && !CheckDeduplication(customId))
-                return new PublishResult(null, false);
-
             var customName = GetCustomName(@event);
             var job = Job.FromExpression<HangfireJobDispatcher>(x => x.DispatchEventAsync(@event, customName, null, default));
-            var jobId = CreateJob(job, state, hasCustomId ? customId : null);
 
-            return new PublishResult(hasCustomId ? customId : jobId, true);
+            if (!JobParameters.TryGetCustomId(@event, out var customId))
+                return new PublishResult(CreateJob(job, state, null), true);
+
+            var behavior = GetDeduplicationBehavior(@event);
+            if (behavior == DeduplicationBehavior.Disabled)
+            {
+                CreateJob(job, state, customId);
+                return new PublishResult(customId, true);
+            }
+
+            return DispatchDeduplicated(job, state, customId, behavior);
+        }
+
+        private PublishResult DispatchDeduplicated(Job job, IState state, string customId, DeduplicationBehavior behavior)
+        {
+            using (var connection = _jobStorage.GetConnection())
+            {
+                IDisposable distributedLock;
+                try
+                {
+                    distributedLock = connection.AcquireDistributedLock(DeduplicationStore.GetLockResource(customId), _options.DeduplicationLockTimeout);
+                }
+                catch (DistributedLockTimeoutException) when (_options.CreateOnDeduplicationLockTimeout)
+                {
+                    Trace.TraceWarning("ExecutionFlow: deduplication lock for custom ID '{0}' timed out; creating the job without deduplication.", customId);
+                    CreateJob(job, state, customId);
+                    return new PublishResult(customId, true);
+                }
+
+                using (distributedLock)
+                {
+                    var activeJobId = DeduplicationStore.FindActiveJobId(connection, customId);
+                    if (activeJobId != null)
+                    {
+                        if (behavior == DeduplicationBehavior.SkipIfExists)
+                            return new PublishResult(null, false);
+
+                        _jobClient.Delete(activeJobId);
+                    }
+
+                    var jobId = CreateJob(job, state, customId);
+                    DeduplicationStore.Reserve(connection, customId, jobId, GetReservationExpiration(state));
+                    return new PublishResult(customId, true);
+                }
+            }
+        }
+
+        private DeduplicationBehavior GetDeduplicationBehavior(object @event)
+        {
+            var attribute = (DeduplicationAttribute)Attribute.GetCustomAttribute(@event.GetType(), typeof(DeduplicationAttribute), inherit: true);
+            return attribute?.Behavior ?? _options.DeduplicationBehavior;
+        }
+
+        private static TimeSpan GetReservationExpiration(IState state)
+        {
+            if (state is ScheduledState scheduled && scheduled.EnqueueAt > DateTime.UtcNow)
+                return DeduplicationStore.BaseExpiration + (scheduled.EnqueueAt - DateTime.UtcNow);
+
+            return DeduplicationStore.BaseExpiration;
         }
 
         private string CreateJob(Job job, IState state, string customId)
@@ -126,26 +180,6 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 JobParameters.WriteCustomId(connection, jobId, customId);
 
             return jobId;
-        }
-
-        /// <returns><c>true</c> if the event should be enqueued; <c>false</c> if it should be skipped.</returns>
-        private bool CheckDeduplication(string customId)
-        {
-            if (_deduplicationBehavior == DeduplicationBehavior.Disabled)
-                return true;
-
-            var manager = _executionManager.Value;
-            var exists = manager.IsRunning(customId) || manager.IsPending(customId);
-
-            if (!exists)
-                return true;
-
-            if (_deduplicationBehavior == DeduplicationBehavior.SkipIfExists)
-                return false;
-
-            // ReplaceExisting: cancel and let the caller proceed with enqueue
-            manager.Cancel(customId);
-            return true;
         }
 
         private static string GetCustomName<TEvent>(TEvent @event)

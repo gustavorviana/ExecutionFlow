@@ -46,6 +46,19 @@ public class JobParametersTests
         Assert.Equal("order-42", JobParameters.ReadCustomId(_connection, "job-1"));
     }
 
+    [Fact]
+    public void WriteCustomId_Null_ReadsBackAsNull()
+    {
+        string? stored = null;
+        _connection.When(c => c.SetJobParameter("job-1", ContextConsts.CustomId, Arg.Any<string>()))
+            .Do(ci => stored = ci.ArgAt<string>(2));
+        _connection.GetJobParameter("job-1", ContextConsts.CustomId).Returns(_ => stored);
+
+        JobParameters.WriteCustomId(_connection, "job-1", null!);
+
+        Assert.Null(JobParameters.ReadCustomId(_connection, "job-1"));
+    }
+
     [Theory]
     [InlineData(null, false)]
     [InlineData("", false)]

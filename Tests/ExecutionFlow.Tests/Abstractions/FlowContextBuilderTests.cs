@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // These tests cover the obsolete FlowContext.SetCustomId.
 using ExecutionFlow.Abstractions;
 using NSubstitute;
 
