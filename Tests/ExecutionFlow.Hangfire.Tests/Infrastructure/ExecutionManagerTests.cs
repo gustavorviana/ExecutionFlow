@@ -664,10 +664,12 @@ public class ExecutionManagerTests
     }
 
     public class TestEvent { }
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class OtherRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;

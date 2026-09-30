@@ -190,12 +190,14 @@ public class HandlerJobFilterProviderTests
 
     // Test types
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
     }
 
     [AutomaticRetry(Attempts = 5)]
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class CustomRetryHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;

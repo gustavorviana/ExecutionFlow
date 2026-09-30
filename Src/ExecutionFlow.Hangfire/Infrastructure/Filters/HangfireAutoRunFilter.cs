@@ -10,6 +10,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
     /// A Hangfire filter that prevents recurring jobs from auto-running when their auto-run setting is disabled,
     /// unless the job was manually triggered via the dashboard or recurring job manager.
     /// </summary>
+    [Obsolete("No longer registered by HangfireSetup since 1.2.0: a recurring handler that doesn't auto-run is scheduled with Cron.Never() instead. Will be removed in 2.0.")]
     public class HangfireAutoRunFilter : IElectStateFilter, IApplyStateFilter
     {
         private static readonly TimeSpan AutoStartNotAllowedCanceledStateExpiration = TimeSpan.FromSeconds(1);

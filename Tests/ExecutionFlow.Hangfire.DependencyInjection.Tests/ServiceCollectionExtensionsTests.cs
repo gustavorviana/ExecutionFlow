@@ -277,6 +277,7 @@ public class ServiceCollectionExtensionsTests
             Task.CompletedTask;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) =>

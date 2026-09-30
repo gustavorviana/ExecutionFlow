@@ -203,6 +203,7 @@ public class StateFilterTests
             null)!;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) =>

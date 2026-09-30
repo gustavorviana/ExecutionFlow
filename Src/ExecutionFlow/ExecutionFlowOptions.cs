@@ -122,7 +122,9 @@ namespace ExecutionFlow
                 _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
                     handlerType: handlerType,
                     displayName: displayName,
-                    cron: cron
+                    cron: cron,
+                    id: recurringAttr?.Id,
+                    timeZone: recurringAttr?.TimeZone
                 );
                 return;
             }

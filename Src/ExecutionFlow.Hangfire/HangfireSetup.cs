@@ -38,6 +38,41 @@ namespace ExecutionFlow.Hangfire
                     throw new InvalidOperationException(
                         $"SetJobAutoRun references type '{handlerType.FullName}' which is not registered as a recurring handler.");
             }
+
+            foreach (var handlerType in options.RecurringTimeZones.Keys)
+            {
+                if (!RecurringHandlers.ContainsKey(handlerType))
+                    throw new InvalidOperationException(
+                        $"SetJobTimeZone references type '{handlerType.FullName}' which is not registered as a recurring handler.");
+            }
+
+            ValidateTimeZone(options.RecurringTimeZone, "RecurringTimeZone");
+
+            foreach (var registration in RecurringHandlers.Values)
+            {
+                if (string.IsNullOrWhiteSpace(registration.Cron))
+                    throw new InvalidOperationException(
+                        $"Recurring handler '{registration.HandlerType.FullName}' has no schedule. Add [Recurring(\"<cron>\")] to the class.");
+
+                ValidateTimeZone(RecurringJobResolver.ResolveTimeZoneId(registration, options), registration.HandlerType.FullName);
+            }
+        }
+
+        private static void ValidateTimeZone(string timeZoneId, string source)
+        {
+            if (timeZoneId == null)
+                return;
+
+            try
+            {
+                TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            }
+            catch (Exception ex) when (ex is TimeZoneNotFoundException || ex is InvalidTimeZoneException)
+            {
+                throw new InvalidOperationException(
+                    $"Time zone '{timeZoneId}' configured for {source} was not found on this host. " +
+                    "On .NET Framework only Windows time zone IDs are available.", ex);
+            }
         }
 
         /// <summary>
@@ -80,7 +115,6 @@ namespace ExecutionFlow.Hangfire
                 InitGenerators(serviceProvider);
 
                 GlobalJobFilters.Filters.Add(new HangfireStateFilter(this, serviceProvider, StateHandlerTypes));
-                GlobalJobFilters.Filters.Add(new HangfireAutoRunFilter(this, Options));
                 GlobalJobFilters.Filters.Add(new DeduplicationCleanupFilter());
                 JobFilterProviders.Providers.Add(new HandlerJobFilterProvider(this, Options));
                 RegisterRecurring(jobStorage);
@@ -175,17 +209,24 @@ namespace ExecutionFlow.Hangfire
         private void RegisterRecurring(JobStorage jobStorage)
         {
             var recurringJobManager = new RecurringJobManager(jobStorage);
-            var registeredIds = new HashSet<string>(StringComparer.Ordinal);
+            var registeredIds = new Dictionary<string, Type>(StringComparer.Ordinal);
 
             foreach (var registration in RecurringHandlers.Values)
             {
-                var jobId = JobIdGenerator.GenerateId(registration.HandlerType);
-                registeredIds.Add(jobId);
+                var jobId = RecurringJobResolver.ResolveId(registration, JobIdGenerator);
+                if (registeredIds.TryGetValue(jobId, out var otherHandler))
+                    throw new InvalidOperationException(
+                        $"Recurring handlers '{otherHandler.FullName}' and '{registration.HandlerType.FullName}' resolve to the same job ID '{jobId}'.");
+                registeredIds.Add(jobId, registration.HandlerType);
+
+                // A handler that doesn't auto-run never fires on its own; it still runs through Trigger.
+                var cron = RecurringJobResolver.IsAutoRun(registration.HandlerType, Options) ? registration.Cron : Cron.Never();
 
                 recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(
                     jobId,
                     dispatcher => dispatcher.DispatchRecurringAsync(null, registration.HandlerType, CancellationToken.None),
-                    registration.Cron);
+                    cron,
+                    new RecurringJobOptions { TimeZone = RecurringJobResolver.ResolveTimeZone(registration, Options) });
             }
 
             if (!Options.RemoveOrphanRecurringJobs)
@@ -193,9 +234,8 @@ namespace ExecutionFlow.Hangfire
 
             using (var connection = jobStorage.GetConnection())
             {
-                var existingJobs = connection.GetRecurringJobs();
-                foreach (var job in existingJobs)
-                    if (!registeredIds.Contains(job.Id))
+                foreach (var job in connection.GetRecurringJobs())
+                    if (!registeredIds.ContainsKey(job.Id) && job.Job.IsRecurring())
                         recurringJobManager.RemoveIfExists(job.Id);
             }
         }

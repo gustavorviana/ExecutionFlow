@@ -268,19 +268,37 @@ All events include `Duration` (time since processing started).
 
 ## Recurring Job Control
 
+Every `IHandler` needs `[Recurring("<cron>")]`; a recurring handler without it fails at `Configure`.
+
 ```csharp
-options.GlobalRecurringAutoRun = true;                    // default: auto-start all
-options.SetJobAutoRun<DataSyncHandler>(false);            // disable specific handler
-options.DisableRecurringRetries = true;                   // default: no retries for recurring
-options.RemoveOrphanRecurringJobs = true;                 // clean up jobs not in code
+[Recurring("0 8 * * *", Id = "daily-report", TimeZone = "America/Sao_Paulo")]
+public class DailyReportHandler : IHandler { ... }
 ```
 
-Manual trigger:
+- `Id` (optional): a stable recurring job ID. Without it, the ID is the handler's full type name (or your `IJobIdGenerator`), so renaming the class creates a new job. An explicit `Id` always wins over the generator.
+- `TimeZone` (optional): the time zone the cron is evaluated in. Precedence: `SetJobTimeZone<T>` > attribute `TimeZone` > `RecurringTimeZone` > UTC. On .NET Framework only Windows time zone IDs exist; unknown IDs fail at `Configure`.
 
 ```csharp
-trigger.Trigger(typeof(DataSyncHandler));
+options.RecurringTimeZone = "America/Sao_Paulo";           // default time zone (null = UTC)
+options.SetJobTimeZone<DailyReportHandler>("Europe/Lisbon"); // per handler, wins over the attribute
+options.GlobalRecurringAutoRun = true;                    // default: run all on schedule
+options.SetJobAutoRun<DataSyncHandler>(false);            // never runs on schedule, only via Trigger
+options.DisableRecurringRetries = true;                   // default: no retries for recurring
+options.RemoveOrphanRecurringJobs = true;                 // remove ExecutionFlow recurring jobs no longer in code
+```
+
+Auto-run applies to the **whole storage**: a handler that doesn't auto-run is registered with a schedule that never fires (`Cron.Never()`), and the last `Build()` wins. To choose **which server processes** a recurring job, use Hangfire queues: put `[Queue("reports")]` on the handler and let only that server listen to the `reports` queue.
+
+`RemoveOrphanRecurringJobs` only removes ExecutionFlow recurring jobs. Recurring jobs created directly with Hangfire, or by other applications sharing the storage, are left alone.
+
+Manual trigger (works whether or not the handler auto-runs):
+
+```csharp
+trigger.Trigger(typeof(DataSyncHandler));   // uses the handler's ID (explicit Id or generated)
 trigger.Trigger("my-job-id");
 ```
+
+Overlapping runs: if a run takes longer than the schedule interval, Hangfire starts the next one in parallel. Add `[DisableConcurrentExecution(timeoutInSeconds: 600)]` to the handler to prevent it.
 
 ## Hangfire Native Attributes
 
@@ -378,8 +396,9 @@ No global state is modified. The existing Hangfire in the process is not affecte
 
 | Option | Default | Description |
 |---|---|---|
-| `GlobalRecurringAutoRun` | `true` | Auto-start recurring jobs |
-| `RemoveOrphanRecurringJobs` | `false` | Delete recurring jobs not in code |
+| `GlobalRecurringAutoRun` | `true` | Run recurring jobs on their schedule (off = `Cron.Never()`, trigger only) |
+| `RecurringTimeZone` | `null` (UTC) | Default time zone for recurring schedules |
+| `RemoveOrphanRecurringJobs` | `false` | Delete ExecutionFlow recurring jobs no longer in code |
 | `DisableRecurringRetries` | `true` | No retries for recurring jobs |
 | `DeduplicationBehavior` | `Disabled` | Default duplicate handling (override per event with `[Deduplication]`) |
 | `DeduplicationLockTimeout` | `1s` | Max wait for the per-custom-ID deduplication lock |

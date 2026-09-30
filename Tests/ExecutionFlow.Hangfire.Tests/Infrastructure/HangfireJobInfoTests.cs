@@ -278,6 +278,7 @@ public class HangfireJobInfoTests
     [System.ComponentModel.DisplayName("Pretty Event")]
     public class NamedEvent { }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;

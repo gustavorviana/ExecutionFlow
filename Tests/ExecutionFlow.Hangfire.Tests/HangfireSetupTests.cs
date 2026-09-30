@@ -246,6 +246,7 @@ public class HangfireSetupTests
             Task.CompletedTask;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class InlineHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) =>

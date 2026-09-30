@@ -86,6 +86,7 @@ public class DefaultHangfireJobNameTests
         public Task HandleAsync(FlowContext<TestEvent> context, CancellationToken ct) => Task.CompletedTask;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;

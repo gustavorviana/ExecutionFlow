@@ -79,11 +79,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         {
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
 
-            if (!_registry.RecurringHandlers.ContainsKey(handlerType))
+            if (!_registry.RecurringHandlers.TryGetValue(handlerType, out var registration))
                 throw new InvalidOperationException(
                     $"No recurring handler registered for type '{handlerType.FullName}'.");
 
-            var jobId = _jobIdGenerator.GenerateId(handlerType);
+            var jobId = RecurringJobResolver.ResolveId(registration, _jobIdGenerator);
             _recurringJobManager.Trigger(jobId);
         }
 

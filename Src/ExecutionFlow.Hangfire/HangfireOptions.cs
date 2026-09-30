@@ -47,25 +47,59 @@ namespace ExecutionFlow.Hangfire
         public IReadOnlyList<Type> StateHandlerTypes => _stateHandlerTypes;
 
         /// <summary>
-        /// Sets whether a specific recurring handler type should auto-run when enqueued.
+        /// Sets whether a specific recurring handler runs on its schedule. A handler that doesn't auto-run is registered
+        /// with a schedule that never fires, so it only runs when triggered manually. Applies to the whole storage.
         /// </summary>
         /// <typeparam name="T">The handler type.</typeparam>
-        /// <param name="autoRun">Whether to auto-run the handler.</param>
+        /// <param name="autoRun">Whether to run the handler on its schedule.</param>
         public void SetJobAutoRun<T>(bool autoRun)
         {
             SetJobAutoRun(typeof(T), autoRun);
         }
 
         /// <summary>
-        /// Sets whether a specific recurring handler type should auto-run when enqueued.
+        /// Sets whether a specific recurring handler runs on its schedule. A handler that doesn't auto-run is registered
+        /// with a schedule that never fires, so it only runs when triggered manually. Applies to the whole storage.
         /// </summary>
         /// <param name="handlerType">The handler type.</param>
-        /// <param name="autoRun">Whether to auto-run the handler.</param>
+        /// <param name="autoRun">Whether to run the handler on its schedule.</param>
         public void SetJobAutoRun(Type handlerType, bool autoRun)
         {
             ThrowIfLocked();
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
             RecurringAutoRun[handlerType] = autoRun;
+        }
+
+        /// <summary>
+        /// Gets or sets the default time zone ID for recurring schedules (e.g. "America/Sao_Paulo").
+        /// <c>null</c> (default) means UTC. Overridden by <see cref="ExecutionFlow.Attributes.RecurringAttribute.TimeZone"/>
+        /// and by <see cref="SetJobTimeZone(Type, string)"/>.
+        /// </summary>
+        public string RecurringTimeZone { get; set; }
+
+        internal Dictionary<Type, string> RecurringTimeZones { get; } = new Dictionary<Type, string>();
+
+        /// <summary>
+        /// Sets the time zone ID for a specific recurring handler. Takes precedence over the attribute and the global default.
+        /// </summary>
+        /// <typeparam name="T">The handler type.</typeparam>
+        /// <param name="timeZoneId">The time zone ID (e.g. "America/Sao_Paulo").</param>
+        public void SetJobTimeZone<T>(string timeZoneId)
+        {
+            SetJobTimeZone(typeof(T), timeZoneId);
+        }
+
+        /// <summary>
+        /// Sets the time zone ID for a specific recurring handler. Takes precedence over the attribute and the global default.
+        /// </summary>
+        /// <param name="handlerType">The handler type.</param>
+        /// <param name="timeZoneId">The time zone ID (e.g. "America/Sao_Paulo").</param>
+        public void SetJobTimeZone(Type handlerType, string timeZoneId)
+        {
+            ThrowIfLocked();
+            if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
+            if (string.IsNullOrEmpty(timeZoneId)) throw new ArgumentNullException(nameof(timeZoneId));
+            RecurringTimeZones[handlerType] = timeZoneId;
         }
 
         /// <summary>

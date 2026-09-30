@@ -267,6 +267,7 @@ public class HangfireJobDispatcherTests
         public string Message { get; set; } = "";
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public static bool WasCalled;

@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Covers the obsolete HangfireAutoRunFilter until it is removed in 2.0.
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Infrastructure;
@@ -324,6 +325,7 @@ public class HangfireValidationTests
         public void OnEnqueued(ExecutionEvent e) { }
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
