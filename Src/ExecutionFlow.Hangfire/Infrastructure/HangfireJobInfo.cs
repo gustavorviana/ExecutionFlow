@@ -1,4 +1,4 @@
-﻿using ExecutionFlow.Abstractions;
+using ExecutionFlow.Abstractions;
 using Hangfire.Common;
 using System;
 
@@ -18,6 +18,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <summary>Gets the custom job name, if one was provided when the event was published.</summary>
         public string CustomJobName { get; }
 
+        /// <summary>Gets the event published with this job (the job's first argument), if available.</summary>
+        public object Event => Job?.Args?.Count > 0 ? Job.Args[0] : null;
+
         /// <summary>
         /// Initializes a new instance from a Hangfire <see cref="Job"/>.
         /// </summary>
@@ -31,25 +34,15 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <inheritdoc />
+        public override Type CarriedType => EventType;
+
+        /// <inheritdoc />
         public override IJobRegistryInfo GetHandler(IExecutionFlowRegistry registry)
         {
             if (registry.EventHandlers.TryGetValue(EventType, out var eventHandler))
                 return eventHandler;
 
             return null;
-        }
-
-        /// <inheritdoc />
-        /// <remarks>
-        /// Falls back to the event type name when the handler is not present in the registry,
-        /// which happens on producer-only hosts that publish events without knowing the handlers.
-        /// </remarks>
-        public override string GetExpectedName(IJobRegistryInfo info)
-        {
-            if (!string.IsNullOrEmpty(CustomJobName))
-                return CustomJobName;
-
-            return base.GetExpectedName(info) ?? GetTypeDisplayName(EventType);
         }
     }
 
@@ -74,6 +67,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <inheritdoc />
+        public override Type CarriedType => HandlerType;
+
+        /// <inheritdoc />
         public override IJobRegistryInfo GetHandler(IExecutionFlowRegistry registry)
         {
             if (HandlerType == null)
@@ -83,16 +79,6 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 return eventHandler;
 
             return null;
-        }
-
-        /// <inheritdoc />
-        /// <remarks>
-        /// Falls back to the handler type carried in the job arguments when the handler
-        /// is not present in the registry (e.g. dashboards hosted on producer-only apps).
-        /// </remarks>
-        public override string GetExpectedName(IJobRegistryInfo info)
-        {
-            return base.GetExpectedName(info) ?? GetTypeDisplayName(HandlerType);
         }
 
         /// <summary>
@@ -110,8 +96,8 @@ namespace ExecutionFlow.Hangfire.Infrastructure
     }
 
     /// <summary>
-    /// Base class for Hangfire job metadata, providing common functionality
-    /// for resolving handlers and display names from Hangfire job instances.
+    /// Base class for Hangfire job metadata: the facts an ExecutionFlow job carries (its event or handler type)
+    /// and how to find its handler registration. Naming rules live in <see cref="JobDisplayNameResolver"/>.
     /// </summary>
     public abstract class HangfireJobInfo
     {
@@ -126,19 +112,28 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
+        /// Gets the type this job carries in its arguments: the event type (event jobs) or the handler type (recurring jobs).
+        /// Available even on hosts where the handler isn't registered.
+        /// </summary>
+        public abstract Type CarriedType { get; }
+
+        /// <summary>
         /// Creates the appropriate <see cref="HangfireJobInfo"/> subclass based on whether the job is event-based or recurring.
         /// </summary>
         /// <param name="job">The Hangfire job.</param>
-        /// <returns>A <see cref="HangfireEventJobInfo"/> or <see cref="HangfireRecurringJobInfo"/>, or <c>null</c> if the job is <c>null</c>.</returns>
+        /// <returns>
+        /// A <see cref="HangfireEventJobInfo"/> or <see cref="HangfireRecurringJobInfo"/>, or <c>null</c> if the job is <c>null</c>
+        /// or isn't an ExecutionFlow job (its method isn't the ExecutionFlow dispatcher).
+        /// </returns>
         public static HangfireJobInfo Create(Job job)
         {
-            if (job == null)
-                return null;
-
-            if (job.Method?.IsGenericMethod == true)
+            if (job.IsEvent())
                 return new HangfireEventJobInfo(job);
 
-            return new HangfireRecurringJobInfo(job);
+            if (job.IsRecurring())
+                return new HangfireRecurringJobInfo(job);
+
+            return null;
         }
 
         /// <summary>
@@ -152,47 +147,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Gets the expected display name for this job by resolving its handler from the registry.
-        /// </summary>
-        /// <param name="registry">The execution flow registry.</param>
-        /// <returns>The display name, or <c>null</c> if the handler is not found.</returns>
-        public virtual string GetExpectedName(IExecutionFlowRegistry registry)
-        {
-            return GetExpectedName(GetHandler(registry));
-        }
-
-        /// <summary>
         /// Resolves the handler registration info for this job from the registry.
         /// </summary>
         /// <param name="registry">The execution flow registry.</param>
         /// <returns>The handler registration info, or <c>null</c> if not found.</returns>
         public abstract IJobRegistryInfo GetHandler(IExecutionFlowRegistry registry);
-
-        /// <summary>
-        /// Gets the expected display name from the handler registration info.
-        /// </summary>
-        /// <param name="info">The handler registration info.</param>
-        /// <returns>The display name, or the handler's full type name if no display name is set.</returns>
-        public virtual string GetExpectedName(IJobRegistryInfo info)
-        {
-            return string.IsNullOrEmpty(info?.DisplayName) ? info?.HandlerType?.FullName : info.DisplayName;
-        }
-
-        /// <summary>
-        /// Resolves a display name for a type: the <see cref="System.ComponentModel.DisplayNameAttribute"/>
-        /// value when present, otherwise the type's simple name.
-        /// </summary>
-        /// <param name="type">The type to name.</param>
-        /// <returns>The display name, or <c>null</c> if <paramref name="type"/> is <c>null</c>.</returns>
-        protected static string GetTypeDisplayName(Type type)
-        {
-            if (type == null)
-                return null;
-
-            var displayNameAttr = (System.ComponentModel.DisplayNameAttribute)Attribute.GetCustomAttribute(
-                type, typeof(System.ComponentModel.DisplayNameAttribute));
-
-            return string.IsNullOrEmpty(displayNameAttr?.DisplayName) ? type.Name : displayNameAttr.DisplayName;
-        }
     }
 }

@@ -178,13 +178,38 @@ executionManager.Retry("payment-123");  // re-enqueue a failed job
 
 ## Custom Display Name (Dashboard)
 
+Show ExecutionFlow job names in the Hangfire dashboard:
+
 ```csharp
+app.UseHangfireDashboard("/hangfire", new DashboardOptions().UseExecutionFlowJobNames(app.Services));
+```
+
+An ExecutionFlow job's name is the first of:
+1. `ICustomNameEvent.CustomName` on the event (per job instance),
+2. Hangfire's `[JobDisplayName]` on the handler's `HandleAsync`, where `{0}` is the event,
+3. `[DisplayName]` on the handler class,
+4. `[DisplayName]` on the event (or recurring handler) class, when the handler isn't registered (e.g. on producer-only hosts),
+5. when no name is defined anywhere: `IJobIdGenerator.GenerateId(type)` for the handler type (or the event type when the handler isn't registered). The default generator returns the type's full name, e.g. `MyApp.Handlers.OrderReminderHandler`.
+
+`[DisplayName]` goes on classes; only `[JobDisplayName]` goes on `HandleAsync`. Steps 1, 3, 4 and 5 live in `JobDisplayNameResolver` as protected methods; `DefaultHangfireJobName` derives from it and places step 2 between them. To customize naming while keeping the rules, derive from `JobDisplayNameResolver` (and implement `IHangfireJobName`) or from `DefaultHangfireJobName`, override `GetName`, and register your class with `options.SetJobName<T>()`.
+
+```csharp
+using ExecutionFlow.Abstractions;   // ICustomNameEvent lives in the core since 1.2.0
+
 public class NotificationEvent : ICustomNameEvent
 {
     public string UserId { get; set; }
     public string CustomName => $"Notify user {UserId}";
 }
+
+public class OrderReminderHandler : IHandler<OrderReminderEvent>
+{
+    [JobDisplayName("Reminder for order {0}")]   // {0} = the event (its ToString()); other placeholders are shown as written
+    public Task HandleAsync(FlowContext<OrderReminderEvent> context, CancellationToken ct) { ... }
+}
 ```
+
+Jobs that aren't ExecutionFlow's use `[JobDisplayName]` on their method, or, without it, `IJobIdGenerator.GenerateId` of the job's type. If the dashboard can't resolve an `IHangfireJobName` from the service provider, every job keeps Hangfire's own default name (`Class.Method`).
 
 ## Deduplication
 

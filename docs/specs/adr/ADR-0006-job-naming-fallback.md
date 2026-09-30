@@ -14,7 +14,7 @@ This decision was first documented on the Wiki (PR #1, `5b337b2`). The Wiki was 
 1. **Custom name for this job.** For event jobs, a non-empty custom name that the event provides through `ICustomNameEvent` and that is stored in the job arguments at publish time (`Infrastructure/HangfireDispatcher.cs:146`, read back in `Infrastructure/HangfireJobInfo.cs:25-30, 47-53`).
 2. **Registered display name** from the handler registry, when the handler is registered on this host (`HangfireJobInfo.GetExpectedName` base implementation).
 3. **Type display name.** The event type for event jobs, or the handler type for recurring jobs (`HangfireJobInfo.cs:52, 95`).
-4. **ID generator.** When the job isn't recognized as an ExecutionFlow job, the name comes from `IJobIdGenerator.GenerateId(job.Method.DeclaringType)`.
+4. **ID generator.** Since 1.2.0 this is the last fallback for every job (ExecutionFlow or not) when no name is defined anywhere: `CustomName`, `[DisplayName]`, or Hangfire's `[JobDisplayName]` (on the handler's `HandleAsync`, or on a native job's method). The full chain is in [job-naming-and-dashboard](../job-naming-and-dashboard/spec.md).
 
 The dashboard uses this through `DashboardOptions.UseExecutionFlowJobNames(IHangfireJobName | IServiceProvider)` (`DashboardOptionsExtensions.cs`). The `IServiceProvider` overload resolves the name generator lazily, on the first render, and throws `InvalidOperationException` if no `IHangfireJobName` is registered.
 

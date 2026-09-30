@@ -140,6 +140,7 @@ public class HangfireValidationTests
     [Fact]
     public void DefaultHangfireJobName_Throws_ForNullIdGenerator()
     {
+        // The ID generator is the last naming fallback, so it is required.
         Assert.Throws<ArgumentNullException>(() =>
             new DefaultHangfireJobName(null!, Substitute.For<IExecutionFlowRegistry>()));
     }

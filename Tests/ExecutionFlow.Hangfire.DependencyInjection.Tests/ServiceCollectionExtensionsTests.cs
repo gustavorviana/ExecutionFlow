@@ -264,7 +264,9 @@ public class ServiceCollectionExtensionsTests
         var job = global::Hangfire.Common.Job.FromExpression<ExecutionFlow.Hangfire.Infrastructure.HangfireJobDispatcher>(
             x => x.DispatchEventAsync<TestEvent>(default!, null, null!, default));
 
-        Assert.Equal(nameof(TestEventHandler), jobName.GetName(job));
+        // No name is defined, so the ID generator names it after the handler: proof that the consumer registry won
+        // (the producer-only registry has no handlers and would name it after the event).
+        Assert.Equal(typeof(TestEventHandler).FullName, jobName.GetName(job));
     }
 
     // Test types
