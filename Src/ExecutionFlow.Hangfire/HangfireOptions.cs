@@ -23,6 +23,13 @@ namespace ExecutionFlow.Hangfire
         /// <summary>Gets or sets whether automatic retries are disabled for recurring jobs. Default is <c>true</c>.</summary>
         public bool DisableRecurringRetries { get; set; } = true;
 
+        /// <summary>
+        /// Gets or sets whether event jobs whose event type has no registered handler on the executing host are retried.
+        /// Default is <c>false</c>: such jobs fail without automatic retries. Set to <c>true</c> when consumers with
+        /// different handlers share a queue, so another consumer can pick the job up on retry.
+        /// </summary>
+        public bool RetryUnregisteredEventJobs { get; set; } = false;
+
         /// <summary>Gets or sets the deduplication behavior for event jobs. Default is <see cref="Hangfire.DeduplicationBehavior.Disabled"/>.</summary>
         public DeduplicationBehavior DeduplicationBehavior { get; set; } = DeduplicationBehavior.Disabled;
 

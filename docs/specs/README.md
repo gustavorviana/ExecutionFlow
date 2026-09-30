@@ -61,7 +61,7 @@ Open ambiguities are written inline as `[NEEDS CLARIFICATION: ...]`.
 
 | Capability | Status |
 | ---------- | ------ |
-| [dispatching](dispatching/spec.md) | not started |
+| [dispatching](dispatching/spec.md) | approved (v1.2.0) |
 | [custom-id-and-deduplication](custom-id-and-deduplication/spec.md) | not started |
 | [recurring-jobs](recurring-jobs/spec.md) | not started |
 | [lifecycle-hooks](lifecycle-hooks/spec.md) | not started |

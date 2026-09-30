@@ -200,6 +200,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// </summary>
         private static bool MatchesId(IStorageConnection connection, string hangfireJobId, string id)
         {
+            // An empty ID never matches; otherwise it would match every job without a custom ID.
+            if (string.IsNullOrEmpty(id))
+                return false;
+
             if (hangfireJobId == id)
                 return true;
 
@@ -325,7 +329,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         {
             try
             {
-                return connection.GetJobParameter(jobId, ContextConsts.CustomId);
+                return JobParameters.ReadCustomId(connection, jobId);
             }
             catch (Exception ex)
             {

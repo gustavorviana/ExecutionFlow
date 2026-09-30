@@ -51,6 +51,33 @@ public class ExecutionManagerTests
             x => x.DispatchEventAsync<TEvent>(default!, null, null, default));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void IsRunning_ReturnsFalse_WhenIdIsNullOrEmpty_EvenIfJobsWithoutCustomIdAreRunning(string? id)
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
+        _connection.GetJobParameter("job-1", ContextConsts.CustomId).Returns((string?)null);
+
+        Assert.False(_manager.IsRunning(id!));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Cancel_DoesNothing_WhenIdIsNullOrEmpty(string? id)
+    {
+        _monitoringApi.ProcessingJobs(0, 10).Returns(
+            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
+        _monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
+        _connection.GetJobParameter("job-1", ContextConsts.CustomId).Returns((string?)null);
+
+        _manager.Cancel(id!);
+
+        _jobClient.DidNotReceiveWithAnyArgs().ChangeState(default!, default!, default!);
+    }
+
     [Fact]
     public void IsRunning_ReturnsTrue_WhenMatchingByHangfireJobId()
     {

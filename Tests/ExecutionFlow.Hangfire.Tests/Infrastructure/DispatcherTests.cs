@@ -52,7 +52,7 @@ public class DispatcherTests
 
         dispatcher.Publish(new TestNamedEvent());
 
-        _connection.Received(1).SetJobParameter("job-100", ContextConsts.CustomId, "named-job-1");
+        _connection.Received(1).SetJobParameter("job-100", ContextConsts.CustomId, JobParameters.EncodeCustomId("named-job-1"));
     }
 
     [Fact]
@@ -113,7 +113,7 @@ public class DispatcherTests
 
         dispatcher.Schedule(new TestNamedEvent(), TimeSpan.FromHours(1));
 
-        _connection.Received(1).SetJobParameter("job-51", ContextConsts.CustomId, "named-job-1");
+        _connection.Received(1).SetJobParameter("job-51", ContextConsts.CustomId, JobParameters.EncodeCustomId("named-job-1"));
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class DispatcherTests
 
         dispatcher.Schedule(new TestNamedEvent(), DateTimeOffset.UtcNow.AddHours(2));
 
-        _connection.Received(1).SetJobParameter("job-61", ContextConsts.CustomId, "named-job-1");
+        _connection.Received(1).SetJobParameter("job-61", ContextConsts.CustomId, JobParameters.EncodeCustomId("named-job-1"));
     }
 
     [Fact]
@@ -266,7 +266,152 @@ public class DispatcherTests
         Assert.Equal("named-job-1", result.JobId);
     }
 
+    // --- Null event (AC-001.3, AC-002.2, AC-003.2) ---
+
+    [Fact]
+    public void Publish_ThrowsArgumentNullException_WhenEventIsNull()
+    {
+        var dispatcher = CreateDispatcher();
+
+        Assert.Throws<ArgumentNullException>(() => dispatcher.Publish<TestEvent>(null!));
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+    }
+
+    [Fact]
+    public void Schedule_TimeSpan_ThrowsArgumentNullException_WhenEventIsNull()
+    {
+        var dispatcher = CreateDispatcher();
+
+        Assert.Throws<ArgumentNullException>(() => dispatcher.Schedule<TestEvent>(null!, TimeSpan.FromMinutes(1)));
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+    }
+
+    [Fact]
+    public void Schedule_DateTimeOffset_ThrowsArgumentNullException_WhenEventIsNull()
+    {
+        var dispatcher = CreateDispatcher();
+
+        Assert.Throws<ArgumentNullException>(() => dispatcher.Schedule<TestEvent>(null!, DateTimeOffset.UtcNow.AddMinutes(1)));
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+    }
+
+    // --- Null or empty CustomId (AC-004.3, F-009) ---
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Publish_TreatsEmptyCustomIdAsNone(string? customId)
+    {
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-5");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        var result = dispatcher.Publish(new TestCustomIdEvent(customId));
+
+        Assert.True(result.Enqueued);
+        Assert.Equal("job-5", result.JobId);
+        _connection.DidNotReceiveWithAnyArgs().SetJobParameter(default!, default!, default!);
+        _storage.DidNotReceive().GetMonitoringApi();
+    }
+
+    [Fact]
+    public void Publish_ReplaceExisting_DoesNotCancelUnrelatedJob_WhenCustomIdIsEmpty()
+    {
+        SetupRunningJob("unrelated-job", customId: null);
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-6");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.ReplaceExisting });
+
+        var result = dispatcher.Publish(new TestCustomIdEvent(""));
+
+        Assert.True(result.Enqueued);
+        _jobClient.DidNotReceiveWithAnyArgs().ChangeState(default!, default!, default!);
+    }
+
+    // --- Deduplication on Schedule (AC-004.4, F-004) ---
+
+    [Fact]
+    public void Schedule_TimeSpan_SkipIfExists_ReturnsFalse_WhenJobAlreadyRunning()
+    {
+        SetupRunningJob("existing-job", "named-job-1");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        var result = dispatcher.Schedule(new TestNamedEvent(), TimeSpan.FromMinutes(1));
+
+        Assert.False(result.Enqueued);
+        Assert.Null(result.JobId);
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+    }
+
+    [Fact]
+    public void Schedule_DateTimeOffset_SkipIfExists_ReturnsFalse_WhenJobAlreadyRunning()
+    {
+        SetupRunningJob("existing-job", "named-job-1");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        var result = dispatcher.Schedule(new TestNamedEvent(), DateTimeOffset.UtcNow.AddMinutes(1));
+
+        Assert.False(result.Enqueued);
+        Assert.Null(result.JobId);
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+    }
+
+    // --- Custom name (AC-005.1, F-005) ---
+
+    [Fact]
+    public void Publish_StoresCustomNameInJobArgs_WhenEventImplementsICustomNameEvent()
+    {
+        global::Hangfire.Common.Job? captured = null;
+        _jobClient.Create(Arg.Do<global::Hangfire.Common.Job>(j => captured = j), Arg.Any<global::Hangfire.States.IState>()).Returns("job-7");
+        var dispatcher = CreateDispatcher();
+
+        dispatcher.Publish(new TestCustomNameEvent());
+
+        Assert.NotNull(captured);
+        Assert.Equal("Custom job name", captured!.Args[HangfireEventJobInfo.CustomNameIndex]);
+    }
+
+    // --- Atomic custom ID (AC-007.1, F-002) ---
+
+    [Fact]
+    public void Publish_CreatesJobWithCustomIdParameterAtomically_WhenClientSupportsV2()
+    {
+        var client = Substitute.For<IBackgroundJobClientV2>();
+        IDictionary<string, object>? parameters = null;
+        client.Create(Arg.Any<global::Hangfire.Common.Job>(), Arg.Any<global::Hangfire.States.IState>(), Arg.Do<IDictionary<string, object>>(p => parameters = p))
+            .Returns("job-v2");
+        var dispatcher = new HangfireDispatcher(client, _storage, _jobIdGenerator, _registry, new HangfireOptions());
+
+        var result = dispatcher.Publish(new TestNamedEvent());
+
+        Assert.Equal("named-job-1", result.JobId);
+        Assert.NotNull(parameters);
+        Assert.Equal("named-job-1", parameters![ContextConsts.CustomId]);
+        client.DidNotReceiveWithAnyArgs().Create(default!, default!);
+        _connection.DidNotReceiveWithAnyArgs().SetJobParameter(default!, default!, default!);
+    }
+
+    private void SetupRunningJob(string jobId, string? customId)
+    {
+        var monitoringApi = Substitute.For<IMonitoringApi>();
+        _storage.GetMonitoringApi().Returns(monitoringApi);
+        monitoringApi.ProcessingJobs(0, 10).Returns(new JobList<ProcessingJobDto>(new List<KeyValuePair<string, ProcessingJobDto>>
+        {
+            new KeyValuePair<string, ProcessingJobDto>(jobId, new ProcessingJobDto { Job = null })
+        }));
+        monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
+        _connection.GetJobParameter(jobId, ContextConsts.CustomId).Returns(customId);
+    }
+
     // Test types
+
+    public class TestCustomIdEvent(string? customId) : ICustomIdEvent
+    {
+        public string CustomId => customId!;
+    }
+
+    public class TestCustomNameEvent : ICustomNameEvent
+    {
+        public string CustomName => "Custom job name";
+    }
 
     public class TestEvent { }
 

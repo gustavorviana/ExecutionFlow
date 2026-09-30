@@ -112,7 +112,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
         private static string GetCustomId(ElectStateContext context, string jobId)
         {
             return SafeExecute("get custom ID", jobId,
-                () => context.Connection.GetJobParameter(jobId, ContextConsts.CustomId));
+                () => JobParameters.ReadCustomId(context.Connection, jobId));
         }
 
         private static bool IsRetry(ElectStateContext context)

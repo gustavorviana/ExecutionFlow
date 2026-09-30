@@ -43,6 +43,50 @@ public class HandlerJobFilterProviderTests
         return registry;
     }
 
+    // --- Unregistered event handler (REQ-008) ---
+
+    [Fact]
+    public void RetryUnregisteredEventJobs_DefaultsToFalse()
+    {
+        Assert.False(new HangfireOptions().RetryUnregisteredEventJobs);
+    }
+
+    [Fact]
+    public void UnregisteredEventJob_GetsRetryDisabled_ByDefault()
+    {
+        var registry = CreateRegistryWith<TestRecurringHandler>();
+        var provider = CreateProvider(opts => { }, registry);
+        var job = JobBuilder.CreateEventJob(new TestEvent());
+
+        var filters = provider.GetFilters(job).ToList();
+
+        var retryFilter = filters.Select(f => f.Instance).OfType<AutomaticRetryAttribute>().SingleOrDefault();
+        Assert.NotNull(retryFilter);
+        Assert.Equal(0, retryFilter!.Attempts);
+    }
+
+    [Fact]
+    public void UnregisteredEventJob_KeepsDefaultRetries_WhenOptionEnabled()
+    {
+        var registry = CreateRegistryWith<TestRecurringHandler>();
+        var provider = CreateProvider(opts => opts.RetryUnregisteredEventJobs = true, registry);
+        var job = JobBuilder.CreateEventJob(new TestEvent());
+
+        Assert.Empty(provider.GetFilters(job));
+    }
+
+    [Fact]
+    public void NonExecutionFlowGenericJob_GetsNoFilters()
+    {
+        var registry = CreateRegistryWith<TestRecurringHandler>();
+        var provider = CreateProvider(opts => { }, registry);
+        var job = Job.FromExpression(() => GenericJob<TestEvent>());
+
+        Assert.Empty(provider.GetFilters(job));
+    }
+
+    public static void GenericJob<T>() { }
+
     // --- DisableRecurringRetries default ---
 
     [Fact]

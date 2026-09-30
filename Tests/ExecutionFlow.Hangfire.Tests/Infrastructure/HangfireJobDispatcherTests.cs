@@ -108,6 +108,66 @@ public class HangfireJobDispatcherTests
             dispatcher.DispatchEventAsync(new TestEvent(), null, CreatePerformContext(), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task WithoutDI_DispatchEventAsync_Throws_WhenHandlerNotResolvable()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(TestEventHandler)));
+
+        var serviceProvider = Substitute.For<IServiceProvider>();
+        serviceProvider.GetService(typeof(TestEventHandler)).Returns(null);
+        serviceProvider.GetService(typeof(ExecutionLoggerFactory)).Returns(new ExecutionLoggerFactory(Array.Empty<IExecutionLoggerFactory>()));
+
+        var dispatcher = new HangfireJobDispatcher(serviceProvider, setup);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.DispatchEventAsync(new TestEvent(), null, CreatePerformContext(), CancellationToken.None));
+        Assert.Contains("Could not activate handler instance", ex.Message);
+    }
+
+    [Fact]
+    public async Task WithoutDI_DispatchEventAsync_ExposesCustomNameParameter()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(CustomNameCaptureHandler)));
+
+        var activator = new FlowEngineJobActivator(setup);
+        activator.RegisterLoggerFactory(setup.LoggerFactoryTypes);
+
+        var dispatcher = new HangfireJobDispatcher(activator, setup);
+
+        await dispatcher.DispatchEventAsync(new CustomNameCaptureEvent(), "Custom job name", CreatePerformContext(), CancellationToken.None);
+
+        Assert.Equal("Custom job name", CustomNameCaptureHandler.ReceivedName);
+    }
+
+    // RN-001: handlers are routed by the compile-time TEvent, not by the runtime event type.
+    [Fact]
+    public async Task WithoutDI_DispatchEventAsync_RoutesByCompileTimeType()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => opts.Add(typeof(TestEventHandler)));
+
+        var activator = new FlowEngineJobActivator(setup);
+        activator.RegisterLoggerFactory(setup.LoggerFactoryTypes);
+
+        var dispatcher = new HangfireJobDispatcher(activator, setup);
+
+        // Derived instance published through the base type runs the base handler.
+        await dispatcher.DispatchEventAsync<TestEvent>(new DerivedTestEvent { Message = "derived" }, null, CreatePerformContext(), CancellationToken.None);
+        Assert.True(TestEventHandler.WasCalled);
+        Assert.Equal("derived", TestEventHandler.ReceivedMessage);
+
+        // The same instance published as its own type has no handler.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.DispatchEventAsync(new DerivedTestEvent(), null, CreatePerformContext(), CancellationToken.None));
+
+        // Published through object: no handler for System.Object.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            dispatcher.DispatchEventAsync<object>(new TestEvent(), null, CreatePerformContext(), CancellationToken.None));
+        Assert.Contains("System.Object", ex.Message);
+    }
+
     // ==========================================
     // WITH DI (Microsoft.Extensions.DependencyInjection)
     // ==========================================
@@ -227,6 +287,23 @@ public class HangfireJobDispatcherTests
         public Task HandleAsync(FlowContext<CustomIdEvent> context, CancellationToken ct)
         {
             ReceivedCustomId = context.CustomId;
+            return Task.CompletedTask;
+        }
+    }
+
+    public class DerivedTestEvent : TestEvent { }
+
+    public class CustomNameCaptureEvent { }
+
+    public class CustomNameCaptureHandler : IHandler<CustomNameCaptureEvent>
+    {
+        public static object? ReceivedName;
+
+        public CustomNameCaptureHandler() => ReceivedName = null;
+
+        public Task HandleAsync(FlowContext<CustomNameCaptureEvent> context, CancellationToken ct)
+        {
+            ReceivedName = context.Parameters[ContextConsts.EventName];
             return Task.CompletedTask;
         }
     }

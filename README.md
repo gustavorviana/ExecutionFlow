@@ -117,17 +117,37 @@ dispatcher.Schedule(new SendReminderEvent(), TimeSpan.FromMinutes(30));
 dispatcher.Schedule(new SendReportEvent(), new DateTimeOffset(2025, 12, 31, 9, 0, 0, TimeSpan.Zero));
 ```
 
+Passing a `null` event throws `ArgumentNullException`.
+
+### Handler Routing
+
+The handler is chosen by the **compile-time type** of the event (the generic `TEvent`), not by its runtime type. Only exact matches count, so base classes and interfaces aren't searched:
+
+```csharp
+// Only IHandler<OrderCreated> is registered. OrderCreatedExpress : OrderCreated.
+dispatcher.Publish(new OrderCreated());          // runs the OrderCreated handler
+OrderCreated e = new OrderCreatedExpress();
+dispatcher.Publish(e);                           // runs the OrderCreated handler
+dispatcher.Publish(new OrderCreatedExpress());   // fails when the job runs: no handler for OrderCreatedExpress
+object o = new OrderCreated();
+dispatcher.Publish(o);                           // fails when the job runs: no handler for System.Object
+```
+
+When publishing from generic code (e.g. a list of `object` or of an interface type), call `Publish` with the concrete type.
+
+By default, a job whose event type has no registered handler on the consumer **fails without retries**. Set `RetryUnregisteredEventJobs = true` if consumers with different handlers share a queue.
+
 ### Publish Result
 
 All `Publish`/`Schedule` methods return `PublishResult`:
 
 ```csharp
 var result = dispatcher.Publish(event);
-result.JobId;    // custom ID if available, otherwise internal job ID (null if skipped)
+result.JobId;    // non-empty custom ID if available, otherwise internal job ID (null if skipped)
 result.Enqueued; // true if job was actually enqueued
 ```
 
-`Enqueued` is `false` only when the event implements `ICustomIdEvent`, deduplication is enabled, and a job with the same custom ID is already running or pending.
+`Enqueued` is `false` only when the event implements `ICustomIdEvent` with a non-empty `CustomId`, deduplication is enabled, and a job with the same custom ID is already running or pending.
 
 ## Custom ID (Job Tracking)
 
@@ -140,6 +160,10 @@ public class PaymentEvent : ICustomIdEvent
     public string CustomId => $"payment-{OrderId}";
 }
 ```
+
+A `null` or empty `CustomId` means the event has no custom ID: `JobId` is the internal job ID and deduplication doesn't apply.
+
+The custom ID is stored with the job in the same storage operation, so a job never exists without it. This holds for Hangfire's default `BackgroundJobClient`. A custom `IBackgroundJobClient` that doesn't implement `IBackgroundJobClientV2` falls back to storing it right after the job is created.
 
 Or set it dynamically inside the handler:
 
@@ -338,6 +362,7 @@ No global state is modified. The existing Hangfire in the process is not affecte
 | `RemoveOrphanRecurringJobs` | `false` | Delete recurring jobs not in code |
 | `DisableRecurringRetries` | `true` | No retries for recurring jobs |
 | `DeduplicationBehavior` | `Disabled` | Duplicate job handling strategy |
+| `RetryUnregisteredEventJobs` | `false` | Retry event jobs whose event type has no handler on the consumer |
 
 ## Project Structure
 

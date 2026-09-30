@@ -5,6 +5,12 @@ namespace ExecutionFlow.Abstractions
     /// <summary>
     /// Dispatches events for background processing via fire-and-forget or delayed scheduling.
     /// </summary>
+    /// <remarks>
+    /// The handler is resolved by the compile-time type <c>TEvent</c>, not by the runtime type of the event,
+    /// and only exact matches count. Publishing through <see cref="object"/>, an interface, or a base class
+    /// runs the handler registered for that type, if any. All methods throw <see cref="ArgumentNullException"/>
+    /// when the event is <c>null</c>.
+    /// </remarks>
     public interface IEventDispatcher
     {
         /// <summary>
