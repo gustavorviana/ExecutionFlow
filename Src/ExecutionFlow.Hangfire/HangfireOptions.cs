@@ -1,3 +1,4 @@
+using ExecutionFlow.Abstractions;
 using System;
 using System.Collections.Generic;
 
@@ -16,6 +17,44 @@ namespace ExecutionFlow.Hangfire
         /// <summary>Gets or sets whether recurring jobs auto-start when enqueued. Default is <c>true</c>.</summary>
         public bool GlobalRecurringAutoRun { get => _globalRecurringAutoRun; set { ThrowIfLocked(); _globalRecurringAutoRun = value; } }
         private bool _globalRecurringAutoRun = true;
+
+        /// <summary>The execution plan registered with <see cref="UsePlan"/>, or <c>null</c>.</summary>
+        internal ExecutionPlan Plan { get; private set; }
+
+        /// <summary>
+        /// Registers every handler of an execution plan as a recurring handler, right away. A disabled step doesn't run on its
+        /// schedule, like <see cref="SetJobAutoRun(Type, bool)"/> <c>false</c>, and a dependent is only enqueued after a new
+        /// completed cycle of every prerequisite; otherwise its run ends in the <c>PrerequisitesNotMet</c> state.
+        /// </summary>
+        /// <param name="plan">The plan built with <see cref="ExecutionPlanner"/>.</param>
+        /// <exception cref="InvalidOperationException">A plan was already registered, or a handler in the plan has <see cref="SetJobAutoRun(Type, bool)"/>.</exception>
+        public void UsePlan(ExecutionPlan plan)
+        {
+            ThrowIfLocked();
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (Plan != null) throw new InvalidOperationException("An execution plan was already registered.");
+
+            foreach (var step in plan.Steps)
+            {
+                // Two switches for the same handler would disagree silently: the plan's Enabled is the one to use.
+                if (RecurringAutoRun.ContainsKey(step.HandlerType))
+                    throw PlanAndAutoRunConflict(step.HandlerType);
+            }
+
+            foreach (var step in plan.Steps)
+            {
+                Add(step.HandlerType);
+                RecurringAutoRun[step.HandlerType] = step.Enabled;
+            }
+
+            Plan = plan;
+        }
+
+        private static InvalidOperationException PlanAndAutoRunConflict(Type handlerType)
+        {
+            return new InvalidOperationException(
+                $"'{handlerType.FullName}' is in the execution plan and also has SetJobAutoRun. Use only the plan's Enabled for it.");
+        }
         internal Dictionary<Type, object> OptionValues { get; } = new Dictionary<Type, object>();
 
         /// <summary>Gets or sets whether orphan recurring jobs (not registered in the setup) are automatically removed. Default is <c>false</c>.</summary>
@@ -81,6 +120,9 @@ namespace ExecutionFlow.Hangfire
         {
             ThrowIfLocked();
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
+            if (Plan != null && Plan.TryGet(handlerType, out _))
+                throw PlanAndAutoRunConflict(handlerType);
+
             RecurringAutoRun[handlerType] = autoRun;
         }
 

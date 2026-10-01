@@ -36,3 +36,25 @@ Plan: [plan.md](plan.md)
   - Requirements: all
   - Depends on: TASK-001..TASK-006
   - Done when: the README documents `Id`, `TimeZone`, on/off per storage, queues and `[DisableConcurrentExecution]`, the spec is `approved`, and every AC names an existing test
+
+## v1.3.0
+
+- [x] TASK-008: `HangfireOptions.UsePlan` (registers the handlers and their auto-run) and job naming from the plan
+  - Requirements: REQ-009
+  - Depends on: execution-plan/TASK-002
+  - Done when: `ExecutionPlanHangfireTests` pass
+
+- [x] TASK-009: `PrerequisitesNotMetState`, `PrerequisiteGenerationStore`, `PrerequisiteGateFilter` and the increment in the dispatcher
+  - Requirements: REQ-010
+  - Depends on: TASK-008
+  - Done when: `PrerequisiteGateTests` pass
+
+- [x] TASK-010: `JobState.PrerequisitesNotMet`
+  - Requirements: REQ-011
+  - Depends on: —
+  - Done when: the `ExecutionManagerTests` case passes
+
+- [x] TASK-011: Run modes (`RunOnOwnSchedule`, `MinInterval`), no-overlap retrigger, and manual runs without the gate
+  - Requirements: REQ-012
+  - Depends on: TASK-009, execution-plan/TASK-003
+  - Done when: the REQ-012 tests in `PrerequisiteGateTests`, `ExecutionPlanHangfireTests` and `RecurringRegistrationTests` pass

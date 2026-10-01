@@ -63,12 +63,14 @@ Open ambiguities are written inline as `[NEEDS CLARIFICATION: ...]`.
 | ---------- | ------ |
 | [dispatching](dispatching/spec.md) | approved (v1.2.0) |
 | [custom-id-and-deduplication](custom-id-and-deduplication/spec.md) | approved (v1.2.0) |
-| [recurring-jobs](recurring-jobs/spec.md) | approved (v1.2.0) |
+| [recurring-jobs](recurring-jobs/spec.md) | approved (v1.2.0), in review for v1.3.0 |
 | [lifecycle-hooks](lifecycle-hooks/spec.md) | approved (v1.2.0) |
 | [execution-manager](execution-manager/spec.md) | approved (v1.2.0) |
 | [job-naming-and-dashboard](job-naming-and-dashboard/spec.md) | approved (v1.2.0) |
 | [setup-and-configuration](setup-and-configuration/spec.md) | approved (v1.2.0) |
 | [handlers-and-context](handlers-and-context/spec.md) | approved (v1.2.0) |
 | [logging-and-console](logging-and-console/spec.md) | approved (v1.2.0) |
+| [execution-plan](execution-plan/spec.md) | draft (v1.3.0) |
+| [local-hosting](local-hosting/spec.md) | draft (v1.3.0) |
 
 See also: [constitution](constitution.md) and [ADRs](adr/).

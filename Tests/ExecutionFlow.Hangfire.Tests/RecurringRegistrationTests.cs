@@ -188,6 +188,33 @@ public class RecurringRegistrationTests : IDisposable
     }
 
     [Fact]
+    public void Build_RegistersDependentWithCronNever()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<NewYorkHandler>();
+        planner.Add<DailyHandler>().DependsOn<NewYorkHandler>();
+        var plan = planner.Build();
+
+        Build(o => o.UsePlan(plan));
+
+        Assert.Equal(Cron.Never(), RecurringHash(typeof(DailyHandler).FullName!)["Cron"]);
+        Assert.Equal("0 8 * * *", RecurringHash(typeof(NewYorkHandler).FullName!)["Cron"]);
+    }
+
+    [Fact]
+    public void Build_RegistersOwnScheduleDependentWithItsCron()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<NewYorkHandler>();
+        planner.Add<DailyHandler>().DependsOn<NewYorkHandler>().RunOnOwnSchedule();
+        var plan = planner.Build();
+
+        Build(o => o.UsePlan(plan));
+
+        Assert.Equal("0 8 * * *", RecurringHash(typeof(DailyHandler).FullName!)["Cron"]);
+    }
+
+    [Fact]
     public void Build_RegistersCronNever_WhenGlobalAutoRunIsOff()
     {
         Build(o =>

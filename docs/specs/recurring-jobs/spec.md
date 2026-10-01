@@ -1,6 +1,6 @@
 # Spec: Recurring jobs
 
-Status: approved
+Status: in review (v1.3.0 additions: REQ-009..REQ-012)
 Mode: to-be (v1.2.0), based on the as-is mapping (see [findings.md](findings.md)). Design in [plan.md](plan.md).
 Packages: `ExecutionFlow` (`IHandler`, `RecurringAttribute`, registration), `ExecutionFlow.Hangfire` (scheduling, triggers, orphan cleanup)
 
@@ -99,7 +99,61 @@ Acceptance criteria:
 - AC-008.2: WHEN a configured time zone ID doesn't exist on the host, THE SYSTEM SHALL throw `InvalidOperationException` at `Configure`, naming the ID. Tests: `RecurringValidationTests.Configure_Throws_WhenGlobalTimeZoneIsUnknown`, `Configure_Throws_WhenAttributeTimeZoneIsUnknown`, `Configure_Throws_WhenOptionTimeZoneIsUnknown`, `Configure_Accepts_ValidTimeZones`
 - AC-008.3: WHEN `SetJobTimeZone` references a type that isn't a registered recurring handler, THE SYSTEM SHALL throw at `Configure`. Test: `RecurringValidationTests.Configure_Throws_WhenSetJobTimeZoneReferencesUnregisteredHandler`
 
+### REQ-009: Execution plan in Hangfire (v1.3.0)
+`HangfireOptions.UsePlan(ExecutionPlan)` registers every handler of an [execution plan](../execution-plan/spec.md) as a recurring handler right away, as `Add` does. A step's `Enabled` becomes that handler's auto-run (REQ-003). A handler that isn't in the plan behaves as before.
+Source: execution-plan/US-001, execution-plan/US-003
+
+Acceptance criteria:
+- AC-009.1: WHEN `UsePlan` is called, THE SYSTEM SHALL register every step's handler as a recurring handler, even when it wasn't scanned. Test: `ExecutionPlanHangfireTests.UsePlan_RegistersPlanHandlers`
+- AC-009.2: WHEN a step is disabled, THE SYSTEM SHALL treat it as `SetJobAutoRun(false)`. An enabled step auto-runs, whatever `GlobalRecurringAutoRun` says. Test: `ExecutionPlanHangfireTests.UsePlan_SetsAutoRunFromStepEnabled`
+- AC-009.3: WHEN a handler in the plan also gets `SetJobAutoRun`, before or after `UsePlan`, THE SYSTEM SHALL throw `InvalidOperationException`. Tests: `ExecutionPlanHangfireTests.UsePlan_Throws_WhenHandlerAlreadyHasSetJobAutoRun`, `SetJobAutoRun_Throws_WhenHandlerIsInPlan`
+- AC-009.4: WHEN `UsePlan` is called twice, THE SYSTEM SHALL throw `InvalidOperationException`. Test: `ExecutionPlanHangfireTests.UsePlan_Throws_WhenCalledTwice`
+- AC-009.5: WHEN a step's display name differs from the class name, THE SYSTEM SHALL use it as the job name. Test: `ExecutionPlanHangfireTests.GetName_UsesPlanDisplayName`
+
+### REQ-010: Prerequisite gate (v1.3.0)
+Hangfire enforces the generation rule ([ADR-0009](../adr/ADR-0009-dependencies-by-generation.md)), keeping the generations in the job storage, under a distributed lock:
+- When a recurring handler that is a prerequisite returns without throwing, its generation is incremented.
+- A dependent (a plan step with prerequisites) has no schedule of its own: it's registered with `Cron.Never()`, and its `[Recurring]` is optional. A cron on it is ignored, with a warning at `Configure`.
+- When a prerequisite completes, each enabled dependent of it whose prerequisites **all** have a generation newer than the one it last consumed is triggered (`RecurringJob.TriggerJob`). In a chain `C → B → A`, C triggers B and B triggers A. A dependent of several prerequisites is triggered by the last one to complete.
+- When a new job of a dependent is about to be enqueued (triggered by the plan, or by its schedule in `RunOnOwnSchedule`; manual runs skip the gate, see REQ-012), every prerequisite must have a generation newer than the one the dependent last consumed. If they do, the dependent records them as consumed and is enqueued. Otherwise, the job goes to the final state `PrerequisitesNotMet` instead, with the pending prerequisites as its reason. It never reaches a worker, and no lifecycle hook fires for it.
+- Retries of an enqueued dependent aren't gated again.
+Source: execution-plan/US-001
+
+Acceptance criteria:
+- AC-010.1: WHEN a prerequisite's handler completes, THE SYSTEM SHALL increment its generation. When it throws, THE SYSTEM SHALL NOT. Tests: `PrerequisiteGateTests.DispatchRecurring_IncrementsGeneration_WhenPrerequisiteCompletes`, `DispatchRecurring_DoesNotIncrement_WhenHandlerThrows`
+- AC-010.2: WHEN a dependent is about to be enqueued and a prerequisite has no new generation, THE SYSTEM SHALL elect `PrerequisitesNotMet`, naming the prerequisite. Test: `PrerequisiteGateTests.OnStateElection_ElectsPrerequisitesNotMet_WhenNoNewGeneration`
+- AC-010.3: WHEN every prerequisite has a new generation, THE SYSTEM SHALL keep `Enqueued` and record the consumed generations, so that the next attempt without new cycles is gated. Test: `PrerequisiteGateTests.OnStateElection_EnqueuesOncePerGeneration`
+- AC-010.4: WHEN a job is re-enqueued from another state (retry, requeue), THE SYSTEM SHALL NOT gate it. Test: `PrerequisiteGateTests.OnStateElection_DoesNotGate_WhenJobIsNotNew`
+- AC-010.5: WHEN a handler isn't a dependent in the plan, THE SYSTEM SHALL NOT gate it. Test: `PrerequisiteGateTests.OnStateElection_DoesNotGate_WhenHandlerHasNoPrerequisites`
+- AC-010.6: WHEN a step has prerequisites, THE SYSTEM SHALL register it with `Cron.Never()`, and SHALL accept it without `[Recurring]`. Tests: `RecurringRegistrationTests.Build_RegistersDependentWithCronNever`, `ExecutionPlanHangfireTests.Configure_Accepts_DependentWithoutRecurringAttribute`, `Configure_Throws_WhenIndependentHandlerHasNoRecurringAttribute`
+- AC-010.7: WHEN a prerequisite completes and a dependent has a new generation of every prerequisite, THE SYSTEM SHALL trigger the dependent. When a prerequisite is still pending or the dependent is disabled, THE SYSTEM SHALL NOT. Tests: `PrerequisiteGateTests.DispatchRecurring_TriggersDependent_WhenAllPrerequisitesHaveNewCycle`, `DispatchRecurring_DoesNotTrigger_WhenAnotherPrerequisiteIsPending`, `DispatchRecurring_DoesNotTrigger_DisabledDependent`, `DispatchRecurring_TriggersChainInOrder_WhenDependentAlsoDependsOnRoot`
+
+### REQ-011: `JobState.PrerequisitesNotMet` (v1.3.0)
+`JobState` gets the value `PrerequisitesNotMet`, for jobs in that state.
+Source: execution-plan/US-001
+
+Acceptance criteria:
+- AC-011.1: WHEN `GetJobs` or `CountJobs` is called with `PrerequisitesNotMet`, THE SYSTEM SHALL return an empty sequence and 0, because Hangfire keeps no list for custom states (RN-007). Test: `ExecutionManagerTests.GetJobsAndCount_ReturnEmpty_ForPrerequisitesNotMet`
+
+### REQ-012: Run modes and manual runs in Hangfire (v1.3.0)
+How Hangfire implements execution-plan REQ-007:
+- **Default:** a dependent is registered with `Cron.Never()` and triggered by its prerequisites (REQ-010).
+- **`RunOnOwnSchedule`:** the dependent is registered with its `[Recurring]` cron, which is required in this mode. Its prerequisites don't trigger it, and each occurrence goes through the gate, ending in `PrerequisitesNotMet` when a prerequisite has no new cycle.
+- **`MinInterval`:** when the dependent is ready but its previous run finished less than the interval ago, a trigger is scheduled for the end of the interval. Only one is pending per dependent. When it fires, the dependent is triggered if it's still ready.
+- **No overlap:** a dependent that is running isn't triggered. When it finishes, whether it succeeded or failed, it's triggered again if it's already ready (respecting `MinInterval`).
+- **Manual run:** a job of a dependent that the plan didn't trigger, and that the scheduler didn't fire, is manual. It runs without the gate, and consumes the prerequisites' current cycles. The plan's own triggers are recognized by a marker in storage. Scheduler occurrences (`RunOnOwnSchedule` only) are recognized by Hangfire's enqueue reason "Triggered by recurring job scheduler", the only signal Hangfire records. If that text ever changes, manual runs in that mode are gated like occurrences, which is the safe side.
+Source: execution-plan/US-001
+
+Acceptance criteria:
+- AC-012.1: WHEN a dependent runs on its own schedule, THE SYSTEM SHALL register its cron, SHALL NOT trigger it from its prerequisites, and SHALL gate each occurrence. Tests: `RecurringRegistrationTests.Build_RegistersOwnScheduleDependentWithItsCron`, `PrerequisiteGateTests.DispatchRecurring_DoesNotTrigger_OwnScheduleDependent`, `OnStateElection_GatesSchedulerOccurrence_OfOwnScheduleDependent`
+- AC-012.2: WHEN a dependent runs on its own schedule without `[Recurring]`, THE SYSTEM SHALL throw at `Configure`. Test: `ExecutionPlanHangfireTests.Configure_Throws_WhenOwnScheduleDependentHasNoCron`
+- AC-012.3: WHEN a `MinInterval` dependent is ready before the interval has passed since its previous run finished, THE SYSTEM SHALL schedule one trigger for the end of the interval. When the interval has passed, THE SYSTEM SHALL trigger it now. Tests: `PrerequisiteGateTests.DispatchRecurring_SchedulesTrigger_WhenMinIntervalNotElapsed`, `DispatchRecurring_SchedulesOnlyOneTrigger_PerDependent`, `DispatchRecurring_TriggersNow_WhenMinIntervalElapsed`
+- AC-012.4: WHEN the scheduled trigger fires and the dependent is still ready, THE SYSTEM SHALL trigger it. Test: `PrerequisiteGateTests.TriggerPlanDependent_TriggersDependent_WhenStillReady`
+- AC-012.5: WHEN a dependent is running, THE SYSTEM SHALL NOT trigger it. When it finishes, with or without an exception, and it's ready, THE SYSTEM SHALL trigger it again. Tests: `PrerequisiteGateTests.DispatchRecurring_DoesNotTrigger_WhenDependentIsRunning`, `DispatchRecurring_RetriggersDependent_WhenItFinishesReady`
+- AC-012.6: WHEN a dependent's job is created by a manual trigger, THE SYSTEM SHALL enqueue it without the gate and consume the prerequisites' current cycles. Test: `PrerequisiteGateTests.OnStateElection_RunsManualTrigger_WithoutGate`
+
 ## Business rules
+- RN-007 (v1.3.0) Listing and counting jobs in `PrerequisitesNotMet` returns empty or 0 for now. A list or counter maintained by the state is planned for later. A single job in that state shows its reason in the dashboard history.
 - RN-001 [CONFIRMED] Schedules are evaluated in the resolved time zone (REQ-008). The default is UTC.
 - RN-002 [CONFIRMED] Without an explicit `Id`, renaming the class or changing its namespace changes the ID, creating a new job and orphaning the old one. `RemoveOrphanRecurringJobs` cleans it up.
 - RN-003 [CONFIRMED] A handler that doesn't auto-run causes no storage writes on schedule, because `Cron.Never()` never fires.

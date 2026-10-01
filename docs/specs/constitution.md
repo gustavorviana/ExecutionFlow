@@ -8,9 +8,9 @@ These are the non-negotiable principles for the project. A change that breaks on
 ## Architectural principles
 
 - **P-001: Dependency-free core.** The `ExecutionFlow` package references no NuGet packages. It holds only abstractions, options, and the handler registry. (`Src/ExecutionFlow/ExecutionFlow.csproj`; [ADR-0001](adr/ADR-0001-dependency-free-netstandard-core.md))
-- **P-002: netstandard2.0 for all shipped libraries**, so the packages work on both .NET Framework 4.6.1+ and modern .NET. Language and BCL features that aren't available on netstandard2.0 are not used in `Src/`. ([ADR-0001](adr/ADR-0001-dependency-free-netstandard-core.md))
+- **P-002: netstandard2.0 for all shipped libraries**, so the packages work on both .NET Framework 4.6.1+ and modern .NET. A package may add newer target frameworks when it needs newer BCL types (e.g. `TimeProvider`); that code sits behind `#if`, and the `netstandard2.0` build stays functional. ([ADR-0001](adr/ADR-0001-dependency-free-netstandard-core.md), [ADR-0008](adr/ADR-0008-local-hosting-provider.md))
 - **P-003: Hangfire is isolated behind the abstractions.** Only `ExecutionFlow.Hangfire*` packages reference Hangfire. Handler authors depend on `ExecutionFlow` types (`IHandler`, `FlowContext`, `IEventDispatcher`, `IExecutionManager`). ([ADR-0002](adr/ADR-0002-hangfire-as-execution-backend.md))
-- **P-004: Optional integrations are separate packages.** Console output (`ExecutionFlow.Hangfire.Console`) and Microsoft DI (`ExecutionFlow.Hangfire.DependencyInjection`) are opt-in. `ExecutionFlow.Hangfire` works without a DI container.
+- **P-004: Optional integrations are separate packages.** Console output (`ExecutionFlow.Hangfire.Console`), Microsoft DI (`ExecutionFlow.Hangfire.DependencyInjection`) and local execution (`ExecutionFlow.Hosting`) are opt-in. `ExecutionFlow.Hangfire` works without a DI container.
 - **P-005: Producer-only mode mutates no global state.** `BuildDispatcherOnly` / `AddExecutionFlowDispatcher` never touches `GlobalJobFilters`, `JobFilterProviders`, `JobActivator.Current`, or recurring jobs. ([ADR-0005](adr/ADR-0005-producer-only-mode.md))
 - **P-006: Minimal public surface.** Settings users shouldn't touch are `internal`. Tests reach them through `InternalsVisibleTo`, not by making them public.
 - **P-007: Dispatch doesn't block.** `Publish`/`Schedule` never wait on other publishes, except for a short, bounded lock around O(1) storage operations. That lock is taken only when deduplication is enabled and the event has a non-empty custom ID. ([custom-id-and-deduplication](custom-id-and-deduplication/spec.md))
@@ -40,7 +40,7 @@ These are the non-negotiable principles for the project. A change that breaks on
 
 ## Mandatory non-functional requirements
 
-- **NFR-001:** Every shipped library builds for `netstandard2.0`.
+- **NFR-001:** Every shipped library builds for `netstandard2.0` (and may multi-target, see P-002).
 - **NFR-002:** `ExecutionFlow.csproj` has zero `PackageReference` entries.
 - **NFR-003:** `dotnet build` and `dotnet test` pass on the .NET SDK version used in CI.
 - **NFR-004:** No public API is removed or changed incompatibly without a major version bump.

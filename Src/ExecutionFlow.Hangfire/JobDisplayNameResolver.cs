@@ -71,7 +71,23 @@ namespace ExecutionFlow.Hangfire
         protected string GetHandlerDisplayName(Job job)
         {
             var handler = HangfireJobInfo.Create(job)?.GetHandler(Registry);
-            return handler?.HandlerType == null ? null : GetExplicitDisplayName(handler);
+            if (handler?.HandlerType == null)
+                return null;
+
+            return GetPlanDisplayName(handler.HandlerType) ?? GetExplicitDisplayName(handler);
+        }
+
+        /// <summary>
+        /// The execution plan step's display name (<see cref="ExecutionPlanEntry.DisplayName(string)"/>), when the setup has a
+        /// plan with this handler and the name isn't just the class name.
+        /// </summary>
+        private string GetPlanDisplayName(Type handlerType)
+        {
+            var plan = (Registry as HangfireSetup)?.Options?.Plan;
+            if (plan == null || !plan.TryGet(handlerType, out var step))
+                return null;
+
+            return step.DisplayName != handlerType.Name ? step.DisplayName : null;
         }
 
         /// <summary>

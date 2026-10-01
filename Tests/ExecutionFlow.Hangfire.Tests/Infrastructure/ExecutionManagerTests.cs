@@ -767,6 +767,15 @@ public class ExecutionManagerTests
     }
 
     [Fact]
+    public void GetJobsAndCount_ReturnEmpty_ForPrerequisitesNotMet()
+    {
+        _monitoringApi.GetStatistics().Returns(CreateStats());
+
+        Assert.Empty(_manager.GetJobs(JobState.PrerequisitesNotMet));
+        Assert.Equal(0, _manager.CountJobs(JobState.PrerequisitesNotMet));
+    }
+
+    [Fact]
     public void CountJobs_ReturnsZero_WhenNoJobs()
     {
         _monitoringApi.GetStatistics().Returns(CreateStats());

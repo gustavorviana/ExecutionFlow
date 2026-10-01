@@ -6,6 +6,7 @@ using Hangfire.Common;
 using Hangfire.Storage;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -30,6 +31,7 @@ namespace ExecutionFlow.Hangfire
         private HangfireStateFilter _stateFilter;
         private DeduplicationCleanupFilter _cleanupFilter;
         private HandlerJobFilterProvider _filterProvider;
+        private PrerequisiteGateFilter _gateFilter;
 
         /// <summary>
         /// Gets the execution manager bound to this setup's storage, available after <see cref="Build"/> or
@@ -67,7 +69,15 @@ namespace ExecutionFlow.Hangfire
 
             foreach (var registration in RecurringHandlers.Values)
             {
-                if (string.IsNullOrWhiteSpace(registration.Cron))
+                // A dependent triggered by its prerequisites needs no schedule and ignores one it has (RunOnOwnSchedule keeps it).
+                if (IsTriggeredByPlan(registration.HandlerType))
+                {
+                    if (!string.IsNullOrWhiteSpace(registration.Cron))
+                        Trace.TraceWarning(
+                            "ExecutionFlow: '{0}' depends on other handlers in the execution plan, so its prerequisites trigger it and its cron '{1}' is ignored.",
+                            registration.HandlerType.FullName, registration.Cron);
+                }
+                else if (string.IsNullOrWhiteSpace(registration.Cron))
                     throw new InvalidOperationException(
                         $"Recurring handler '{registration.HandlerType.FullName}' has no schedule. Add [Recurring(\"<cron>\")] to the class.");
 
@@ -213,6 +223,13 @@ namespace ExecutionFlow.Hangfire
                 _filterProvider = new HandlerJobFilterProvider(this, Options);
 
                 GlobalJobFilters.Filters.Add(_stateFilter, HangfireStateFilter.FilterOrder);
+
+                if (Options.Plan != null)
+                {
+                    _gateFilter = new PrerequisiteGateFilter(this);
+                    GlobalJobFilters.Filters.Add(_gateFilter, PrerequisiteGateFilter.FilterOrder);
+                }
+
                 GlobalJobFilters.Filters.Add(_cleanupFilter);
                 JobFilterProviders.Providers.Add(_filterProvider);
 
@@ -228,6 +245,40 @@ namespace ExecutionFlow.Hangfire
                 GlobalJobFilters.Filters.Remove(_cleanupFilter);
             if (_filterProvider != null)
                 JobFilterProviders.Providers.Remove(_filterProvider);
+            if (_gateFilter != null)
+                GlobalJobFilters.Filters.Remove(_gateFilter);
+        }
+
+        /// <summary>
+        /// Whether the handler is a dependent in the execution plan that its prerequisites trigger: it has prerequisites and
+        /// doesn't run on its own schedule.
+        /// </summary>
+        internal bool IsTriggeredByPlan(Type handlerType)
+        {
+            return Options.Plan != null && Options.Plan.TryGet(handlerType, out var step)
+                && step.Prerequisites.Count > 0 && !step.RunsOnOwnSchedule;
+        }
+
+        /// <summary>Triggers a recurring job now. Replaceable in tests, where there's no real storage behind the job manager.</summary>
+        internal Action<JobStorage, string> TriggerRecurringJob { get; set; } =
+            (storage, jobId) => new RecurringJobManager(storage).TriggerJob(jobId);
+
+        /// <summary>
+        /// Schedules a trigger of a dependent after a delay (its minimum interval). Replaceable in tests.
+        /// </summary>
+        internal Action<JobStorage, string, TimeSpan> ScheduleDependentTrigger { get; set; } =
+            (storage, dependentId, delay) => new BackgroundJobClient(storage)
+                .Schedule<HangfireJobDispatcher>(d => d.TriggerPlanDependent(null, dependentId), delay);
+
+        /// <summary>The current UTC time, for minimum intervals. Replaceable in tests.</summary>
+        internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
+
+        /// <summary>The recurring job ID of a registered handler, or its full name when it isn't registered.</summary>
+        internal string ResolveRecurringJobId(Type handlerType)
+        {
+            return RecurringHandlers.TryGetValue(handlerType, out var registration) && JobIdGenerator != null
+                ? RecurringJobResolver.ResolveId(registration, JobIdGenerator)
+                : handlerType.FullName;
         }
 
         private void ThrowIfBuilt()
@@ -277,7 +328,10 @@ namespace ExecutionFlow.Hangfire
                 registeredIds.Add(jobId, registration.HandlerType);
 
                 // A handler that doesn't auto-run never fires on its own; it still runs through Trigger.
-                var cron = RecurringJobResolver.IsAutoRun(registration.HandlerType, Options) ? registration.Cron : Cron.Never();
+                // A dependent triggered by its prerequisites never fires on schedule.
+                var cron = RecurringJobResolver.IsAutoRun(registration.HandlerType, Options) && !IsTriggeredByPlan(registration.HandlerType)
+                    ? registration.Cron
+                    : Cron.Never();
 
                 recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(
                     jobId,

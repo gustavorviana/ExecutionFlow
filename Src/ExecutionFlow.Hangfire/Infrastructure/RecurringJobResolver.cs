@@ -30,7 +30,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return timeZoneId == null ? TimeZoneInfo.Utc : TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         }
 
-        /// <summary>Per-handler option &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.</summary>
+        /// <summary>Per-handler option (also set by <see cref="HangfireOptions.UsePlan"/>) &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.</summary>
         public static bool IsAutoRun(Type handlerType, HangfireOptions options)
         {
             return options.RecurringAutoRun.TryGetValue(handlerType, out var autoRun)
