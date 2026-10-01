@@ -11,6 +11,7 @@ namespace ExecutionFlow.Examples.Handlers
         {
             options.ConfigureConsole();
             options.RemoveOrphanRecurringJobs = true;
+            options.SetJobIdGeneratorType<ExampleJobIdGenerator>();
             options.Scan(typeof(IHandlerMark).Assembly);
             options.SetJobAutoRun<AutoRunDisabledHandler>(false);
 
