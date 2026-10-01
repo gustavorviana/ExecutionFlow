@@ -92,6 +92,19 @@ public class ExecutionPlanHangfireTests
     }
 
     [Fact]
+    public void GetName_NamesPostponedTrigger_AfterDependent()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(o => o.UsePlan(CreatePlan()));
+        var idGenerator = new DefaultRecurringServiceIdGenerator();
+        var job = global::Hangfire.Common.Job.FromExpression<HangfireJobDispatcher>(
+            d => d.TriggerPlanDependent(null!, typeof(BrandHandler).FullName!));
+
+        Assert.Equal("Brands (postponed trigger)", new JobDisplayNameResolver(idGenerator, setup).GetName(job));
+        Assert.Equal("Brands (postponed trigger)", new DefaultHangfireJobName(idGenerator, setup).GetName(job));
+    }
+
+    [Fact]
     public void Configure_Accepts_DependentWithoutRecurringAttribute()
     {
         var planner = new ExecutionPlanner();

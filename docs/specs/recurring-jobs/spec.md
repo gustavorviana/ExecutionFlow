@@ -151,6 +151,7 @@ Acceptance criteria:
 - AC-012.4: WHEN the scheduled trigger fires and the dependent is still ready, THE SYSTEM SHALL trigger it. Test: `PrerequisiteGateTests.TriggerPlanDependent_TriggersDependent_WhenStillReady`
 - AC-012.5: WHEN a dependent is running, THE SYSTEM SHALL NOT trigger it. When it finishes, with or without an exception, and it's ready, THE SYSTEM SHALL trigger it again. Tests: `PrerequisiteGateTests.DispatchRecurring_DoesNotTrigger_WhenDependentIsRunning`, `DispatchRecurring_RetriggersDependent_WhenItFinishesReady`
 - AC-012.6: WHEN a dependent's job is created by a manual trigger, THE SYSTEM SHALL enqueue it without the gate and consume the prerequisites' current cycles. Test: `PrerequisiteGateTests.OnStateElection_RunsManualTrigger_WithoutGate`
+- AC-012.7: WHEN the dashboard names a trigger postponed by `MinInterval`, THE SYSTEM SHALL use the dependent's display name followed by "(postponed trigger)", instead of the dispatcher type. Test: `ExecutionPlanHangfireTests.GetName_NamesPostponedTrigger_AfterDependent`
 
 ## Business rules
 - RN-007 (v1.3.0) Listing and counting jobs in `PrerequisitesNotMet` returns empty or 0 for now. A list or counter maintained by the state is planned for later. A single job in that state shows its reason in the dashboard history.
