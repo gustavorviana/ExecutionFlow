@@ -127,11 +127,13 @@ From [010-execution-plan](../010-execution-plan/spec.md) User Stories 1 and 3: d
 ### Functional Requirements
 
 - **FR-001 Declare a recurring handler**: a class that implements `IHandler` (not `IHandler<TEvent>`) is a recurring handler. `[Recurring("cron")]` sets its schedule, and `[DisplayName]` sets its name. *(Story 1)*
+  - *Amended by [012-interval-and-overlap](../012-interval-and-overlap/spec.md) FR-001: a schedule can also be an interval.*
   - **AC-001.1**: **Given** a class implementing `IHandler`, **When** it is added or scanned, **Then** it is registered as a recurring handler, with the cron, `Id` and `TimeZone` from `[Recurring]` and the display name from `[DisplayName]` (defaulting to the class name). Tests: `ExecutionFlowOptionsTests.Add_RecurringHandler_Populates_RecurringHandlers`, `HangfireSetupTests.Configure_Registers_RecurringHandler`, `RecurringValidationTests.Add_CopiesIdAndTimeZoneFromAttribute_ToRegistry`
   - **AC-001.2**: **Given** a class that implements both `IHandler` and `IHandler<TEvent>`, **When** it is registered, **Then** `InvalidOperationException` is thrown. Test: `ValidationTests.Add_Throws_WhenTypeImplementsBothIHandlerAndGenericIHandler`
   - **AC-001.3**: **Given** a recurring handler with no `[Recurring]` (or an empty cron), **When** `Configure` runs, **Then** `InvalidOperationException` is thrown, naming the handler and saying `[Recurring]` is required. Test: `RecurringValidationTests.Configure_Throws_WhenRecurringHandlerHasNoCron`
 
 - **FR-002 Registration with Hangfire**: on `Build()`, each recurring handler is added or updated with `RecurringJobManager.AddOrUpdate`, using its resolved ID (FR-007), its cron (or `Cron.Never()`, see FR-003), and its resolved time zone (FR-008). *(Story 1)*
+  - *Amended by [012-interval-and-overlap](../012-interval-and-overlap/spec.md) FR-002: an interval is registered as an exact cron or as a ticker.*
   - **AC-002.1**: **Given** registered recurring handlers, **When** `Build()` runs, **Then** one Hangfire recurring job is added or updated per handler. Test: `RecurringRegistrationTests.Build_UsesFullNameAsId_WhenNoExplicitId`
   - **AC-002.2**: **Given** a producer-only setup, **When** `BuildDispatcherOnly()` runs, **Then** no recurring jobs are registered (constitution IV, was P-005). Test: `ServiceCollectionExtensionsTests.DispatcherOnly_DoesNotRegister_IRecurringTrigger` (indirect)
 
@@ -164,6 +166,7 @@ From [010-execution-plan](../010-execution-plan/spec.md) User Stories 1 and 3: d
   - **AC-008.3**: **Given** `SetJobTimeZone` referencing a type that isn't a registered recurring handler, **When** `Configure` runs, **Then** it throws. Test: `RecurringValidationTests.Configure_Throws_WhenSetJobTimeZoneReferencesUnregisteredHandler`
 
 - **FR-009 Execution plan in Hangfire (v1.3.0)**: `HangfireOptions.UsePlan(ExecutionPlan)` registers every handler of an [execution plan](../010-execution-plan/spec.md) as a recurring handler right away, as `Add` does. A step's `Enabled` becomes that handler's auto-run (FR-003). A handler that isn't in the plan behaves as before. Source: 010-execution-plan User Stories 1 and 3. *(Story 7)*
+  - *Amended by [012-interval-and-overlap](../012-interval-and-overlap/spec.md) FR-004: `UsePlan` moves to `ExecutionFlowOptions`, same signature and Hangfire behavior.*
   - **AC-009.1**: **Given** a plan, **When** `UsePlan` is called, **Then** every step's handler is registered as a recurring handler, even when it wasn't scanned. Test: `ExecutionPlanHangfireTests.UsePlan_RegistersPlanHandlers`
   - **AC-009.2**: **Given** a disabled step, **When** `UsePlan` is called, **Then** it is treated as `SetJobAutoRun(false)`; an enabled step auto-runs, whatever `GlobalRecurringAutoRun` says. Test: `ExecutionPlanHangfireTests.UsePlan_SetsAutoRunFromStepEnabled`
   - **AC-009.3**: **Given** a handler in the plan that also gets `SetJobAutoRun`, before or after `UsePlan`, **When** it is configured, **Then** `InvalidOperationException` is thrown. Tests: `ExecutionPlanHangfireTests.UsePlan_Throws_WhenHandlerAlreadyHasSetJobAutoRun`, `ExecutionPlanHangfireTests.SetJobAutoRun_Throws_WhenHandlerIsInPlan`
@@ -208,6 +211,7 @@ From [010-execution-plan](../010-execution-plan/spec.md) User Stories 1 and 3: d
 - **RN-002** [CONFIRMED]: Without an explicit `Id`, renaming the class or changing its namespace changes the ID, creating a new job and orphaning the old one. `RemoveOrphanRecurringJobs` cleans it up.
 - **RN-003** [CONFIRMED]: A handler that doesn't auto-run causes no storage writes on schedule, because `Cron.Never()` never fires.
 - **RN-004** [CONFIRMED]: Hangfire doesn't prevent overlapping runs. `[DisableConcurrentExecution]` on the handler prevents them, and this is documented in the README.
+  - *Amended by [012-interval-and-overlap](../012-interval-and-overlap/spec.md) FR-003: overlap can be turned off with the core attribute or the plan entry.*
 - **RN-005** [CONFIRMED]: Auto-run is decided at registration and applies to the whole storage. Choosing the processing server is done with Hangfire queues (`[Queue]` on the handler), which the README documents.
 - **RN-006** [CONFIRMED]: Queues for recurring jobs can only be set with Hangfire's `[Queue]` attribute on the handler.
 

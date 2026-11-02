@@ -78,6 +78,7 @@ As a provider, I want the steps in an order where every prerequisite comes first
 ### Functional Requirements
 
 - **FR-001 Declare handlers**: `ExecutionPlanner.Add<THandler>()` declares a recurring handler and returns an `ExecutionPlanEntry` for configuring it. *(Story 1)*
+  - *Amended by [012-interval-and-overlap](../012-interval-and-overlap/spec.md) FR-003: an entry can turn overlap off; the entry wins over the attribute.*
   - **AC-001.1**: **Given** a handler already added, **When** it is added again, **Then** `InvalidOperationException` is thrown naming the handler. Test: `ExecutionPlannerTests.Add_Throws_WhenHandlerAddedTwice`
   - **AC-001.2**: **Given** a built planner, **When** it is modified, **Then** `InvalidOperationException` is thrown. Test: `ExecutionPlannerTests.Add_Throws_AfterBuild`
 
