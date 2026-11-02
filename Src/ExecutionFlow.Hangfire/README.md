@@ -15,6 +15,7 @@ dotnet add package ExecutionFlow.Hangfire
 - Custom job IDs and display names
 - Deduplication (skip or replace existing jobs)
 - Recurring job management
+- Interval schedules (`[RecurringInterval]`; prefer `[Recurring]` with a cron on Hangfire) and `[NoOverlap]`
 - Lifecycle hooks
 - Hangfire native attribute propagation
 

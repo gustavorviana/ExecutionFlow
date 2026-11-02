@@ -297,6 +297,21 @@ public class ExecutionPlannerTests
         Assert.False(plan.TryGet(typeof(HandlerA), out _));
     }
 
+    // --- 012-interval-and-overlap FR-003: overlap control on the entry ---
+
+    [Fact]
+    public void Build_PrefersEntryOverlap_OverAttribute()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<NoOverlapAttributeHandler>().NoOverlap(TimeSpan.FromMinutes(2));
+        planner.Add<HandlerA>().NoOverlap(TimeSpan.FromMinutes(3));
+
+        var plan = planner.Build();
+
+        Assert.Equal(TimeSpan.FromMinutes(2), plan.Get<NoOverlapAttributeHandler>().OverlapTimeout);
+        Assert.Equal(TimeSpan.FromMinutes(3), plan.Get<HandlerA>().OverlapTimeout);
+    }
+
     private abstract class TestHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -312,6 +327,9 @@ public class ExecutionPlannerTests
 
     [DependsOn(typeof(SelfDependentHandler))]
     private class SelfDependentHandler : TestHandler { }
+
+    [NoOverlap(600)]
+    private class NoOverlapAttributeHandler : TestHandler { }
 
     [DisplayName("From attribute")]
     private class NamedHandler : TestHandler { }

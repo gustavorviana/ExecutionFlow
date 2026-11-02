@@ -32,6 +32,8 @@ namespace ExecutionFlow.Hangfire
         private DeduplicationCleanupFilter _cleanupFilter;
         private HandlerJobFilterProvider _filterProvider;
         private PrerequisiteGateFilter _gateFilter;
+        private IntervalTickerFilter _tickerFilter;
+        private NoOverlapFilter _overlapFilter;
 
         /// <summary>
         /// Gets the execution manager bound to this setup's storage, available after <see cref="Build"/> or
@@ -70,16 +72,26 @@ namespace ExecutionFlow.Hangfire
             foreach (var registration in RecurringHandlers.Values)
             {
                 // A dependent triggered by its prerequisites needs no schedule and ignores one it has (RunOnOwnSchedule keeps it).
+                var hasSchedule = !string.IsNullOrWhiteSpace(registration.Cron) || registration.Interval.HasValue;
                 if (IsTriggeredByPlan(registration.HandlerType))
                 {
-                    if (!string.IsNullOrWhiteSpace(registration.Cron))
+                    if (hasSchedule)
                         Trace.TraceWarning(
-                            "ExecutionFlow: '{0}' depends on other handlers in the execution plan, so its prerequisites trigger it and its cron '{1}' is ignored.",
-                            registration.HandlerType.FullName, registration.Cron);
+                            "ExecutionFlow: '{0}' depends on other handlers in the execution plan, so its prerequisites trigger it and its schedule '{1}' is ignored.",
+                            registration.HandlerType.FullName, registration.Cron ?? registration.Interval.ToString());
                 }
-                else if (string.IsNullOrWhiteSpace(registration.Cron))
+                else if (!hasSchedule)
                     throw new InvalidOperationException(
-                        $"Recurring handler '{registration.HandlerType.FullName}' has no schedule. Add [Recurring(\"<cron>\")] to the class.");
+                        $"Recurring handler '{registration.HandlerType.FullName}' has no schedule. Add [Recurring(\"<cron>\")] or [RecurringInterval(\"hh:mm:ss\")] to the class.");
+
+                // An interval has no time zone: a time zone set for this handler has no effect (the global one is ignored quietly).
+                if (registration.Interval.HasValue && options.RecurringTimeZones.TryGetValue(registration.HandlerType, out var ignoredTimeZone))
+                {
+                    ValidateTimeZone(ignoredTimeZone, registration.HandlerType.FullName);
+                    Trace.TraceWarning(
+                        "ExecutionFlow: '{0}' runs on an interval, which has no time zone, so its time zone '{1}' is ignored.",
+                        registration.HandlerType.FullName, ignoredTimeZone);
+                }
 
                 ValidateTimeZone(RecurringJobResolver.ResolveTimeZoneId(registration, options), registration.HandlerType.FullName);
             }
@@ -230,6 +242,18 @@ namespace ExecutionFlow.Hangfire
                     GlobalJobFilters.Filters.Add(_gateFilter, PrerequisiteGateFilter.FilterOrder);
                 }
 
+                if (RecurringHandlers.Values.Any(r => r.Interval.HasValue && !IntervalCron.TryGetExactCron(r.Interval.Value, out _)))
+                {
+                    _tickerFilter = new IntervalTickerFilter(this);
+                    GlobalJobFilters.Filters.Add(_tickerFilter);
+                }
+
+                if (RecurringHandlers.Keys.Any(t => ResolveOverlapTimeout(t).HasValue))
+                {
+                    _overlapFilter = new NoOverlapFilter(this);
+                    GlobalJobFilters.Filters.Add(_overlapFilter);
+                }
+
                 GlobalJobFilters.Filters.Add(_cleanupFilter);
                 JobFilterProviders.Providers.Add(_filterProvider);
 
@@ -247,6 +271,10 @@ namespace ExecutionFlow.Hangfire
                 JobFilterProviders.Providers.Remove(_filterProvider);
             if (_gateFilter != null)
                 GlobalJobFilters.Filters.Remove(_gateFilter);
+            if (_tickerFilter != null)
+                GlobalJobFilters.Filters.Remove(_tickerFilter);
+            if (_overlapFilter != null)
+                GlobalJobFilters.Filters.Remove(_overlapFilter);
         }
 
         /// <summary>
@@ -272,6 +300,18 @@ namespace ExecutionFlow.Hangfire
 
         /// <summary>The current UTC time, for minimum intervals. Replaceable in tests.</summary>
         internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
+
+        /// <summary>
+        /// How long a run of the handler waits for a running one, or <c>null</c> when runs may overlap: the plan's step,
+        /// else <see cref="Attributes.NoOverlapAttribute"/>.
+        /// </summary>
+        internal TimeSpan? ResolveOverlapTimeout(Type handlerType)
+        {
+            if (Options.Plan != null && Options.Plan.TryGet(handlerType, out var step))
+                return step.OverlapTimeout;
+
+            return RecurringHandlers.TryGetValue(handlerType, out var registration) ? registration.OverlapTimeout : null;
+        }
 
         /// <summary>The recurring job ID of a registered handler, or its full name when it isn't registered.</summary>
         internal string ResolveRecurringJobId(Type handlerType)
@@ -330,7 +370,7 @@ namespace ExecutionFlow.Hangfire
                 // A handler that doesn't auto-run never fires on its own; it still runs through Trigger.
                 // A dependent triggered by its prerequisites never fires on schedule.
                 var cron = RecurringJobResolver.IsAutoRun(registration.HandlerType, Options) && !IsTriggeredByPlan(registration.HandlerType)
-                    ? registration.Cron
+                    ? RecurringJobResolver.ResolveCron(registration)
                     : Cron.Never();
 
                 recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(

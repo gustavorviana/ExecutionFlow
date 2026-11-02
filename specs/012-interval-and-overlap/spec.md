@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-02
 
-**Status**: Draft
+**Status**: Implemented (v1.3.0, unreleased)
 
 **Input**: Decisions taken with the maintainer on 2026-11-02 while resolving the `/speckit-analyze` findings of [011-local-hosting](../011-local-hosting/spec.md) (I1, I2, U1, U2).
 
@@ -24,6 +24,13 @@ Two execution providers (Hangfire, and the local host of [011](../011-local-host
 
 This feature puts the declarations in the core (constitution principle I: the core declares, providers execute) and specifies how Hangfire implements them. The local host implements them in 011.
 
+## Clarifications
+
+### Session 2026-11-02
+
+- Q: In the ticker, does a manual trigger count as the last run? → A: Yes. The next automatic run is one interval after the manual run, which keeps the minimum time between runs (maintainer, 2026-11-02).
+- Q: A time zone set for an interval handler (`SetJobTimeZone<T>`)? → A: Ignored with a trace warning; an unknown one still throws; the global `RecurringTimeZone` is ignored silently (maintainer, 2026-11-02).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Run a handler every N minutes (Priority: P1)
@@ -34,7 +41,7 @@ As a handler author, I want to declare that a recurring handler runs every N min
 
 **Independent Test**: declare an interval of 15 min and of 90 min, build Hangfire, and check the registered recurring job and the ticker behavior.
 
-**Acceptance Scenarios**: AC-001.1..AC-001.5, AC-002.1..AC-002.5.
+**Acceptance Scenarios**: AC-001.1..AC-001.5, AC-002.1..AC-002.6.
 
 ---
 
@@ -73,21 +80,22 @@ As a consumer app, I want to register the execution plan on the core options, so
 - **FR-001 Interval schedule declaration (core)**: a recurring handler declares either a cron expression (`[Recurring("cron")]`) or an interval with the new attribute `[RecurringInterval("hh:mm:ss")]`, never both. The interval is a `TimeSpan` string (invariant format, e.g. `"00:15:00"`, `"10:00:00"`, `"1.00:00:00"`) and must be at least 1 minute, for every provider. An interval has no time zone: it means "every N of time", not a time of day, and is always evaluated in UTC. `[RecurringInterval]` has an `Id` property with the same rule as `[Recurring]` (005 FR-007: explicit `Id`, otherwise `IJobIdGenerator`). *(Story 1)*
   - **AC-001.1**: **Given** a handler with both a cron and an interval, **When** the options are configured, **Then** it throws naming the handler. Test: `IntervalScheduleTests.Configure_Throws_WhenCronAndIntervalAreBothSet`
   - **AC-001.2**: **Given** a handler with an interval below 1 minute, **When** the options are configured, **Then** it throws naming the handler. Test: `IntervalScheduleTests.Configure_Throws_WhenIntervalBelowOneMinute`
-  - **AC-001.5**: **Given** `[RecurringInterval("00:15:00", Id = "price-sync")]`, **When** the recurring ID is resolved, **Then** it is `price-sync`; without `Id`, it comes from `IJobIdGenerator`. Test: `IntervalScheduleTests.Registry_ResolvesId_LikeRecurring`
-  - **AC-001.4**: **Given** an interval string that isn't a valid `TimeSpan`, **When** the options are configured, **Then** it throws naming the handler and the value. Test: `IntervalScheduleTests.Configure_Throws_WhenIntervalIsInvalid`
   - **AC-001.3**: **Given** a handler with an interval, **When** the registry is read, **Then** the registration exposes the interval and no cron. Test: `IntervalScheduleTests.Registry_ExposesInterval`
+  - **AC-001.4**: **Given** an interval string that isn't a valid `TimeSpan`, **When** the options are configured, **Then** it throws naming the handler and the value. Test: `IntervalScheduleTests.Configure_Throws_WhenIntervalIsInvalid`
+  - **AC-001.5**: **Given** `[RecurringInterval("00:15:00", Id = "price-sync")]`, **When** the recurring ID is resolved, **Then** it is `price-sync`; without `Id`, it comes from `IJobIdGenerator`. Test: `IntervalScheduleTests.Registry_ResolvesId_LikeRecurring`
 
-- **FR-002 Interval schedules in Hangfire**: an interval with an exact single-cron equivalent (it divides an hour evenly when below one hour, or divides a day evenly in whole hours) is registered as that cron, in UTC. Any other interval is registered as a "ticker": a recurring job with the cron `* * * * *`, whose occurrences are cancelled at creation (no job is created, nothing appears in the dashboard) until the interval has elapsed since the last run, which is kept in the job storage. The ticker counts from the start of the last run, and this isn't configurable in Hangfire (the "count from the end" option exists only in the local host, 011 FR-003). Manual triggers (005 FR-004) always run. *(Story 1)*
+- **FR-002 Interval schedules in Hangfire**: an interval with an exact single-cron equivalent (it divides an hour evenly when below one hour, or divides a day evenly in whole hours) is registered as that cron, in UTC. Any other interval is registered as a "ticker": a recurring job with the cron `* * * * *`, whose occurrences are cancelled at creation (no job is created, nothing appears in the dashboard) until the interval has elapsed since the last run, which is kept in the job storage. The ticker counts from the start of the last run, and this isn't configurable in Hangfire (the "count from the end" option exists only in the local host, 011 FR-003). Manual triggers (005 FR-004) always run, and count as the last run, so the next automatic run is one interval after the manual one (see Clarifications). *(Story 1)*
   - **AC-002.1**: **Given** an interval of 15 min, **When** Hangfire is built, **Then** the recurring job is registered with `*/15 * * * *`. Test: `IntervalRegistrationTests.Build_RegistersExactCron_WhenIntervalDividesTheHour`
   - **AC-002.2**: **Given** an interval of 6 h, **When** Hangfire is built, **Then** the recurring job is registered with `0 */6 * * *`. Test: `IntervalRegistrationTests.Build_RegistersExactCron_WhenIntervalDividesTheDay`
   - **AC-002.3**: **Given** an interval of 90 min, **When** Hangfire is built, **Then** the recurring job is registered with `* * * * *` as a ticker. Test: `IntervalRegistrationTests.Build_RegistersTicker_WhenNoExactCronExists`
   - **AC-002.4**: **Given** a ticker whose interval hasn't elapsed, **When** an occurrence is about to be created, **Then** it is cancelled and no job is stored; **Given** the interval has elapsed, **Then** the job is created and the last-run time is updated. Tests: `IntervalTickerTests.OnCreating_Cancels_WhenIntervalNotElapsed`, `IntervalTickerTests.OnCreating_Creates_WhenIntervalElapsed`
   - **AC-002.5**: **Given** a ticker handler, **When** it is triggered manually, **Then** it runs even if the interval hasn't elapsed. Test: `IntervalTickerTests.Trigger_Runs_WhenIntervalNotElapsed`
+  - **AC-002.6**: **Given** an interval handler with `SetJobTimeZone<T>`, **When** the options are configured, **Then** a trace warning names the handler and the ignored time zone; an unknown time zone still throws; the global `RecurringTimeZone` is ignored without a warning (maintainer, 2026-11-02). Tests: `IntervalRegistrationTests.Configure_Warns_WhenIntervalHandlerHasSetJobTimeZone`, `IntervalRegistrationTests.Configure_Throws_WhenIntervalHandlerHasUnknownSetJobTimeZone`, `IntervalRegistrationTests.Configure_DoesNotWarn_ForGlobalTimeZoneOnIntervalHandler`
 
 - **FR-003 Overlap control (core)**: a new core attribute turns off overlapping runs of a recurring handler, with a **mandatory** timeout. The plan entry can set the same option fluently, and the plan wins over the attribute (same precedence as the display name, 010 FR-003). Without either, overlapping runs are allowed (current Hangfire behavior, 005 RN-004). Dependents of the plan never overlap regardless (005 FR-012). When overlap is off, a run that starts while another run of the same handler is in progress **waits** for it; if the timeout expires first, the waiting run fails. The attribute is `[NoOverlap(timeoutSeconds: n)]` and the entry method is `ExecutionPlanEntry.NoOverlap(TimeSpan timeout)`. *(Story 2)*
   - **AC-003.1**: **Given** the attribute without a positive timeout, **When** the options are configured, **Then** it throws. Test: `OverlapOptionTests.Configure_Throws_WhenTimeoutIsNotPositive`
   - **AC-003.2**: **Given** the attribute on the handler and a different value on the plan entry, **When** the plan is built, **Then** the step exposes the plan's value. Test: `ExecutionPlannerTests.Build_PrefersEntryOverlap_OverAttribute`
-  - **AC-003.3**: **Given** a Hangfire handler with overlap off and a run in progress, **When** a second run starts, **Then** it waits until the first ends and then runs. Test: `OverlapFilterTests.Perform_Waits_WhenRunInProgress`
+  - **AC-003.3**: **Given** a Hangfire handler with overlap off and a run in progress, **When** a second run starts, **Then** it acquires a distributed lock per recurring job with the timeout and holds it until the run ends, so the second run waits for the first (the wait itself is the storage lock's behavior, as with Hangfire's `[DisableConcurrentExecution]`). Test: `OverlapFilterTests.Perform_Waits_WhenRunInProgress`
   - **AC-003.4**: **Given** a Hangfire handler with overlap off and a run that outlasts the timeout, **When** a second run waits, **Then** the second run fails (and follows the retry rules of 005 FR-005). Test: `OverlapFilterTests.Perform_Fails_WhenTimeoutExpires`
   - **AC-003.5**: **Given** a handler without the attribute or option, **When** two runs start, **Then** they run concurrently in Hangfire. Test: `OverlapFilterTests.Perform_AllowsOverlap_ByDefault`
 
@@ -112,7 +120,7 @@ As a consumer app, I want to register the execution plan on the core options, so
 ### Measurable Outcomes
 
 - **SC-001**: Existing Hangfire code that calls `HangfireOptions.UsePlan` compiles and passes its tests without changes (`ExecutionPlanHangfireTests`).
-- **SC-002**: A ticker occurrence that doesn't run creates no Hangfire job (`IntervalTickerTests.OnCreating_Cancels_WhenIntervalNotElapsed` asserts the job count is unchanged).
+- **SC-002**: A ticker occurrence that doesn't run is cancelled at creation, so Hangfire creates no job, and its last-run time isn't moved (`IntervalTickerTests.OnCreating_Cancels_WhenIntervalNotElapsed` asserts `Canceled` and the unchanged timestamp).
 
 ## Assumptions
 

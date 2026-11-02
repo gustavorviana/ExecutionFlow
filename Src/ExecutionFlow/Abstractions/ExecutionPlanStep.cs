@@ -43,9 +43,16 @@ namespace ExecutionFlow.Abstractions
         /// </summary>
         public bool RunsOnOwnSchedule { get; }
 
+        /// <summary>
+        /// Gets how long a run waits for a running one before it fails, or <c>null</c> when runs may overlap:
+        /// <see cref="ExecutionPlanEntry.NoOverlap(TimeSpan)"/>, else <see cref="Attributes.NoOverlapAttribute"/>.
+        /// </summary>
+        public TimeSpan? OverlapTimeout { get; }
+
         internal ExecutionPlanStep(Type handlerType, string displayName, string skipReason, IReadOnlyList<Type> prerequisites, IReadOnlyList<Type> dependents,
-            TimeSpan? minInterval, bool runsOnOwnSchedule)
+            TimeSpan? minInterval, bool runsOnOwnSchedule, TimeSpan? overlapTimeout)
         {
+            OverlapTimeout = overlapTimeout;
             MinInterval = minInterval;
             RunsOnOwnSchedule = runsOnOwnSchedule;
             HandlerType = handlerType;

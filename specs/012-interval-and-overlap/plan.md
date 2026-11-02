@@ -32,7 +32,7 @@ Three declarations move to (or are added in) the core: interval schedules (`[Rec
 
 - I. Dependency-free core: ✅ attributes, options and plan entry only; no execution logic in the core.
 - II. Processors isolated: ✅ the cron conversion, ticker and lock live in `ExecutionFlow.Hangfire`.
-- V. Minimal public surface: ⚠️ new public attributes and `ExecutionFlowOptions.UsePlan`; `HangfireOptions.UsePlan` keeps compiling (inherited). New public API → minor version (v1.3.0).
+- V. Minimal public surface: ⚠️ new public API, all additive: `RecurringIntervalAttribute`, `NoOverlapAttribute`, `ExecutionFlowOptions.UsePlan`, `ExecutionFlowOptions.Plan` (getter), `ExecutionFlowOptions.OnPlanRegistering` (protected), `RecurringJobRegistryInfo.Interval`/`OverlapTimeout` and its new constructor, `ExecutionPlanEntry.NoOverlap`/`ConfiguredOverlapTimeout`, `ExecutionPlanStep.OverlapTimeout`; `HangfireOptions.UsePlan` keeps compiling (inherited). New public API → minor version (v1.3.0).
 - VI. Dispatch doesn't block: ✅ the ticker gate runs on recurring-job creation, not on `Publish`/`Schedule`.
 - VII. Tested, traceable behavior: ✅ every AC names a test.
 
@@ -72,7 +72,7 @@ Tests/ExecutionFlow.Hangfire.Tests/…/IntervalRegistrationTests.cs, IntervalTic
 - **`IntervalCron.TryGetExactCron(TimeSpan, out string)`**: `n` minutes with `60 % n == 0` → `*/n * * * *` (`n = 1` → `* * * * *`); `h` whole hours with `24 % h == 0` → `0 */h * * *` (`h = 24` → `0 0 * * *`); otherwise `false`. Always registered in UTC.
 - **Ticker**: registered with `* * * * *`. `IntervalTickerFilter : IClientFilter` runs `OnCreating` only for ticker jobs created by the recurring scheduler (manual triggers are recognized the same way the plan recognizes them, 005 FR-012). Under a distributed lock it reads `executionflow:interval:lastrun` (hash, one field per recurring ID); if `now - lastRun < interval` it sets `context.Canceled = true`; otherwise it writes `now` and lets the job be created. Start-based counting: the timestamp is the creation time.
 - **`[NoOverlap(timeoutSeconds)]` / `entry.NoOverlap(TimeSpan)`**: the step exposes `OverlapTimeout` (plan value wins over the attribute). `NoOverlapFilter : IServerFilter` acquires `executionflow:overlap:<recurring id>` with the timeout in `OnPerforming` and releases it in `OnPerformed`; a timeout throws `DistributedLockTimeoutException`, so the job fails and follows 005 FR-005.
-- **`ExecutionFlowOptions.UsePlan(ExecutionPlan)`**: non-virtual public method in the core; stores the plan once (second call throws; null throws) and calls `protected virtual void OnPlanRegistered(ExecutionPlan plan)`. `HangfireOptions` removes its own `UsePlan` and overrides `OnPlanRegistered` with the current body (conflict with `SetJobAutoRun`, `Add`, auto-run). Callers of `hangfireOptions.UsePlan(plan)` compile unchanged.
+- **`ExecutionFlowOptions.UsePlan(ExecutionPlan)`**: non-virtual public method in the core; stores the plan once (second call throws; null throws) and calls `protected virtual void OnPlanRegistering(ExecutionPlan plan)`. `HangfireOptions` removes its own `UsePlan` and overrides `OnPlanRegistering` with the current body (conflict with `SetJobAutoRun`, `Add`, auto-run). Callers of `hangfireOptions.UsePlan(plan)` compile unchanged.
 
 ## Complexity Tracking
 

@@ -26,6 +26,18 @@ public class ExecutionPlanHangfireTests
         Assert.True(setup.RecurringHandlers.ContainsKey(typeof(ProductHandler)));
     }
 
+    /// <summary>012-interval-and-overlap AC-004.2: the Hangfire behavior holds through the core options type.</summary>
+    [Fact]
+    public void UsePlan_ThroughBaseOptions_RegistersPlan()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(o => ((ExecutionFlowOptions)o).UsePlan(CreatePlan(brandEnabled: false)));
+
+        Assert.NotNull(setup.Options.Plan);
+        Assert.True(setup.RecurringHandlers.ContainsKey(typeof(ProductHandler)));
+        Assert.False(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), setup.Options));
+    }
+
     [Fact]
     public void UsePlan_SetsAutoRunFromStepEnabled()
     {

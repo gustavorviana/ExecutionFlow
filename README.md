@@ -312,7 +312,7 @@ To veto or change a job's state, write a Hangfire filter instead of a hook.
 
 ## Recurring Job Control
 
-Every `IHandler` needs `[Recurring("<cron>")]`; a recurring handler without it fails at `Configure`.
+Every `IHandler` needs a schedule, `[Recurring("<cron>")]` or `[RecurringInterval("hh:mm:ss")]`; a recurring handler without one, or with both, fails at `Configure`.
 
 ```csharp
 [Recurring("0 8 * * *", Id = "daily-report", TimeZone = "America/Sao_Paulo")]
@@ -342,7 +342,43 @@ trigger.Trigger(typeof(DataSyncHandler));   // uses the handler's ID (explicit I
 trigger.Trigger("my-job-id");
 ```
 
-Overlapping runs: if a run takes longer than the schedule interval, Hangfire starts the next one in parallel. Add `[DisableConcurrentExecution(timeoutInSeconds: 600)]` to the handler to prevent it.
+### Interval schedules
+
+**Prefer `[Recurring]` with a cron expression on Hangfire.** `[RecurringInterval]` is an alternative for "every N of time":
+
+```csharp
+[RecurringInterval("00:15:00")]                    // every 15 minutes
+[RecurringInterval("01:30:00", Id = "price-sync")] // every 90 minutes, with a stable ID
+```
+
+- The format is `[d.]hh:mm:ss` (e.g. `"10:00:00"`, `"1.00:00:00"`); the minimum is one minute. An interval has no time zone: `RecurringTimeZone` doesn't apply to it, and a `SetJobTimeZone<T>` for it is ignored with a trace warning.
+- An interval with an exact cron equivalent (it divides an hour, or a day in whole hours) is registered as that cron in UTC, so it's aligned to the clock: every 15 minutes runs at :00, :15, :30, :45.
+- Any other interval (7 min, 90 min, 5 h) runs on a per-minute recurring job that skips each minute until the interval has passed since the last run, with about one minute of precision. Skipped minutes create no job, so nothing shows in the dashboard. A manual `Trigger` always runs and counts as the last run.
+
+### Overlapping runs
+
+If a run takes longer than the schedule, Hangfire starts the next one in parallel. Add `[NoOverlap(timeoutSeconds)]` to prevent it: a run that starts while another one is in progress waits for it, and fails if the timeout passes first. The timeout is mandatory.
+
+```csharp
+[Recurring("*/5 * * * *"), NoOverlap(600)]
+public class ImportHandler : IHandler { ... }
+```
+
+`[NoOverlap]` is part of the core package, so handlers don't depend on Hangfire's `[DisableConcurrentExecution]` (which still works). In an execution plan, `entry.NoOverlap(TimeSpan)` takes precedence over the attribute, and dependents never overlap.
+
+### Execution plan
+
+Declare which recurring handlers wait for which with `ExecutionPlanner`, and register the plan on the options with `UsePlan`:
+
+```csharp
+var planner = new ExecutionPlanner();
+planner.Add<CategorySyncHandler>();
+planner.Add<ProductSyncHandler>().DependsOn<CategorySyncHandler>();
+
+options.UsePlan(planner.Build());
+```
+
+`UsePlan` lives on the core `ExecutionFlowOptions`, so the same plan works with any execution provider. A step's `Enabled` replaces `SetJobAutoRun` for the handlers in the plan. See `Examples/` for every plan feature.
 
 ## Hangfire Native Attributes
 

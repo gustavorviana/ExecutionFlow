@@ -137,6 +137,43 @@ public class ExecutionFlowOptionsTests
         Assert.True(options.EventHandlers.Count > 0 || options.RecurringHandlers.Count > 0);
     }
 
+    // --- 012-interval-and-overlap FR-004: the plan is registered on the core options ---
+
+    private static ExecutionPlan CreatePlan()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<TestHandler>();
+        return planner.Build();
+    }
+
+    [Fact]
+    public void UsePlan_StoresPlan()
+    {
+        var options = new TestOptions();
+        var plan = CreatePlan();
+
+        options.UsePlan(plan);
+
+        Assert.Same(plan, options.Plan);
+    }
+
+    [Fact]
+    public void UsePlan_Throws_WhenCalledTwice()
+    {
+        var options = new TestOptions();
+        options.UsePlan(CreatePlan());
+
+        Assert.Throws<InvalidOperationException>(() => options.UsePlan(CreatePlan()));
+    }
+
+    [Fact]
+    public void UsePlan_Throws_WhenPlanIsNull()
+    {
+        var options = new TestOptions();
+
+        Assert.Throws<ArgumentNullException>(() => options.UsePlan(null!));
+    }
+
     // Test types
 
     public class TestEvent { }

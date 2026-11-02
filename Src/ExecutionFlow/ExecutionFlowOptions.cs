@@ -1,6 +1,7 @@
 using ExecutionFlow.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 
@@ -121,12 +122,21 @@ namespace ExecutionFlow
 
             if (isRecurring)
             {
+                var intervalAttr = handlerType.GetCustomAttribute<Attributes.RecurringIntervalAttribute>();
+                var interval = intervalAttr == null ? (TimeSpan?)null : ParseInterval(handlerType, intervalAttr.Interval);
+
+                if (intervalAttr != null && recurringAttr != null)
+                    throw new InvalidOperationException(
+                        $"Recurring handler '{handlerType.FullName}' has both [Recurring] and [RecurringInterval]. Use only one schedule.");
+
                 _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
                     handlerType: handlerType,
                     displayName: displayName,
                     cron: cron,
-                    id: recurringAttr?.Id,
-                    timeZone: recurringAttr?.TimeZone
+                    id: recurringAttr?.Id ?? intervalAttr?.Id,
+                    timeZone: recurringAttr?.TimeZone,
+                    interval: interval,
+                    overlapTimeout: Attributes.NoOverlapAttribute.GetTimeout(handlerType)
                 );
                 return;
             }
@@ -149,6 +159,51 @@ namespace ExecutionFlow
 
             throw new ArgumentException(
                 $"Type '{handlerType.FullName}' does not implement IHandler or IHandler<TEvent>.", nameof(handlerType));
+        }
+
+        private static readonly string[] IntervalFormats = { @"hh\:mm\:ss", @"d\.hh\:mm\:ss" };
+
+        private static TimeSpan ParseInterval(Type handlerType, string value)
+        {
+            // Only hh:mm:ss with optional days: a bare number such as "10" would otherwise be read as days.
+            if (!TimeSpan.TryParseExact(value ?? string.Empty, IntervalFormats, CultureInfo.InvariantCulture, out var interval))
+                throw new InvalidOperationException(
+                    $"Recurring handler '{handlerType.FullName}' has an invalid interval '{value}'. Use the format [d.]hh:mm:ss, e.g. \"00:15:00\".");
+
+            if (interval < TimeSpan.FromMinutes(1))
+                throw new InvalidOperationException(
+                    $"Recurring handler '{handlerType.FullName}' has the interval '{value}', but the minimum is one minute.");
+
+            return interval;
+        }
+
+        /// <summary>Gets the execution plan registered with <see cref="UsePlan"/>, or <c>null</c>.</summary>
+        public ExecutionPlan Plan { get; private set; }
+
+        /// <summary>
+        /// Registers the execution plan built with <see cref="ExecutionPlanner"/>. The options only store it; each execution
+        /// provider applies it (see the provider's documentation).
+        /// </summary>
+        /// <param name="plan">The built plan.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="plan"/> is <c>null</c>.</exception>
+        /// <exception cref="InvalidOperationException">A plan was already registered, or the provider rejects the plan.</exception>
+        public void UsePlan(ExecutionPlan plan)
+        {
+            ThrowIfLocked();
+            if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (Plan != null) throw new InvalidOperationException("An execution plan was already registered.");
+
+            OnPlanRegistering(plan);
+            Plan = plan;
+        }
+
+        /// <summary>
+        /// Called by <see cref="UsePlan"/> before the plan is stored, so a provider can validate and apply it.
+        /// Throwing leaves no plan registered.
+        /// </summary>
+        /// <param name="plan">The plan being registered.</param>
+        protected virtual void OnPlanRegistering(ExecutionPlan plan)
+        {
         }
 
         /// <summary>

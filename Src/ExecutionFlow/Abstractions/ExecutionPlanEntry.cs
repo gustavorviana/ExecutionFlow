@@ -62,6 +62,26 @@ namespace ExecutionFlow.Abstractions
             return this;
         }
 
+        /// <summary>Gets the overlap timeout set with <see cref="NoOverlap(TimeSpan)"/>, or <c>null</c>.</summary>
+        public TimeSpan? ConfiguredOverlapTimeout { get; private set; }
+
+        /// <summary>
+        /// Prevents runs of this handler from overlapping: a run that starts while another one is in progress waits for it,
+        /// and fails if <paramref name="timeout"/> passes first. Takes precedence over <see cref="Attributes.NoOverlapAttribute"/>.
+        /// </summary>
+        /// <param name="timeout">How long a run waits for the running one before it fails.</param>
+        /// <returns>This entry, for chaining.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="timeout"/> is zero or negative.</exception>
+        public ExecutionPlanEntry NoOverlap(TimeSpan timeout)
+        {
+            if (timeout <= TimeSpan.Zero)
+                throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "The overlap timeout must be positive.");
+
+            _owner.ThrowIfBuilt();
+            ConfiguredOverlapTimeout = timeout;
+            return this;
+        }
+
         internal ExecutionPlanEntry(ExecutionPlanner owner, Type handlerType)
         {
             _owner = owner;

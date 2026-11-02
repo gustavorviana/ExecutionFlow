@@ -113,7 +113,8 @@ namespace ExecutionFlow.Abstractions
                     ReadOnly(entry.Prerequisites),
                     dependents.TryGetValue(entry.HandlerType, out var list) ? ReadOnly(list) : None,
                     entry.ConfiguredMinInterval,
-                    entry.RunsOnOwnSchedule))
+                    entry.RunsOnOwnSchedule,
+                    entry.ConfiguredOverlapTimeout ?? NoOverlapAttribute.GetTimeout(entry.HandlerType)))
                 .ToList();
 
             return new ExecutionPlan(steps);

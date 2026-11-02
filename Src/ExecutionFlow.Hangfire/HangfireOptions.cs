@@ -18,22 +18,16 @@ namespace ExecutionFlow.Hangfire
         public bool GlobalRecurringAutoRun { get => _globalRecurringAutoRun; set { ThrowIfLocked(); _globalRecurringAutoRun = value; } }
         private bool _globalRecurringAutoRun = true;
 
-        /// <summary>The execution plan registered with <see cref="UsePlan"/>, or <c>null</c>.</summary>
-        internal ExecutionPlan Plan { get; private set; }
-
         /// <summary>
-        /// Registers every handler of an execution plan as a recurring handler, right away. A disabled step doesn't run on its
-        /// schedule, like <see cref="SetJobAutoRun(Type, bool)"/> <c>false</c>, and a dependent is only enqueued after a new
-        /// completed cycle of every prerequisite; otherwise its run ends in the <c>PrerequisitesNotMet</c> state.
+        /// In Hangfire, <see cref="ExecutionFlowOptions.UsePlan"/> registers every handler of the plan as a recurring handler,
+        /// right away. A disabled step doesn't run on its schedule, like <see cref="SetJobAutoRun(Type, bool)"/> <c>false</c>,
+        /// and a dependent is only enqueued after a new completed cycle of every prerequisite; otherwise its run ends in the
+        /// <c>PrerequisitesNotMet</c> state. Throws <see cref="InvalidOperationException"/> when a handler in the plan has
+        /// <see cref="SetJobAutoRun(Type, bool)"/>.
         /// </summary>
         /// <param name="plan">The plan built with <see cref="ExecutionPlanner"/>.</param>
-        /// <exception cref="InvalidOperationException">A plan was already registered, or a handler in the plan has <see cref="SetJobAutoRun(Type, bool)"/>.</exception>
-        public void UsePlan(ExecutionPlan plan)
+        protected override void OnPlanRegistering(ExecutionPlan plan)
         {
-            ThrowIfLocked();
-            if (plan == null) throw new ArgumentNullException(nameof(plan));
-            if (Plan != null) throw new InvalidOperationException("An execution plan was already registered.");
-
             foreach (var step in plan.Steps)
             {
                 // Two switches for the same handler would disagree silently: the plan's Enabled is the one to use.
@@ -46,8 +40,6 @@ namespace ExecutionFlow.Hangfire
                 Add(step.HandlerType);
                 RecurringAutoRun[step.HandlerType] = step.Enabled;
             }
-
-            Plan = plan;
         }
 
         private static InvalidOperationException PlanAndAutoRunConflict(Type handlerType)
