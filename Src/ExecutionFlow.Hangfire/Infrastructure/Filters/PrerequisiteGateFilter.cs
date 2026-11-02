@@ -5,7 +5,7 @@ using System.Linq;
 namespace ExecutionFlow.Hangfire.Infrastructure.Filters
 {
     /// <summary>
-    /// Enforces the execution plan when a new job of a dependent recurring handler is about to be enqueued (ADR-0009).
+    /// Enforces the execution plan when a new job of a dependent recurring handler is about to be enqueued (specs/010-execution-plan/research.md, R-003).
     /// A job the plan triggered, or an occurrence of a dependent's own schedule, runs only if every prerequisite completed a
     /// new cycle; otherwise it goes to <see cref="PrerequisitesNotMetState"/>. A manual run skips the gate.
     /// </summary>

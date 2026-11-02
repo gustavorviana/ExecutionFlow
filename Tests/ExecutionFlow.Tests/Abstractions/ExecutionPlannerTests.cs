@@ -6,7 +6,7 @@ namespace ExecutionFlow.Tests.Abstractions;
 
 public class ExecutionPlannerTests
 {
-    // --- REQ-001: declare handlers ---
+    // --- FR-001: declare handlers ---
 
     [Fact]
     public void Add_Throws_WhenHandlerAddedTwice()
@@ -38,7 +38,7 @@ public class ExecutionPlannerTests
         Assert.Throws<InvalidOperationException>(() => planner.Build());
     }
 
-    // --- REQ-002: declare dependencies ---
+    // --- FR-002: declare dependencies ---
 
     [Fact]
     public void Build_ListsPrerequisitesAndDependents()
@@ -93,7 +93,7 @@ public class ExecutionPlannerTests
         Assert.Throws<InvalidOperationException>(() => new ExecutionPlanner().Add<SelfDependentHandler>());
     }
 
-    // --- REQ-003: enabled handlers and display names ---
+    // --- FR-003: enabled handlers and display names ---
 
     [Fact]
     public void Build_KeepsDisabledHandler_WithReason()
@@ -122,7 +122,7 @@ public class ExecutionPlannerTests
         Assert.Equal(nameof(HandlerA), plan.Get<HandlerA>().DisplayName);
     }
 
-    // --- REQ-004: unavailable prerequisites ---
+    // --- FR-004: unavailable prerequisites ---
 
     [Fact]
     public void Build_Throws_WhenPrerequisiteNotAdded()
@@ -178,7 +178,7 @@ public class ExecutionPlannerTests
         Assert.Equal("disabled", step.SkipReason);
     }
 
-    // --- REQ-005: cycles ---
+    // --- FR-005: cycles ---
 
     [Theory]
     [InlineData(MissingPrerequisite.Throw)]
@@ -195,7 +195,7 @@ public class ExecutionPlannerTests
         Assert.Contains("HandlerA -> HandlerC -> HandlerB -> HandlerA", ex.Message);
     }
 
-    // --- REQ-007: run mode of a dependent ---
+    // --- FR-007: run mode of a dependent ---
 
     [Fact]
     public void Build_ExposesRunMode()
@@ -246,7 +246,7 @@ public class ExecutionPlannerTests
         Assert.Throws<InvalidOperationException>(() => withOwnSchedule.Build());
     }
 
-    // --- REQ-006: order and immutability ---
+    // --- FR-006: order and immutability ---
 
     [Fact]
     public void Build_OrdersPrerequisitesFirst()

@@ -12,14 +12,16 @@ dotnet test --no-build
 
 ## Spec-Driven Development
 
-This repo follows SDD. Read [docs/specs/README.md](docs/specs/README.md) and [docs/specs/constitution.md](docs/specs/constitution.md) before changing behavior.
+This repo follows SDD with [GitHub Spec Kit](https://github.com/github/spec-kit). Read [.specify/memory/constitution.md](.specify/memory/constitution.md) before changing behavior.
 
-- **Spec first.** Before changing behavior, find the capability in `docs/specs/<capability>/spec.md` and update the spec before the code. If no spec covers the change, write one first. Pure refactors that don't change observable behavior don't need a spec change.
-- **Use the `sdd` skill** for any work on specs, plans, tasks, or reviews. Use the templates in `docs/specs/_templates/`, which override the skill's defaults for this repo. Write everything in English.
+- **Use the Spec Kit commands** for any work on specs, plans, or tasks: `/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-analyze` → `/speckit-implement`. Don't use the `sdd` skill in this repo. Write everything in English.
+- **Spec first.** Features live in `specs/NNN-short-name/` (`spec.md`, `plan.md`, `research.md`, `tasks.md`). Before changing behavior, update or create the spec. Pure refactors that don't change observable behavior don't need a spec change.
+- **Amendments.** When a feature changes behavior specified by an earlier feature, its spec lists it under `**Amends**:`, and the earlier spec gets a one-line note under that requirement.
 - **Never assume.** Write ambiguities as `[NEEDS CLARIFICATION: ...]` and ask, rather than guessing.
-- **Stable IDs.** Never renumber `REQ`/`AC`/`RN`/`TASK`/`ADR` IDs. Mark removed items as deprecated.
-- **Traceability.** Every acceptance criterion names the test that covers it. Commits and PRs reference the REQ and TASK IDs they implement.
-- **Architectural decisions** go in `docs/specs/adr/` as `ADR-NNNN-title.md`.
+- **Stable IDs.** Never renumber `FR`/`AC`/`RN`/`SC`/`T` IDs. Mark removed items as deprecated.
+- **Traceability.** Every acceptance scenario names the test that covers it. Tests are mandatory, even though the Spec Kit tasks template calls them optional. Commits and PRs reference the feature and the FR and T IDs they implement.
+- **Decisions.** Feature decisions go in the feature's `research.md`. Project-wide decisions amend the constitution with `/speckit-constitution`.
+- **Old IDs.** Commits from before the Spec Kit migration cite `REQ-n`/`TASK-n` of `docs/specs/<capability>/`. These map 1:1 to `FR-n`/`Tn` of `specs/NNN-<capability>/`.
 
 ## Conventions
 

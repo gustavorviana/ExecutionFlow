@@ -54,7 +54,7 @@ public class ExecutionEventTests
         Assert.Equal(3, evt.AttemptNumber);
     }
 
-    // --- Duration only on attempt-related events (lifecycle-hooks REQ-003) ---
+    // --- Duration only on attempt-related events (006-lifecycle-hooks FR-003) ---
 
     [Fact]
     public void ExecutionEvent_HasNoDuration()

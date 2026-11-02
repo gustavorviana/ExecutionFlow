@@ -11,7 +11,7 @@ using NSubstitute;
 
 namespace ExecutionFlow.Hangfire.Tests.Infrastructure;
 
-/// <summary>recurring-jobs REQ-010 and REQ-012: the prerequisite gate, triggers and run modes.</summary>
+/// <summary>005-recurring-jobs FR-010 and FR-012: the prerequisite gate, triggers and run modes.</summary>
 public class PrerequisiteGateTests
 {
     private static readonly DateTime Start = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -120,7 +120,7 @@ public class PrerequisiteGateTests
     private string Generation<T>() =>
         _hashes.TryGetValue(PrerequisiteGenerationStore.GenerationKey, out var hash) && hash.TryGetValue(Id<T>(), out var value) ? value : "0";
 
-    // --- REQ-010: generations and the gate ---
+    // --- FR-010: generations and the gate ---
 
     [Fact]
     public void DispatchRecurring_IncrementsGeneration_WhenPrerequisiteCompletes()
@@ -184,7 +184,7 @@ public class PrerequisiteGateTests
         Assert.IsType<EnqueuedState>(Elect(setup, typeof(PrerequisiteHandler)).CandidateState);
     }
 
-    // --- REQ-010: triggers ---
+    // --- FR-010: triggers ---
 
     [Fact]
     public void DispatchRecurring_TriggersDependent_WhenAllPrerequisitesHaveNewCycle()
@@ -243,7 +243,7 @@ public class PrerequisiteGateTests
         Assert.Equal(new[] { Id<OtherPrerequisiteHandler>(), Id<DependentHandler>() }, _triggered);
     }
 
-    // --- REQ-012: run modes and manual runs ---
+    // --- FR-012: run modes and manual runs ---
 
     [Fact]
     public void DispatchRecurring_DoesNotTrigger_OwnScheduleDependent()

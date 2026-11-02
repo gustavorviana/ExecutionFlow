@@ -207,7 +207,7 @@ public class StateFilterTests
             e.Duration >= TimeSpan.FromSeconds(4) && e.Duration < TimeSpan.FromMinutes(1)));
     }
 
-    // --- Hook isolation (lifecycle-hooks REQ-004) ---
+    // --- Hook isolation (006-lifecycle-hooks FR-004) ---
 
     private (HangfireStateFilter filter, IOnFailed second) CreateFilterWithThrowingHook(Action<HookErrorContext>? errorHandler)
     {

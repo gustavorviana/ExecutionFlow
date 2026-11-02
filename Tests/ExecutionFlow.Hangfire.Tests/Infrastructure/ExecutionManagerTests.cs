@@ -79,7 +79,7 @@ public class ExecutionManagerTests
         _jobClient.DidNotReceiveWithAnyArgs().ChangeState(default!, default!, default!);
     }
 
-    // --- Reservation key fast path (custom-id-and-deduplication REQ-003) ---
+    // --- Reservation key fast path (004-custom-id-and-deduplication FR-003) ---
 
     private void SetupReservation(string customId, string jobId, string stateName)
     {

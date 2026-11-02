@@ -33,7 +33,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
     }
 
     /// <summary>
-    /// The execution plan's state, kept in the job storage so every server agrees on it (ADR-0009).
+    /// The execution plan's state, kept in the job storage so every server agrees on it (specs/010-execution-plan/research.md, R-003).
     /// </summary>
     /// <remarks>
     /// <para>A generation is how many cycles a prerequisite completed: a counter rather than a flag, because the rule covers

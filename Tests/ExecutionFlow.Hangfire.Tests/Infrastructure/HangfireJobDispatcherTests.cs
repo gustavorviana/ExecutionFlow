@@ -126,7 +126,7 @@ public class HangfireJobDispatcherTests
         Assert.Contains("Could not activate handler instance", ex.Message);
     }
 
-    // --- handlers-and-context REQ-002: job facts and typed Hangfire access ---
+    // --- 001-handlers-and-context FR-002: job facts and typed Hangfire access ---
 
     private async Task<FlowContext> RunContextCapture(PerformContext performContext)
     {

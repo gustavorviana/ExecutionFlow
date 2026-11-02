@@ -3,7 +3,7 @@ using ExecutionFlow.Attributes;
 
 namespace ExecutionFlow.Hangfire.Tests;
 
-/// <summary>recurring-jobs AC-001.3 and REQ-008: configuration errors surface at Configure.</summary>
+/// <summary>005-recurring-jobs AC-001.3 and FR-008: configuration errors surface at Configure.</summary>
 public class RecurringValidationTests
 {
     [Fact]

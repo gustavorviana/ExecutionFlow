@@ -5,7 +5,7 @@ using ExecutionFlow.Hangfire.Tests.Utils;
 
 namespace ExecutionFlow.Hangfire.Tests;
 
-/// <summary>recurring-jobs REQ-009: <see cref="HangfireOptions.UsePlan"/>.</summary>
+/// <summary>005-recurring-jobs FR-009: <see cref="HangfireOptions.UsePlan"/>.</summary>
 public class ExecutionPlanHangfireTests
 {
     private static ExecutionPlan CreatePlan(bool brandEnabled = true)
