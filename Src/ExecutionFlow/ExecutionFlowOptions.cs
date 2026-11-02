@@ -1,7 +1,6 @@
 using ExecutionFlow.Abstractions;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Reflection;
 
@@ -30,6 +29,7 @@ namespace ExecutionFlow
 
         private readonly List<Type> _loggerFactoryTypes = new List<Type>();
         private readonly Dictionary<Type, RecurringJobRegistryInfo> _recurringHandlers = new Dictionary<Type, RecurringJobRegistryInfo>(new TypeEqualityComparer());
+        private readonly List<Type> _recurringOrder = new List<Type>();
         private readonly Dictionary<Type, EventJobRegistryInfo> _eventHandlers = new Dictionary<Type, EventJobRegistryInfo>(new TypeEqualityComparer());
 
         /// <summary>Gets the registered logger factory types.</summary>
@@ -37,6 +37,9 @@ namespace ExecutionFlow
 
         /// <summary>Gets the registered recurring handlers, keyed by handler type.</summary>
         public IReadOnlyDictionary<Type, RecurringJobRegistryInfo> RecurringHandlers => _recurringHandlers;
+
+        /// <summary>Gets the registered recurring handler types, in the order they were first registered.</summary>
+        internal IReadOnlyList<Type> RecurringHandlerOrder => _recurringOrder;
 
         /// <summary>Gets the registered event handlers, keyed by event type.</summary>
         public IReadOnlyDictionary<Type, EventJobRegistryInfo> EventHandlers => _eventHandlers;
@@ -129,6 +132,10 @@ namespace ExecutionFlow
                     throw new InvalidOperationException(
                         $"Recurring handler '{handlerType.FullName}' has both [Recurring] and [RecurringInterval]. Use only one schedule.");
 
+                // Re-adding a handler keeps its first position: the automatic plan follows the registration order.
+                if (!_recurringHandlers.ContainsKey(handlerType))
+                    _recurringOrder.Add(handlerType);
+
                 _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
                     handlerType: handlerType,
                     displayName: displayName,
@@ -161,12 +168,9 @@ namespace ExecutionFlow
                 $"Type '{handlerType.FullName}' does not implement IHandler or IHandler<TEvent>.", nameof(handlerType));
         }
 
-        private static readonly string[] IntervalFormats = { @"hh\:mm\:ss", @"d\.hh\:mm\:ss" };
-
         private static TimeSpan ParseInterval(Type handlerType, string value)
         {
-            // Only hh:mm:ss with optional days: a bare number such as "10" would otherwise be read as days.
-            if (!TimeSpan.TryParseExact(value ?? string.Empty, IntervalFormats, CultureInfo.InvariantCulture, out var interval))
+            if (!Attributes.TimeSpanText.TryParse(value, out var interval))
                 throw new InvalidOperationException(
                     $"Recurring handler '{handlerType.FullName}' has an invalid interval '{value}'. Use the format [d.]hh:mm:ss, e.g. \"00:15:00\".");
 
@@ -177,7 +181,16 @@ namespace ExecutionFlow
             return interval;
         }
 
-        /// <summary>Gets the execution plan registered with <see cref="UsePlan"/>, or <c>null</c>.</summary>
+        /// <summary>
+        /// Gets or sets what the automatic plan does when a handler depends on one that isn't registered or is turned off.
+        /// Default: <see cref="MissingPrerequisite.Throw"/>. It only applies to the automatic plan, formed from
+        /// <see cref="Attributes.DependsOnAttribute"/> and <see cref="Attributes.DependentRunAttribute"/> when
+        /// <see cref="UsePlan"/> isn't called; an explicit plan takes its policy from <see cref="ExecutionPlanner.Build(MissingPrerequisite)"/>.
+        /// </summary>
+        public MissingPrerequisite AutomaticPlanMissingPrerequisite { get => _automaticPlanMissingPrerequisite; set { ThrowIfLocked(); _automaticPlanMissingPrerequisite = value; } }
+        private MissingPrerequisite _automaticPlanMissingPrerequisite = MissingPrerequisite.Throw;
+
+        /// <summary>Gets the execution plan registered with <see cref="UsePlan"/>, the automatic plan, or <c>null</c>.</summary>
         public ExecutionPlan Plan { get; private set; }
 
         /// <summary>
@@ -217,12 +230,32 @@ namespace ExecutionFlow
         }
 
         /// <summary>
+        /// Without <see cref="UsePlan"/>, forms the automatic plan when a registered recurring handler has
+        /// <see cref="Attributes.DependsOnAttribute"/> or <see cref="Attributes.DependentRunAttribute"/>, so those attributes
+        /// are never silently ignored. Every registered recurring handler joins it, in registration order; whether each
+        /// runs is decided afterwards by the provider's on/off, in <see cref="ResolvePlan"/>.
+        /// </summary>
+        private void FormAutomaticPlan()
+        {
+            if (Plan != null || !_recurringOrder.Any(t =>
+                    t.IsDefined(typeof(Attributes.DependsOnAttribute), false) || t.IsDefined(typeof(Attributes.DependentRunAttribute), false)))
+                return;
+
+            var planner = new ExecutionPlanner();
+            foreach (var handlerType in _recurringOrder)
+                planner.Add(handlerType);
+
+            Plan = planner.Build(AutomaticPlanMissingPrerequisite);
+        }
+
+        /// <summary>
         /// Applies the plan once the options are complete: the builder's schedule, ID and name replace the attribute's in the
         /// registrations (no per-handler option exists for them), and the plan's enabled steps are re-resolved with the
         /// provider's on/off, applying its <see cref="ExecutionPlan.MissingPrerequisite"/> again.
         /// </summary>
         internal void ResolvePlan()
         {
+            FormAutomaticPlan();
             if (Plan == null)
                 return;
 

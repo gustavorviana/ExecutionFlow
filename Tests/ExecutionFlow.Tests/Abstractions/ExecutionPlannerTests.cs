@@ -311,6 +311,35 @@ public class ExecutionPlannerTests
         Assert.Equal(TimeSpan.FromMinutes(3), plan.Get<HandlerA>().OverlapTimeout);
     }
 
+    // --- 013-dependencies-by-attribute FR-004: [DependentRun] in an explicit plan ---
+
+    [Fact]
+    public void Build_ReadsDependentRunAttribute()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<HandlerA>();
+        planner.Add<DependentRunAttributeHandler>().DependsOn<HandlerA>();
+
+        Assert.Equal(TimeSpan.FromMinutes(20), planner.Build().Get<DependentRunAttributeHandler>().MinInterval);
+    }
+
+    [Fact]
+    public void Build_PrefersEntryRunMode_OverDependentRunAttribute()
+    {
+        var ownSchedule = new ExecutionPlanner();
+        ownSchedule.Add<HandlerA>();
+        ownSchedule.Add<DependentRunAttributeHandler>().DependsOn<HandlerA>().RunMode(DependentRunMode.OwnSchedule);
+
+        var shorter = new ExecutionPlanner();
+        shorter.Add<HandlerA>();
+        shorter.Add<DependentRunAttributeHandler>().DependsOn<HandlerA>().RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(10));
+
+        var ownStep = ownSchedule.Build().Get<DependentRunAttributeHandler>();
+        Assert.True(ownStep.RunsOnOwnSchedule);
+        Assert.Null(ownStep.MinInterval);
+        Assert.Equal(TimeSpan.FromMinutes(10), shorter.Build().Get<DependentRunAttributeHandler>().MinInterval);
+    }
+
     private abstract class TestHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -326,6 +355,9 @@ public class ExecutionPlannerTests
 
     [DependsOn(typeof(SelfDependentHandler))]
     private class SelfDependentHandler : TestHandler { }
+
+    [DependentRun(DependentRunMode.MinInterval, "00:20:00")]
+    private class DependentRunAttributeHandler : TestHandler { }
 
     [NoOverlap(600)]
     private class NoOverlapAttributeHandler : TestHandler { }

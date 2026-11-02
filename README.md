@@ -380,6 +380,22 @@ options.UsePlan(planner.Build());
 
 `UsePlan` lives on the core `ExecutionFlowOptions`, so the same plan works with any execution provider. See `Examples/` for every plan feature.
 
+**Without a planner (automatic plan).** Put the dependencies on the handlers and register them with `Scan` or `Add`; when `UsePlan` isn't called and a registered handler has `[DependsOn]` or `[DependentRun]`, the registered handlers form a plan with the same rules:
+
+```csharp
+[Recurring("*/10 * * * *")]
+public class CategorySyncHandler : IHandler { ... }
+
+[DependsOn(typeof(CategorySyncHandler))]
+[DependentRun(DependentRunMode.MinInterval, "00:20:00")]   // optional; or DependentRunMode.OwnSchedule
+public class ProductSyncHandler : IHandler { ... }
+
+options.Scan(typeof(CategorySyncHandler).Assembly);
+options.AutomaticPlanMissingPrerequisite = MissingPrerequisite.Throw; // default; or SkipDependents
+```
+
+In the automatic plan, `SetJobAutoRun<T>`/`GlobalRecurringAutoRun` turn handlers on or off. With `UsePlan`, the explicit plan is the only one: `[DependsOn]` and `[DependentRun]` on handlers outside it are ignored. In a plan, `RunMode(...)` on the builder replaces the class's `[DependentRun]`.
+
 ### Handler configuration (EF Core style)
 
 `ExecutionPlanner` is the single place to configure handlers. `Add<T>()` returns a `HandlerBuilder<T>`, and the same builder is passed to `IHandlerConfiguration<T>` classes, like EF Core's `IEntityTypeConfiguration<T>`:
@@ -417,7 +433,7 @@ Like EF's fluent API over data annotations, the builder changes **only what it c
 | Display name | class name | — | `[DisplayName]` | — | `DisplayName` |
 | Enabled | on | `GlobalRecurringAutoRun` | — | `SetJobAutoRun<T>` | `Enabled` |
 | Dependencies | none | — | `[DependsOn]` (merged) | — | `DependsOn` / `RemoveDependency` / `ClearDependencies` |
-| Run mode | triggered | — | — | — | `RunMode` |
+| Run mode | triggered | — | `[DependentRun]` | — | `RunMode` |
 | Overlap | allowed | — | `[NoOverlap]` | — | `NoOverlap` / `AllowOverlap` |
 | Queue, retries | Hangfire's, `DisableRecurringRetries` | — | `[Queue]`, `[AutomaticRetry]` | — | `Queue`, `AutomaticRetry` |
 

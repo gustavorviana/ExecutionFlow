@@ -153,7 +153,7 @@ namespace ExecutionFlow.Abstractions
             ThrowIfBuilt();
             _built = true;
 
-            ValidateRunModes();
+            var runModes = ResolveRunModes();
             DetectCycles();
 
             var order = Order();
@@ -167,8 +167,8 @@ namespace ExecutionFlow.Abstractions
                     reasons[entry.HandlerType],
                     ReadOnly(entry.Prerequisites),
                     dependents.TryGetValue(entry.HandlerType, out var list) ? ReadOnly(list) : None,
-                    entry.ConfiguredMinInterval,
-                    entry.RunsOnOwnSchedule,
+                    runModes[entry.HandlerType].MinInterval,
+                    runModes[entry.HandlerType].Mode == DependentRunMode.OwnSchedule,
                     entry.IsOverlapConfigured ? entry.ConfiguredOverlapTimeout : NoOverlapAttribute.GetTimeout(entry.HandlerType),
                     entry.ConfiguredCron,
                     entry.ConfiguredInterval,
@@ -198,6 +198,7 @@ namespace ExecutionFlow.Abstractions
 
             foreach (var attribute in handlerType.GetCustomAttributes<DependsOnAttribute>(false))
                 builder.DependsOn(attribute.Prerequisite);
+            builder.RunModeAttribute = handlerType.GetCustomAttribute<DependentRunAttribute>(false);
 
             _entries.Add(handlerType, builder);
             _entryOrder.Add(builder);
@@ -251,15 +252,22 @@ namespace ExecutionFlow.Abstractions
             return null;
         }
 
-        /// <summary>The run modes only apply to dependents.</summary>
-        private void ValidateRunModes()
+        /// <summary>Resolves each handler's run mode (builder, else attribute) and checks it only applies to dependents.</summary>
+        private Dictionary<Type, (DependentRunMode? Mode, TimeSpan? MinInterval)> ResolveRunModes()
         {
+            var modes = new Dictionary<Type, (DependentRunMode? Mode, TimeSpan? MinInterval)>(TypeComparer);
+
             foreach (var entry in _entryOrder)
             {
-                if (entry.ConfiguredRunMode.HasValue && entry.Prerequisites.Count == 0)
+                var mode = entry.ResolveRunMode(out var minInterval);
+                if (mode.HasValue && entry.Prerequisites.Count == 0)
                     throw new InvalidOperationException(
-                        $"'{entry.HandlerType.FullName}' sets the run mode {entry.ConfiguredRunMode.Value} but has no prerequisites, so nothing triggers it. Add a dependency or remove the run mode.");
+                        $"'{entry.HandlerType.FullName}' sets the run mode {mode.Value} but has no prerequisites, so nothing triggers it. Add a dependency or remove the run mode.");
+
+                modes.Add(entry.HandlerType, (mode, minInterval));
             }
+
+            return modes;
         }
 
         /// <summary>

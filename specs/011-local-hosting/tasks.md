@@ -22,7 +22,7 @@ description: "Tasks for local hosting (regenerated 2026-11-02 after /speckit-ana
 ## Phase 2: Foundational
 
 - [ ] T002 [P] [US2] `DependencyGate` (generations, consumed generations, atomic trigger selection) (FR-005, AC-005.1..AC-005.3, AC-005.8; depends on T001; done when `DependencyGateTests` pass)
-- [ ] T003 [P] [US4] `ConcurrencyLimiter`, `HostingOptions` (enabled, global/per-handler settings, `OnPlanRegistering`) and `HandlerExecutor` (FR-002, FR-003, FR-006, AC-002.2, AC-002.4, AC-003.11, AC-006.1, AC-006.2; depends on T001, 012 T001; done when `HostingOptionsTests` and `ConcurrencyLimiterTests` pass)
+- [ ] T003 [P] [US4] `ConcurrencyLimiter`, `HostingOptions` (enabled, global/per-handler settings, `OnPlanRegistering`, and the `IsRecurringHandlerEnabled` override used by explicit and automatic plans, 013/014, with a test `HostingOptionsTests.IsRecurringHandlerEnabled_FollowsSetJobAutoRun`) and `HandlerExecutor` (FR-002, FR-003, FR-006, AC-002.2, AC-002.4, AC-003.11, AC-006.1, AC-006.2; depends on T001, 012 T001; done when `HostingOptionsTests` and `ConcurrencyLimiterTests` pass)
 - [ ] T009 [P] [US1] `OverlapGuard` (wait with mandatory timeout, skip mode) (FR-003, AC-003.8..AC-003.10; depends on T001, 012 T005; done when the overlap cases of `RecurringHandlerHostTests` pass)
 
 ## Phase 3: User Stories 1, 5 - Scheduled execution (Priority: P1)

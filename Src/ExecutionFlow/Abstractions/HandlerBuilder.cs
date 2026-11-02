@@ -64,6 +64,25 @@ namespace ExecutionFlow.Abstractions
 
         private TimeSpan? _runModeInterval;
 
+        /// <summary>The class's <see cref="Attributes.DependentRunAttribute"/>, used when <see cref="RunMode"/> isn't called.</summary>
+        internal Attributes.DependentRunAttribute RunModeAttribute { get; set; }
+
+        /// <summary>
+        /// The run mode that applies: the builder's <see cref="RunMode"/> as a whole, else the class's
+        /// <see cref="Attributes.DependentRunAttribute"/>, else none (triggered by prerequisites).
+        /// </summary>
+        internal DependentRunMode? ResolveRunMode(out TimeSpan? minInterval)
+        {
+            if (ConfiguredRunMode.HasValue)
+            {
+                minInterval = ConfiguredMinInterval;
+                return ConfiguredRunMode;
+            }
+
+            minInterval = RunModeAttribute?.ResolveInterval(HandlerType);
+            return RunModeAttribute?.Mode;
+        }
+
         /// <summary>Gets whether <see cref="NoOverlap(TimeSpan)"/> or <see cref="AllowOverlap"/> was called.</summary>
         public bool IsOverlapConfigured { get; private set; }
 
