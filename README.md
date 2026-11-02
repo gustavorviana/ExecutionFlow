@@ -388,7 +388,6 @@ Hangfire attributes on handlers are propagated automatically:
 [Queue("critical")]
 [AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 60, 300, 900 })]
 [DisableConcurrentExecution(300)]
-[Timeout("00:10:00")]
 public class ImportHandler : IHandler<ImportEvent> { ... }
 ```
 
