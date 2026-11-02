@@ -70,6 +70,10 @@ api.MapGet("/recurring/data-sync", (IExecutionManager jobs) => new
 });
 api.MapDelete("/recurring/data-sync", (IExecutionManager jobs) => new { Cancelled = jobs.Cancel(typeof(DataSyncHandler)) });
 
+// The dashboard is mounted at the root, which catches every path: run the /api endpoints before it.
+app.UseRouting();
+app.UseEndpoints(_ => { });
+
 app.UseHangfireDashboard("", options: new DashboardOptions().UseExecutionFlowJobNames(app.Services));
 
 app.Run();
