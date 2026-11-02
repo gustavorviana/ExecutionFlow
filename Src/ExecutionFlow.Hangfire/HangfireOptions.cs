@@ -22,30 +22,20 @@ namespace ExecutionFlow.Hangfire
         /// In Hangfire, <see cref="ExecutionFlowOptions.UsePlan"/> registers every handler of the plan as a recurring handler,
         /// right away. A disabled step doesn't run on its schedule, like <see cref="SetJobAutoRun(Type, bool)"/> <c>false</c>,
         /// and a dependent is only enqueued after a new completed cycle of every prerequisite; otherwise its run ends in the
-        /// <c>PrerequisitesNotMet</c> state. Throws <see cref="InvalidOperationException"/> when a handler in the plan has
-        /// <see cref="SetJobAutoRun(Type, bool)"/>.
+        /// <c>PrerequisitesNotMet</c> state. A step's <see cref="HandlerBuilder.Enabled(bool)"/> wins over
+        /// <see cref="SetJobAutoRun(Type, bool)"/>, which then logs a trace warning; without it, the option decides.
         /// </summary>
         /// <param name="plan">The plan built with <see cref="ExecutionPlanner"/>.</param>
         protected override void OnPlanRegistering(ExecutionPlan plan)
         {
             foreach (var step in plan.Steps)
-            {
-                // Two switches for the same handler would disagree silently: the plan's Enabled is the one to use.
-                if (RecurringAutoRun.ContainsKey(step.HandlerType))
-                    throw PlanAndAutoRunConflict(step.HandlerType);
-            }
-
-            foreach (var step in plan.Steps)
-            {
                 Add(step.HandlerType);
-                RecurringAutoRun[step.HandlerType] = step.Enabled;
-            }
         }
 
-        private static InvalidOperationException PlanAndAutoRunConflict(Type handlerType)
+        /// <summary><see cref="SetJobAutoRun(Type, bool)"/>, else <see cref="GlobalRecurringAutoRun"/>.</summary>
+        protected override bool IsRecurringHandlerEnabled(Type handlerType)
         {
-            return new InvalidOperationException(
-                $"'{handlerType.FullName}' is in the execution plan and also has SetJobAutoRun. Use only the plan's Enabled for it.");
+            return RecurringAutoRun.TryGetValue(handlerType, out var autoRun) ? autoRun : GlobalRecurringAutoRun;
         }
         internal Dictionary<Type, object> OptionValues { get; } = new Dictionary<Type, object>();
 
@@ -112,8 +102,6 @@ namespace ExecutionFlow.Hangfire
         {
             ThrowIfLocked();
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
-            if (Plan != null && Plan.TryGet(handlerType, out _))
-                throw PlanAndAutoRunConflict(handlerType);
 
             RecurringAutoRun[handlerType] = autoRun;
         }

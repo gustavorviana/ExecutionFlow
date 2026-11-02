@@ -16,13 +16,16 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Per-handler option &gt; attribute &gt; global option; <c>null</c> means UTC. An interval has no time zone, so it is
-        /// always UTC.
+        /// Plan builder &gt; per-handler option &gt; attribute &gt; global option; <c>null</c> means UTC. An interval has no
+        /// time zone, so it is always UTC.
         /// </summary>
         public static string ResolveTimeZoneId(RecurringJobRegistryInfo registration, HangfireOptions options)
         {
             if (registration.Interval.HasValue)
                 return null;
+
+            if (options.Plan != null && options.Plan.TryGet(registration.HandlerType, out var step) && step.TimeZone != null)
+                return step.TimeZone;
 
             if (options.RecurringTimeZones.TryGetValue(registration.HandlerType, out var configured))
                 return configured;
@@ -42,9 +45,15 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return registration.Interval.HasValue ? IntervalCron.ToCron(registration.Interval.Value) : registration.Cron;
         }
 
-        /// <summary>Per-handler option (also set by <see cref="HangfireOptions.UsePlan"/>) &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.</summary>
+        /// <summary>
+        /// A handler in the plan: its step's resolved <see cref="ExecutionPlanStep.Enabled"/> (builder &gt; option &gt; global,
+        /// with the plan's missing-prerequisite policy). Otherwise the per-handler option &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.
+        /// </summary>
         public static bool IsAutoRun(Type handlerType, HangfireOptions options)
         {
+            if (options.Plan != null && options.Plan.TryGet(handlerType, out var step))
+                return step.Enabled;
+
             return options.RecurringAutoRun.TryGetValue(handlerType, out var autoRun)
                 ? autoRun
                 : options.GlobalRecurringAutoRun;

@@ -9,8 +9,9 @@ using System.Reflection;
 namespace ExecutionFlow.Abstractions
 {
     /// <summary>
-    /// Declares which recurring handlers exist, which are enabled, and which wait for which, and turns that into a
-    /// checked, immutable <see cref="ExecutionPlan"/>.
+    /// Configures the recurring handlers, which are enabled, and which wait for which, and turns that into a checked,
+    /// immutable <see cref="ExecutionPlan"/>. It's the single place where handlers are configured: inline with
+    /// <see cref="Add{THandler}"/>, or with <see cref="IHandlerConfiguration{THandler}"/> classes.
     /// </summary>
     /// <remarks>
     /// <para><b>A plan, not a list.</b> Registering handler by handler says what runs, but not in what order. The order is
@@ -22,8 +23,9 @@ namespace ExecutionFlow.Abstractions
     /// <example>
     /// <code>
     /// var planner = new ExecutionPlanner();
+    /// planner.ApplyConfigurationsFromAssembly(typeof(ProductSyncConfiguration).Assembly);
     /// planner.Add&lt;BrandHandler&gt;().Enabled(isBrandEnabled);
-    /// planner.Add&lt;ProductHandler&gt;().DependsOn&lt;BrandHandler&gt;();
+    /// planner.Add&lt;PriceHandler&gt;().DependsOn&lt;BrandHandler&gt;().Cron("*/10 * * * *");
     /// var plan = planner.Build();
     /// </code>
     /// </example>
@@ -33,49 +35,102 @@ namespace ExecutionFlow.Abstractions
 
         private static readonly IReadOnlyList<Type> None = new ReadOnlyCollection<Type>(new Type[0]);
 
-        private readonly Dictionary<Type, ExecutionPlanEntry> _entries = new Dictionary<Type, ExecutionPlanEntry>(TypeComparer);
-        private readonly List<ExecutionPlanEntry> _entryOrder = new List<ExecutionPlanEntry>();
+        private readonly Dictionary<Type, HandlerBuilder> _entries = new Dictionary<Type, HandlerBuilder>(TypeComparer);
+        private readonly List<HandlerBuilder> _entryOrder = new List<HandlerBuilder>();
         private bool _built;
 
-        /// <summary>Gets the declared entries, in declaration order.</summary>
-        public IReadOnlyList<ExecutionPlanEntry> Entries => _entryOrder;
+        /// <summary>Gets the configured handlers, in declaration order.</summary>
+        public IReadOnlyList<HandlerBuilder> Entries => _entryOrder;
 
         /// <summary>
-        /// Declares a recurring handler and returns its entry, to chain <see cref="ExecutionPlanEntry.DependsOn{TPrerequisite}"/>,
-        /// <see cref="ExecutionPlanEntry.Enabled(bool)"/> and <see cref="ExecutionPlanEntry.DisplayName(string)"/>.
+        /// Declares a recurring handler and returns its builder, the same one an <see cref="IHandlerConfiguration{THandler}"/>
+        /// receives. Prerequisites declared with <see cref="DependsOnAttribute"/> on the class are added to it.
         /// </summary>
         /// <typeparam name="THandler">The recurring handler.</typeparam>
-        public ExecutionPlanEntry Add<THandler>() where THandler : class, IHandler
+        /// <exception cref="InvalidOperationException">The handler was already configured, or the planner was already built.</exception>
+        public HandlerBuilder<THandler> Add<THandler>() where THandler : class, IHandler
         {
-            return Add(typeof(THandler));
+            return (HandlerBuilder<THandler>)Register(new HandlerBuilder<THandler>(this));
         }
 
         /// <summary>
-        /// Declares a recurring handler and returns its entry. Prerequisites declared with <see cref="DependsOnAttribute"/>
+        /// Declares a recurring handler and returns its builder. Prerequisites declared with <see cref="DependsOnAttribute"/>
         /// on the class are added to it.
         /// </summary>
         /// <param name="handlerType">The recurring handler type, implementing <see cref="IHandler"/>.</param>
         /// <exception cref="ArgumentException">The type doesn't implement <see cref="IHandler"/>.</exception>
-        /// <exception cref="InvalidOperationException">The handler was already added, depends on itself, or the planner was already built.</exception>
-        public ExecutionPlanEntry Add(Type handlerType)
+        /// <exception cref="InvalidOperationException">The handler was already configured, depends on itself, or the planner was already built.</exception>
+        public HandlerBuilder Add(Type handlerType)
         {
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
-            ThrowIfBuilt();
-
             if (!typeof(IHandler).IsAssignableFrom(handlerType))
                 throw new ArgumentException(
                     $"'{handlerType.FullName}' is not a recurring handler: only IHandler implementations can be in the execution plan.", nameof(handlerType));
 
-            if (_entries.ContainsKey(handlerType))
-                throw new InvalidOperationException($"'{handlerType.FullName}' was added to the execution plan twice.");
+            return Register(new HandlerBuilder(this, handlerType));
+        }
 
-            var entry = new ExecutionPlanEntry(this, handlerType);
-            foreach (var attribute in handlerType.GetCustomAttributes<DependsOnAttribute>(false))
-                entry.DependsOn(attribute.Prerequisite);
+        /// <summary>Configures a handler with a configuration class, as <c>configuration.Configure(Add&lt;THandler&gt;())</c>.</summary>
+        /// <typeparam name="THandler">The recurring handler.</typeparam>
+        /// <param name="configuration">The configuration.</param>
+        /// <returns>This planner, for chaining.</returns>
+        /// <exception cref="InvalidOperationException">The handler was already configured, or the planner was already built.</exception>
+        public ExecutionPlanner ApplyConfiguration<THandler>(IHandlerConfiguration<THandler> configuration) where THandler : class, IHandler
+        {
+            if (configuration == null) throw new ArgumentNullException(nameof(configuration));
+            configuration.Configure(Add<THandler>());
+            return this;
+        }
 
-            _entries.Add(handlerType, entry);
-            _entryOrder.Add(entry);
-            return entry;
+        /// <summary>
+        /// Creates and applies every non-abstract class in <paramref name="assembly"/> that implements
+        /// <see cref="IHandlerConfiguration{THandler}"/>, with its parameterless constructor.
+        /// </summary>
+        /// <param name="assembly">The assembly to scan.</param>
+        /// <returns>This planner, for chaining.</returns>
+        /// <exception cref="InvalidOperationException">A configuration class has no parameterless constructor, or a handler is configured twice.</exception>
+        public ExecutionPlanner ApplyConfigurationsFromAssembly(Assembly assembly)
+        {
+            return ApplyConfigurationsFromAssembly(assembly, null);
+        }
+
+        /// <summary>
+        /// Creates and applies the non-abstract classes in <paramref name="assembly"/> that implement
+        /// <see cref="IHandlerConfiguration{THandler}"/> and match <paramref name="predicate"/>, as EF Core's overload does.
+        /// </summary>
+        /// <param name="assembly">The assembly to scan.</param>
+        /// <param name="predicate">Filter on the configuration class; <c>null</c> applies all.</param>
+        /// <returns>This planner, for chaining.</returns>
+        /// <exception cref="InvalidOperationException">A configuration class has no parameterless constructor, or a handler is configured twice.</exception>
+        public ExecutionPlanner ApplyConfigurationsFromAssembly(Assembly assembly, Func<Type, bool> predicate)
+        {
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+            ThrowIfBuilt();
+
+            var apply = typeof(ExecutionPlanner).GetMethod(nameof(ApplyConfiguration));
+            foreach (var type in assembly.GetTypes().Where(t => t.IsClass && !t.IsAbstract && !t.ContainsGenericParameters
+                && (predicate == null || predicate(t))))
+            {
+                foreach (var configurationInterface in type.GetInterfaces()
+                    .Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IHandlerConfiguration<>)))
+                {
+                    if (type.GetConstructor(Type.EmptyTypes) == null)
+                        throw new InvalidOperationException(
+                            $"Handler configuration '{type.FullName}' has no parameterless constructor, so it can't be applied from the assembly.");
+
+                    var handlerType = configurationInterface.GetGenericArguments()[0];
+                    try
+                    {
+                        apply.MakeGenericMethod(handlerType).Invoke(this, new[] { Activator.CreateInstance(type) });
+                    }
+                    catch (TargetInvocationException ex) when (ex.InnerException != null)
+                    {
+                        throw ex.InnerException;
+                    }
+                }
+            }
+
+            return this;
         }
 
         /// <summary>
@@ -114,10 +169,16 @@ namespace ExecutionFlow.Abstractions
                     dependents.TryGetValue(entry.HandlerType, out var list) ? ReadOnly(list) : None,
                     entry.ConfiguredMinInterval,
                     entry.RunsOnOwnSchedule,
-                    entry.ConfiguredOverlapTimeout ?? NoOverlapAttribute.GetTimeout(entry.HandlerType)))
+                    entry.IsOverlapConfigured ? entry.ConfiguredOverlapTimeout : NoOverlapAttribute.GetTimeout(entry.HandlerType),
+                    entry.ConfiguredCron,
+                    entry.ConfiguredInterval,
+                    entry.ConfiguredId,
+                    entry.ConfiguredTimeZone,
+                    entry.ConfiguredEnabled,
+                    new ReadOnlyDictionary<string, object>(entry.Settings.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal))))
                 .ToList();
 
-            return new ExecutionPlan(steps);
+            return new ExecutionPlan(steps, missingPrerequisite);
         }
 
         internal void ThrowIfBuilt()
@@ -126,64 +187,78 @@ namespace ExecutionFlow.Abstractions
                 throw new InvalidOperationException("The execution planner was already built and can no longer be changed.");
         }
 
+        private HandlerBuilder Register(HandlerBuilder builder)
+        {
+            ThrowIfBuilt();
+            var handlerType = builder.HandlerType;
+
+            if (_entries.ContainsKey(handlerType))
+                throw new InvalidOperationException(
+                    $"'{handlerType.FullName}' was configured twice in the execution plan (two configuration classes, or a configuration and Add). Configure it in one place.");
+
+            foreach (var attribute in handlerType.GetCustomAttributes<DependsOnAttribute>(false))
+                builder.DependsOn(attribute.Prerequisite);
+
+            _entries.Add(handlerType, builder);
+            _entryOrder.Add(builder);
+            return builder;
+        }
+
         /// <summary>
         /// Walks the steps in execution order, so every prerequisite is resolved before its dependents and a skip cascades
         /// in a single pass.
         /// </summary>
-        private Dictionary<Type, string> ResolveSkipReasons(List<ExecutionPlanEntry> order, MissingPrerequisite policy)
+        private static Dictionary<Type, string> ResolveSkipReasons(List<HandlerBuilder> order, MissingPrerequisite policy)
         {
             var reasons = new Dictionary<Type, string>(TypeComparer);
 
             foreach (var entry in order)
             {
-                if (!entry.IsEnabled)
-                {
-                    reasons.Add(entry.HandlerType, "disabled");
-                    continue;
-                }
-
-                string reason = null;
-                foreach (var prerequisite in entry.Prerequisites)
-                {
-                    var unavailable = !_entries.ContainsKey(prerequisite)
-                        ? "is not in the execution plan"
-                        : reasons[prerequisite] != null ? "is not enabled (" + reasons[prerequisite] + ")" : null;
-
-                    if (unavailable == null)
-                        continue;
-
-                    // The worst outcome here is silent: the dependent would wait for a cycle that never comes.
-                    if (policy == MissingPrerequisite.Throw)
-                        throw new InvalidOperationException(
-                            $"'{entry.HandlerType.FullName}' is enabled and depends on '{prerequisite.FullName}', which {unavailable}. " +
-                            $"Add or enable '{prerequisite.Name}', disable '{entry.HandlerType.Name}', or remove the dependency.");
-
-                    reason = $"prerequisite '{prerequisite.Name}' {unavailable}";
-                    break;
-                }
-
+                var reason = entry.IsEnabled
+                    ? ResolveUnavailablePrerequisite(entry.HandlerType, entry.Prerequisites, reasons, policy)
+                    : "disabled";
                 reasons.Add(entry.HandlerType, reason);
             }
 
             return reasons;
         }
 
-        /// <summary>The run modes only apply to dependents, and only one at a time.</summary>
+        /// <summary>
+        /// The skip reason of an enabled handler, or <c>null</c> when every prerequisite is available. <paramref name="resolved"/>
+        /// holds the handlers already resolved in execution order, so a prerequisite missing from it isn't in the plan.
+        /// </summary>
+        internal static string ResolveUnavailablePrerequisite(Type handlerType, IReadOnlyList<Type> prerequisites,
+            Dictionary<Type, string> resolved, MissingPrerequisite policy)
+        {
+            foreach (var prerequisite in prerequisites)
+            {
+                var unavailable = !resolved.TryGetValue(prerequisite, out var prerequisiteReason)
+                    ? "is not in the execution plan"
+                    : prerequisiteReason != null ? "is not enabled (" + prerequisiteReason + ")" : null;
+
+                if (unavailable == null)
+                    continue;
+
+                // The worst outcome here is silent: the dependent would wait for a cycle that never comes.
+                if (policy == MissingPrerequisite.Throw)
+                    throw new InvalidOperationException(
+                        $"'{handlerType.FullName}' is enabled and depends on '{prerequisite.FullName}', which {unavailable}. " +
+                        $"Add or enable '{prerequisite.Name}', disable '{handlerType.Name}', or remove the dependency.");
+
+                return $"prerequisite '{prerequisite.Name}' {unavailable}";
+            }
+
+            return null;
+        }
+
+        /// <summary>The run modes only apply to dependents.</summary>
         private void ValidateRunModes()
         {
             foreach (var entry in _entryOrder)
             {
-                var hasMinInterval = entry.ConfiguredMinInterval.HasValue;
-                if (!hasMinInterval && !entry.RunsOnOwnSchedule)
-                    continue;
-
-                if (hasMinInterval && entry.RunsOnOwnSchedule)
+                if (entry.ConfiguredRunMode.HasValue && entry.Prerequisites.Count == 0)
                     throw new InvalidOperationException(
-                        $"'{entry.HandlerType.FullName}' sets both MinInterval and RunOnOwnSchedule. With its own schedule, the schedule already spaces its runs: use one of them.");
-
-                if (entry.Prerequisites.Count == 0)
-                    throw new InvalidOperationException(
-                        $"'{entry.HandlerType.FullName}' sets {(hasMinInterval ? "MinInterval" : "RunOnOwnSchedule")} but has no prerequisites, so nothing triggers it. Add a dependency or remove the setting.");
+                        $"'{entry.HandlerType.FullName}' sets the run mode {entry.ConfiguredRunMode.Value} but has no prerequisites, so nothing triggers it. Add a dependency or remove the run mode.");
             }
         }
 
@@ -226,9 +301,9 @@ namespace ExecutionFlow.Abstractions
         }
 
         /// <summary>Post-order DFS over the declaration order: every prerequisite comes before its dependents.</summary>
-        private List<ExecutionPlanEntry> Order()
+        private List<HandlerBuilder> Order()
         {
-            var order = new List<ExecutionPlanEntry>();
+            var order = new List<HandlerBuilder>();
             var visited = new HashSet<Type>(TypeComparer);
 
             foreach (var entry in _entryOrder)
@@ -237,7 +312,7 @@ namespace ExecutionFlow.Abstractions
             return order;
         }
 
-        private void VisitForOrder(ExecutionPlanEntry entry, HashSet<Type> visited, List<ExecutionPlanEntry> order)
+        private void VisitForOrder(HandlerBuilder entry, HashSet<Type> visited, List<HandlerBuilder> order)
         {
             if (!visited.Add(entry.HandlerType))
                 return;
@@ -266,7 +341,7 @@ namespace ExecutionFlow.Abstractions
             return dependents;
         }
 
-        private static string ResolveDisplayName(ExecutionPlanEntry entry)
+        private static string ResolveDisplayName(HandlerBuilder entry)
         {
             return entry.ConfiguredDisplayName
                 ?? entry.HandlerType.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName

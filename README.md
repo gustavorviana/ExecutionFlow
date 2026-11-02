@@ -378,7 +378,50 @@ planner.Add<ProductSyncHandler>().DependsOn<CategorySyncHandler>();
 options.UsePlan(planner.Build());
 ```
 
-`UsePlan` lives on the core `ExecutionFlowOptions`, so the same plan works with any execution provider. A step's `Enabled` replaces `SetJobAutoRun` for the handlers in the plan. See `Examples/` for every plan feature.
+`UsePlan` lives on the core `ExecutionFlowOptions`, so the same plan works with any execution provider. See `Examples/` for every plan feature.
+
+### Handler configuration (EF Core style)
+
+`ExecutionPlanner` is the single place to configure handlers. `Add<T>()` returns a `HandlerBuilder<T>`, and the same builder is passed to `IHandlerConfiguration<T>` classes, like EF Core's `IEntityTypeConfiguration<T>`:
+
+```csharp
+public class ProductSyncConfiguration : IHandlerConfiguration<ProductSyncHandler>
+{
+    public void Configure(HandlerBuilder<ProductSyncHandler> handler)
+    {
+        handler.Cron("*/10 * * * *")                  // or .Interval(TimeSpan.FromMinutes(90))
+               .Id("product-sync")
+               .TimeZone("America/Sao_Paulo")
+               .DisplayName("Product Sync")
+               .DependsOn<CategorySyncHandler>()     // .RemoveDependency<X>() / .ClearDependencies()
+               .RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(20)) // or DependentRunMode.OwnSchedule
+               .NoOverlap(TimeSpan.FromMinutes(10))  // or .AllowOverlap()
+               .Queue("reports")                     // Hangfire extension
+               .AutomaticRetry(3);                   // Hangfire extension
+    }
+}
+
+var planner = new ExecutionPlanner();
+planner.ApplyConfigurationsFromAssembly(typeof(ProductSyncConfiguration).Assembly); // or ApplyConfiguration(new ...)
+planner.Add<CategorySyncHandler>().Enabled(true);                                   // inline, same builder
+options.UsePlan(planner.Build());
+```
+
+Like EF's fluent API over data annotations, the builder changes **only what it calls**; every other item keeps its attribute, option or default. Configuring the same handler twice (two classes, or a class and `Add<T>()`) throws.
+
+| Item | Default | Global option | Attribute | Per-handler option | Builder (wins) |
+|---|---|---|---|---|---|
+| Schedule | — | — | `[Recurring]` / `[RecurringInterval]` | — | `Cron` / `Interval` |
+| Id | `IJobIdGenerator` | — | `Id = ...` | — | `Id` |
+| Time zone | UTC | `RecurringTimeZone` | `TimeZone = ...` | `SetJobTimeZone<T>` | `TimeZone` |
+| Display name | class name | — | `[DisplayName]` | — | `DisplayName` |
+| Enabled | on | `GlobalRecurringAutoRun` | — | `SetJobAutoRun<T>` | `Enabled` |
+| Dependencies | none | — | `[DependsOn]` (merged) | — | `DependsOn` / `RemoveDependency` / `ClearDependencies` |
+| Run mode | triggered | — | — | — | `RunMode` |
+| Overlap | allowed | — | `[NoOverlap]` | — | `NoOverlap` / `AllowOverlap` |
+| Queue, retries | Hangfire's, `DisableRecurringRetries` | — | `[Queue]`, `[AutomaticRetry]` | — | `Queue`, `AutomaticRetry` |
+
+When the builder overrides `SetJobAutoRun<T>` or `SetJobTimeZone<T>`, `Configure` writes a trace warning. If an option turns off a prerequisite of the plan, the plan's `MissingPrerequisite` policy still applies (throw, or skip its dependents).
 
 ## Hangfire Native Attributes
 

@@ -30,7 +30,7 @@ public static class CatalogPlan
         planner.Add<ProductSyncHandler>()
             .DependsOn<CategorySyncHandler>()
             .DependsOn<BrandSyncHandler>()
-            .MinInterval(TimeSpan.FromMinutes(5))
+            .RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(5))
             .DisplayName("Plan: Product Sync");
 
         // The prerequisite comes from [DependsOn(typeof(ProductSyncHandler))] on the class.
@@ -45,7 +45,7 @@ public static class CatalogPlan
         // Keeps its own cron; each occurrence without a new product cycle ends in PrerequisitesNotMet.
         planner.Add<InventoryReportHandler>()
             .DependsOn<ProductSyncHandler>()
-            .RunOnOwnSchedule();
+            .RunMode(DependentRunMode.OwnSchedule);
 
         // Disabled: registered with a schedule that never fires. Its dependent is disabled in cascade (see Build below).
         planner.Add<LegacyImportHandler>()

@@ -8,7 +8,7 @@ namespace ExecutionFlow.Attributes
     /// runs may overlap. Every execution provider respects it, so handlers don't depend on a provider's own attribute.
     /// </summary>
     /// <remarks>
-    /// <see cref="Abstractions.ExecutionPlanEntry.NoOverlap(TimeSpan)"/> on the execution plan takes precedence over this
+    /// <see cref="Abstractions.HandlerBuilder.NoOverlap(TimeSpan)"/> on the execution plan takes precedence over this
     /// attribute. Dependents in the execution plan never overlap, with or without it.
     /// </remarks>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]

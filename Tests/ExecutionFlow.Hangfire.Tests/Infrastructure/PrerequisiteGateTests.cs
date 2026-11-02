@@ -64,7 +64,7 @@ public class PrerequisiteGateTests
         return setup;
     }
 
-    private HangfireSetup CreateChainSetup(Action<ExecutionPlanEntry>? configureDependent = null)
+    private HangfireSetup CreateChainSetup(Action<HandlerBuilder>? configureDependent = null)
     {
         return CreateSetup(p =>
         {
@@ -248,7 +248,7 @@ public class PrerequisiteGateTests
     [Fact]
     public void DispatchRecurring_DoesNotTrigger_OwnScheduleDependent()
     {
-        var setup = CreateChainSetup(d => d.RunOnOwnSchedule());
+        var setup = CreateChainSetup(d => d.RunMode(DependentRunMode.OwnSchedule));
 
         RunHandler(setup, typeof(PrerequisiteHandler));
 
@@ -258,7 +258,7 @@ public class PrerequisiteGateTests
     [Fact]
     public void OnStateElection_GatesSchedulerOccurrence_OfOwnScheduleDependent()
     {
-        var setup = CreateChainSetup(d => d.RunOnOwnSchedule());
+        var setup = CreateChainSetup(d => d.RunMode(DependentRunMode.OwnSchedule));
 
         var withoutCycle = Elect(setup, typeof(DependentHandler), PrerequisiteGateFilter.SchedulerEnqueueReason);
         RunHandler(setup, typeof(PrerequisiteHandler));
@@ -294,7 +294,7 @@ public class PrerequisiteGateTests
     [Fact]
     public void DispatchRecurring_TriggersNow_WhenMinIntervalElapsed()
     {
-        var setup = CreateChainSetup(d => d.MinInterval(TimeSpan.FromMinutes(10)));
+        var setup = CreateChainSetup(d => d.RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(10)));
 
         RunHandler(setup, typeof(PrerequisiteHandler));
 
@@ -305,7 +305,7 @@ public class PrerequisiteGateTests
     [Fact]
     public void DispatchRecurring_SchedulesTrigger_WhenMinIntervalNotElapsed()
     {
-        var setup = CreateChainSetup(d => d.MinInterval(TimeSpan.FromMinutes(10)));
+        var setup = CreateChainSetup(d => d.RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(10)));
         RunHandler(setup, typeof(PrerequisiteHandler));
         ElectPlanTrigger(setup, typeof(DependentHandler));
         FinishActiveJobs();
@@ -322,7 +322,7 @@ public class PrerequisiteGateTests
     [Fact]
     public void DispatchRecurring_SchedulesOnlyOneTrigger_PerDependent()
     {
-        var setup = CreateChainSetup(d => d.MinInterval(TimeSpan.FromMinutes(10)));
+        var setup = CreateChainSetup(d => d.RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(10)));
         RunHandler(setup, typeof(PrerequisiteHandler));
         ElectPlanTrigger(setup, typeof(DependentHandler));
         FinishActiveJobs();
@@ -339,7 +339,7 @@ public class PrerequisiteGateTests
     [Fact]
     public void TriggerPlanDependent_TriggersDependent_WhenStillReady()
     {
-        var setup = CreateChainSetup(d => d.MinInterval(TimeSpan.FromMinutes(10)));
+        var setup = CreateChainSetup(d => d.RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(10)));
         RunHandler(setup, typeof(PrerequisiteHandler));
         ElectPlanTrigger(setup, typeof(DependentHandler));
         FinishActiveJobs();

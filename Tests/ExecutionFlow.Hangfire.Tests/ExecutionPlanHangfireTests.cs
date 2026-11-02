@@ -55,30 +55,40 @@ public class ExecutionPlanHangfireTests
         Assert.True(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), enabled.Options));
     }
 
+    /// <summary>014-handler-configuration AC-002.6: without Enabled on the builder, SetJobAutoRun applies (it used to throw).</summary>
     [Fact]
-    public void UsePlan_Throws_WhenHandlerAlreadyHasSetJobAutoRun()
+    public void SetJobAutoRun_Applies_WhenBuilderDoesNotSetEnabled()
     {
+        var planner = new ExecutionPlanner();
+        planner.Add<BrandHandler>();
+        var plan = planner.Build();
+
         var setup = new HangfireSetup();
-
-        var ex = Assert.Throws<InvalidOperationException>(() => setup.Configure(o =>
+        setup.Configure(o =>
         {
-            o.SetJobAutoRun<BrandHandler>(true);
-            o.UsePlan(CreatePlan());
-        }));
+            o.SetJobAutoRun<BrandHandler>(false);
+            o.UsePlan(plan);
+        });
 
-        Assert.Contains(typeof(BrandHandler).FullName!, ex.Message);
+        Assert.False(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), setup.Options));
     }
 
+    /// <summary>014-handler-configuration AC-002.5: the builder's Enabled wins over SetJobAutoRun, set before or after UsePlan.</summary>
     [Fact]
-    public void SetJobAutoRun_Throws_WhenHandlerIsInPlan()
+    public void SetJobAutoRun_IsIgnored_WhenBuilderSetsEnabled()
     {
-        var setup = new HangfireSetup();
+        var planner = new ExecutionPlanner();
+        planner.Add<BrandHandler>().Enabled(true);
+        var plan = planner.Build();
 
-        Assert.Throws<InvalidOperationException>(() => setup.Configure(o =>
+        var setup = new HangfireSetup();
+        setup.Configure(o =>
         {
-            o.UsePlan(CreatePlan());
-            o.SetJobAutoRun<ProductHandler>(false);
-        }));
+            o.UsePlan(plan);
+            o.SetJobAutoRun<BrandHandler>(false);
+        });
+
+        Assert.True(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), setup.Options));
     }
 
     [Fact]
@@ -135,7 +145,7 @@ public class ExecutionPlanHangfireTests
     {
         var planner = new ExecutionPlanner();
         planner.Add<BrandHandler>();
-        planner.Add<UnscheduledHandler>().DependsOn<BrandHandler>().RunOnOwnSchedule();
+        planner.Add<UnscheduledHandler>().DependsOn<BrandHandler>().RunMode(DependentRunMode.OwnSchedule);
         var plan = planner.Build();
 
         var ex = Assert.Throws<InvalidOperationException>(() => new HangfireSetup().Configure(o => o.UsePlan(plan)));

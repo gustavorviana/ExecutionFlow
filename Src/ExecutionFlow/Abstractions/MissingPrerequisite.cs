@@ -2,7 +2,7 @@ namespace ExecutionFlow.Abstractions
 {
     /// <summary>
     /// What <see cref="ExecutionPlanner.Build(MissingPrerequisite)"/> does when an enabled handler depends on a prerequisite
-    /// that isn't available: it wasn't added to the planner, or it was added with <see cref="ExecutionPlanEntry.Enabled(bool)"/> <c>false</c>.
+    /// that isn't available: it wasn't added to the planner, or it was added with <see cref="HandlerBuilder.Enabled(bool)"/> <c>false</c>.
     /// </summary>
     public enum MissingPrerequisite
     {

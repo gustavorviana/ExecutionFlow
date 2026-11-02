@@ -84,8 +84,25 @@ namespace ExecutionFlow.Hangfire
                     throw new InvalidOperationException(
                         $"Recurring handler '{registration.HandlerType.FullName}' has no schedule. Add [Recurring(\"<cron>\")] or [RecurringInterval(\"hh:mm:ss\")] to the class.");
 
+                ExecutionPlanStep step = null;
+                options.Plan?.TryGet(registration.HandlerType, out step);
+
+                // The plan's builder wins over a per-handler option; say so, since the option would otherwise look applied.
+                if (step?.ConfiguredEnabled != null && options.RecurringAutoRun.ContainsKey(registration.HandlerType))
+                    Trace.TraceWarning(
+                        "ExecutionFlow: '{0}' sets Enabled in the execution plan, so its SetJobAutoRun is ignored.",
+                        registration.HandlerType.FullName);
+
+                if (step?.TimeZone != null && options.RecurringTimeZones.ContainsKey(registration.HandlerType) && !registration.Interval.HasValue)
+                    Trace.TraceWarning(
+                        "ExecutionFlow: '{0}' sets TimeZone in the execution plan, so its SetJobTimeZone is ignored.",
+                        registration.HandlerType.FullName);
+
                 // An interval has no time zone: a time zone set for this handler has no effect (the global one is ignored quietly).
-                if (registration.Interval.HasValue && options.RecurringTimeZones.TryGetValue(registration.HandlerType, out var ignoredTimeZone))
+                var ignoredTimeZone = registration.Interval.HasValue
+                    ? step?.TimeZone ?? (options.RecurringTimeZones.TryGetValue(registration.HandlerType, out var option) ? option : null)
+                    : null;
+                if (ignoredTimeZone != null)
                 {
                     ValidateTimeZone(ignoredTimeZone, registration.HandlerType.FullName);
                     Trace.TraceWarning(

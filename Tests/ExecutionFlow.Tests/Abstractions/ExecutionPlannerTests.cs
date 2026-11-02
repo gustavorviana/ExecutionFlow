@@ -202,8 +202,8 @@ public class ExecutionPlannerTests
     {
         var planner = new ExecutionPlanner();
         planner.Add<HandlerA>();
-        planner.Add<HandlerB>().DependsOn<HandlerA>().MinInterval(TimeSpan.FromMinutes(10));
-        planner.Add<HandlerC>().DependsOn<HandlerA>().RunOnOwnSchedule();
+        planner.Add<HandlerB>().DependsOn<HandlerA>().RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(10));
+        planner.Add<HandlerC>().DependsOn<HandlerA>().RunMode(DependentRunMode.OwnSchedule);
         planner.Add<HandlerD>().DependsOn<HandlerA>();
 
         var plan = planner.Build();
@@ -216,31 +216,30 @@ public class ExecutionPlannerTests
     }
 
     [Fact]
-    public void MinInterval_Throws_WhenNotPositive()
+    public void RunMode_Throws_WhenMinIntervalIsNotPositive()
     {
         var entry = new ExecutionPlanner().Add<HandlerA>();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => entry.MinInterval(TimeSpan.Zero));
+        Assert.Throws<ArgumentOutOfRangeException>(() => entry.RunMode(DependentRunMode.MinInterval, TimeSpan.Zero));
     }
 
     [Fact]
-    public void Build_Throws_WhenMinIntervalAndOwnScheduleAreCombined()
+    public void RunMode_Throws_WhenModeAndIntervalDisagree()
     {
-        var planner = new ExecutionPlanner();
-        planner.Add<HandlerA>();
-        planner.Add<HandlerB>().DependsOn<HandlerA>().MinInterval(TimeSpan.FromMinutes(1)).RunOnOwnSchedule();
+        var entry = new ExecutionPlanner().Add<HandlerA>();
 
-        Assert.Throws<InvalidOperationException>(() => planner.Build());
+        Assert.Throws<ArgumentException>(() => entry.RunMode(DependentRunMode.MinInterval));
+        Assert.Throws<ArgumentException>(() => entry.RunMode(DependentRunMode.OwnSchedule, TimeSpan.FromMinutes(1)));
     }
 
     [Fact]
     public void Build_Throws_WhenRunModeIsSetWithoutPrerequisites()
     {
         var withMinInterval = new ExecutionPlanner();
-        withMinInterval.Add<HandlerA>().MinInterval(TimeSpan.FromMinutes(1));
+        withMinInterval.Add<HandlerA>().RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(1));
 
         var withOwnSchedule = new ExecutionPlanner();
-        withOwnSchedule.Add<HandlerA>().RunOnOwnSchedule();
+        withOwnSchedule.Add<HandlerA>().RunMode(DependentRunMode.OwnSchedule);
 
         Assert.Throws<InvalidOperationException>(() => withMinInterval.Build());
         Assert.Throws<InvalidOperationException>(() => withOwnSchedule.Build());

@@ -100,6 +100,7 @@ As a consumer app, I want to register the execution plan on the core options, so
   - **AC-003.5**: **Given** a handler without the attribute or option, **When** two runs start, **Then** they run concurrently in Hangfire. Test: `OverlapFilterTests.Perform_AllowsOverlap_ByDefault`
 
 - **FR-004 The plan is registered on the core options**: `UsePlan(ExecutionPlan)` moves from `HangfireOptions` to `ExecutionFlowOptions`, keeping its signature, so existing Hangfire code compiles unchanged. The core only stores and validates the plan (one plan per options); each provider applies it. In Hangfire the behavior of 005 FR-009 is unchanged, including the conflict with `SetJobAutoRun`, which stays in `HangfireOptions`. *(Story 3)*
+  - *Amended by [014-handler-configuration](../014-handler-configuration/spec.md) FR-002: the `SetJobAutoRun` conflict no longer throws (builder wins with a warning).*
   - **AC-004.1**: **Given** options of any provider, **When** `UsePlan` is called twice, **Then** it throws. Test: `ExecutionFlowOptionsTests.UsePlan_Throws_WhenCalledTwice`
   - **AC-004.2**: **Given** `HangfireOptions`, **When** `UsePlan` is called through the `ExecutionFlowOptions` base type, **Then** the existing `ExecutionPlanHangfireTests` behavior holds. Test: `ExecutionPlanHangfireTests.UsePlan_ThroughBaseOptions_RegistersPlan`
   - **AC-004.3**: **Given** a null plan, **When** `UsePlan` is called, **Then** `ArgumentNullException` is thrown. Test: `ExecutionFlowOptionsTests.UsePlan_Throws_WhenPlanIsNull`

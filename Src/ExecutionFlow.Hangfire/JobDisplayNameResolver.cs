@@ -104,7 +104,7 @@ namespace ExecutionFlow.Hangfire
         }
 
         /// <summary>
-        /// The execution plan step's display name (<see cref="ExecutionPlanEntry.DisplayName(string)"/>), when the setup has a
+        /// The execution plan step's display name (<see cref="HandlerBuilder.DisplayName(string)"/>), when the setup has a
         /// plan with this handler and the name isn't just the class name.
         /// </summary>
         private string GetPlanDisplayName(Type handlerType)

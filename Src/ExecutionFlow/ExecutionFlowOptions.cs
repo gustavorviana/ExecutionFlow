@@ -207,6 +207,41 @@ namespace ExecutionFlow
         }
 
         /// <summary>
+        /// The provider's on/off for a recurring handler whose plan builder didn't call <see cref="HandlerBuilder.Enabled(bool)"/>
+        /// (e.g. a per-handler option, else a global one). Default: <c>true</c>.
+        /// </summary>
+        /// <param name="handlerType">The recurring handler type.</param>
+        protected internal virtual bool IsRecurringHandlerEnabled(Type handlerType)
+        {
+            return true;
+        }
+
+        /// <summary>
+        /// Applies the plan once the options are complete: the builder's schedule, ID and name replace the attribute's in the
+        /// registrations (no per-handler option exists for them), and the plan's enabled steps are re-resolved with the
+        /// provider's on/off, applying its <see cref="ExecutionPlan.MissingPrerequisite"/> again.
+        /// </summary>
+        internal void ResolvePlan()
+        {
+            if (Plan == null)
+                return;
+
+            foreach (var step in Plan.Steps)
+            {
+                if (!_recurringHandlers.TryGetValue(step.HandlerType, out var registration))
+                    continue;
+
+                var cron = step.Cron ?? (step.Interval.HasValue ? null : registration.Cron);
+                var interval = step.Interval ?? (step.Cron != null ? null : registration.Interval);
+
+                _recurringHandlers[step.HandlerType] = new RecurringJobRegistryInfo(
+                    step.HandlerType, step.DisplayName, cron, step.Id ?? registration.Id, registration.TimeZone, interval, registration.OverlapTimeout);
+            }
+
+            Plan = Plan.Reevaluate(IsRecurringHandlerEnabled);
+        }
+
+        /// <summary>
         /// Registers a logger factory type.
         /// </summary>
         /// <typeparam name="TFactory">The logger factory type implementing <see cref="IExecutionLoggerFactory"/>.</typeparam>

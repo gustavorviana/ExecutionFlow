@@ -33,9 +33,19 @@ namespace ExecutionFlow.Hangfire.Infrastructure
                 return System.Array.Empty<JobFilter>();
             }
 
-            var filters = handlerType
-                .GetCustomAttributes(true)
-                .OfType<JobFilterAttribute>()
+            var attributes = handlerType.GetCustomAttributes(true).OfType<JobFilterAttribute>().ToList();
+
+            // Settings from the plan's builder win over the class's attributes of the same type.
+            if (_options.Plan != null && _options.Plan.TryGet(handlerType, out var step))
+            {
+                foreach (var setting in step.Settings.Values.OfType<JobFilterAttribute>())
+                {
+                    attributes.RemoveAll(a => a.GetType() == setting.GetType());
+                    attributes.Add(setting);
+                }
+            }
+
+            var filters = attributes
                 .Select((attr, i) => new JobFilter(attr, JobFilterScope.Type, i))
                 .ToList();
 

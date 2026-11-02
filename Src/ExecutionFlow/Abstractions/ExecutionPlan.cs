@@ -21,8 +21,12 @@ namespace ExecutionFlow.Abstractions
         /// </summary>
         public IReadOnlyList<ExecutionPlanStep> Steps { get; }
 
-        internal ExecutionPlan(IList<ExecutionPlanStep> steps)
+        /// <summary>Gets the policy the plan was built with, also used when a provider re-evaluates which handlers are enabled.</summary>
+        public MissingPrerequisite MissingPrerequisite { get; }
+
+        internal ExecutionPlan(IList<ExecutionPlanStep> steps, MissingPrerequisite missingPrerequisite)
         {
+            MissingPrerequisite = missingPrerequisite;
             Steps = new ReadOnlyCollection<ExecutionPlanStep>(steps);
             _steps = new Dictionary<Type, ExecutionPlanStep>(ExecutionPlanner.TypeComparer);
             foreach (var step in steps)
@@ -46,6 +50,32 @@ namespace ExecutionFlow.Abstractions
                 throw new KeyNotFoundException($"'{handlerType.FullName}' is not in the execution plan.");
 
             return step;
+        }
+
+        /// <summary>
+        /// Re-resolves which steps run when the provider decides the enabled state of the steps whose builder didn't set it
+        /// (e.g. from <c>SetJobAutoRun</c>), applying <see cref="MissingPrerequisite"/> again: an unavailable prerequisite
+        /// throws or turns its dependents off in cascade, as at <see cref="ExecutionPlanner.Build(Abstractions.MissingPrerequisite)"/>.
+        /// </summary>
+        /// <param name="isEnabledByProvider">The provider's on/off for a handler whose builder didn't call <c>Enabled</c>.</param>
+        internal ExecutionPlan Reevaluate(Func<Type, bool> isEnabledByProvider)
+        {
+            var reasons = new Dictionary<Type, string>(ExecutionPlanner.TypeComparer);
+            var steps = new List<ExecutionPlanStep>(Steps.Count);
+
+            // Steps are in execution order, so every prerequisite is resolved before its dependents.
+            foreach (var step in Steps)
+            {
+                var enabled = step.ConfiguredEnabled ?? isEnabledByProvider(step.HandlerType);
+                var reason = enabled
+                    ? ExecutionPlanner.ResolveUnavailablePrerequisite(step.HandlerType, step.Prerequisites, reasons, MissingPrerequisite)
+                    : "disabled";
+
+                reasons.Add(step.HandlerType, reason);
+                steps.Add(step.WithSkipReason(reason));
+            }
+
+            return new ExecutionPlan(steps, MissingPrerequisite);
         }
 
         /// <summary>Gets the step of <paramref name="handlerType"/>, if it's in the plan.</summary>

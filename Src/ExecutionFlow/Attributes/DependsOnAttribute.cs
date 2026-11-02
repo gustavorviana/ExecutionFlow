@@ -5,7 +5,7 @@ namespace ExecutionFlow.Attributes
     /// <summary>
     /// Declares that a recurring handler only runs after a new completed cycle of another recurring handler.
     /// Repeat the attribute for several prerequisites. Read by <see cref="Abstractions.ExecutionPlanner.Add(Type)"/> and
-    /// merged with <see cref="Abstractions.ExecutionPlanEntry.DependsOn(Type)"/>.
+    /// merged with <see cref="Abstractions.HandlerBuilder.DependsOn(Type)"/>.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true, Inherited = false)]
     public class DependsOnAttribute : Attribute

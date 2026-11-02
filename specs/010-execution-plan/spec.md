@@ -79,6 +79,7 @@ As a provider, I want the steps in an order where every prerequisite comes first
 
 - **FR-001 Declare handlers**: `ExecutionPlanner.Add<THandler>()` declares a recurring handler and returns an `ExecutionPlanEntry` for configuring it. *(Story 1)*
   - *Amended by [012-interval-and-overlap](../012-interval-and-overlap/spec.md) FR-003: an entry can turn overlap off; the entry wins over the attribute.*
+  - *Amended by [014-handler-configuration](../014-handler-configuration/spec.md) FR-001: `Add<T>()` returns `HandlerBuilder<T>`, which replaces `ExecutionPlanEntry`; the planner also applies `IHandlerConfiguration<T>` classes.*
   - **AC-001.1**: **Given** a handler already added, **When** it is added again, **Then** `InvalidOperationException` is thrown naming the handler. Test: `ExecutionPlannerTests.Add_Throws_WhenHandlerAddedTwice`
   - **AC-001.2**: **Given** a built planner, **When** it is modified, **Then** `InvalidOperationException` is thrown. Test: `ExecutionPlannerTests.Add_Throws_AfterBuild`
 
@@ -107,9 +108,10 @@ As a provider, I want the steps in an order where every prerequisite comes first
   - **AC-006.3**: **Given** a built plan, **When** its collections are read, **Then** they are read-only. Test: `ExecutionPlannerTests.Build_ReturnsReadOnlyCollections`
 
 - **FR-007 Run mode of a dependent**: a dependent (an entry with prerequisites) runs in one of three modes, enforced by providers. **Default:** triggered as soon as every prerequisite has completed a new cycle. **`MinInterval(TimeSpan)`:** triggered the same way, but never less than the interval after its previous run finished; a trigger that comes too early is postponed to the end of the interval, not lost. **`RunOnOwnSchedule()`:** runs on its own schedule, and at each occurrence runs only if every prerequisite has a new cycle, otherwise records that its prerequisites weren't met. A manual run ignores the mode and the prerequisites, but still counts as a run: it consumes the prerequisites' cycles, and its end starts the `MinInterval`. *(Story 1)*
+  - *Amended by [013](../013-dependencies-by-attribute/spec.md) FR-002 and [014](../014-handler-configuration/spec.md) FR-001: the modes are set with `HandlerBuilder.RunMode(DependentRunMode.MinInterval, interval)` / `RunMode(DependentRunMode.OwnSchedule)`, replacing `MinInterval()` / `RunOnOwnSchedule()` (unreleased 1.3.0, confirmed by the maintainer).*
   - **AC-007.1**: **Given** an entry with `MinInterval` or `RunOnOwnSchedule`, **When** the plan is built, **Then** the step exposes it (`MinInterval`, `RunsOnOwnSchedule`). Test: `ExecutionPlannerTests.Build_ExposesRunMode`
-  - **AC-007.2**: **Given** a zero or negative interval, **When** `MinInterval` is set, **Then** `ArgumentOutOfRangeException` is thrown. Test: `ExecutionPlannerTests.MinInterval_Throws_WhenNotPositive`
-  - **AC-007.3**: **Given** an entry with both `MinInterval` and `RunOnOwnSchedule`, **When** the plan is built, **Then** `InvalidOperationException` is thrown. Test: `ExecutionPlannerTests.Build_Throws_WhenMinIntervalAndOwnScheduleAreCombined`
+  - **AC-007.2**: **Given** a zero or negative interval, **When** `MinInterval` is set, **Then** `ArgumentOutOfRangeException` is thrown. Test: `ExecutionPlannerTests.RunMode_Throws_WhenMinIntervalIsNotPositive`
+  - **AC-007.3**: **Given** `RunMode(MinInterval)` without an interval or `RunMode(OwnSchedule)` with one (both modes can no longer be combined, 013), **When** it is set, **Then** `ArgumentException` is thrown. Test: `ExecutionPlannerTests.RunMode_Throws_WhenModeAndIntervalDisagree`
   - **AC-007.4**: **Given** an entry without prerequisites that sets `MinInterval` or `RunOnOwnSchedule`, **When** the plan is built, **Then** `InvalidOperationException` is thrown. Test: `ExecutionPlannerTests.Build_Throws_WhenRunModeIsSetWithoutPrerequisites`
 
 ### Business Rules

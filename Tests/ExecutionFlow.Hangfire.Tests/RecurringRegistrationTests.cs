@@ -206,7 +206,7 @@ public class RecurringRegistrationTests : IDisposable
     {
         var planner = new ExecutionPlanner();
         planner.Add<NewYorkHandler>();
-        planner.Add<DailyHandler>().DependsOn<NewYorkHandler>().RunOnOwnSchedule();
+        planner.Add<DailyHandler>().DependsOn<NewYorkHandler>().RunMode(DependentRunMode.OwnSchedule);
         var plan = planner.Build();
 
         Build(o => o.UsePlan(plan));
