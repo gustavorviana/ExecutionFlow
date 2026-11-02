@@ -1,5 +1,12 @@
 <!--
 Sync Impact Report
+- Version change: 1.0.0 → 1.1.0 (2026-11-02)
+- Modified principle: V. Minimal public surface — adds "Breaking changes need the maintainer's explicit
+  confirmation": recorded in the spec's Clarifications, plus a major bump; CRITICAL in /speckit-analyze;
+  /speckit-implement stops and asks.
+- Templates: unchanged. Follow-up: none (existing specs record no unconfirmed breaking change pending).
+
+Previous report (1.0.0):
 - Version change: (template) → 1.0.0
 - Origin: migrated from docs/specs/constitution.md (P-001..P-007, NFR-001..NFR-004) and the global ADRs
   ADR-0001, ADR-0002, ADR-0003, ADR-0004 and ADR-0007, which are absorbed as principles below.
@@ -53,7 +60,14 @@ Console output (`ExecutionFlow.Hangfire.Console`), Microsoft DI (`ExecutionFlow.
 
 ### V. Minimal public surface
 
-Settings users shouldn't touch are `internal`. Tests reach them through `InternalsVisibleTo`, not by making them public. No public API is removed or changed incompatibly without a major version bump.
+Settings users shouldn't touch are `internal`. Tests reach them through `InternalsVisibleTo`, not by making them public.
+
+**Breaking changes need the maintainer's explicit confirmation (NON-NEGOTIABLE).** No public API is removed or changed incompatibly (types, members, signatures, namespaces, attribute usage), and no documented behavior is changed incompatibly (e.g. a default value, an exception that is or isn't thrown, an order or a state), without both:
+
+1. the maintainer's explicit confirmation, recorded in the feature's `spec.md` under *Clarifications* with the date and what breaks; and
+2. a major version bump.
+
+Compatible changes (new types, new members, new optional settings whose default keeps the current behavior) don't need this confirmation; they follow the normal versioning rules. A spec, plan or task that introduces a breaking change without that record is a CRITICAL finding in `/speckit-analyze`, and `/speckit-implement` stops and asks the maintainer instead of proceeding. When in doubt whether a change breaks, treat it as breaking and ask.
 
 ### VI. Dispatch doesn't block
 
@@ -95,4 +109,4 @@ Settings users shouldn't touch are `internal`. Tests reach them through `Interna
 
 This constitution supersedes other practices in the repository. Amendments are made with `/speckit-constitution`, update the Sync Impact Report at the top, and follow semantic versioning: removing or redefining a principle → major; adding a principle or section → minor; wording → patch. Every PR review checks compliance with the principles above, and `/speckit-analyze` treats a violation as CRITICAL.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-30 | **Last Amended**: 2026-11-02
+**Version**: 1.1.0 | **Ratified**: 2026-09-30 | **Last Amended**: 2026-11-02

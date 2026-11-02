@@ -17,6 +17,7 @@ This repo follows SDD with [GitHub Spec Kit](https://github.com/github/spec-kit)
 - **Use the Spec Kit commands** for any work on specs, plans, or tasks: `/speckit-specify` → `/speckit-clarify` → `/speckit-plan` → `/speckit-tasks` → `/speckit-analyze` → `/speckit-implement`. Don't use the `sdd` skill in this repo. Write everything in English.
 - **Spec first.** Features live in `specs/NNN-short-name/` (`spec.md`, `plan.md`, `research.md`, `tasks.md`). Before changing behavior, update or create the spec. Pure refactors that don't change observable behavior don't need a spec change.
 - **Amendments.** When a feature changes behavior specified by an earlier feature, its spec lists it under `**Amends**:`, and the earlier spec gets a one-line note under that requirement.
+- **No breaking change without confirmation.** Never remove or incompatibly change a public API or documented behavior unless the maintainer confirmed it explicitly and the confirmation is recorded in the spec's Clarifications (constitution principle V). If unsure whether something breaks, ask.
 - **Never assume.** Write ambiguities as `[NEEDS CLARIFICATION: ...]` and ask, rather than guessing.
 - **Stable IDs.** Never renumber `FR`/`AC`/`RN`/`SC`/`T` IDs. Mark removed items as deprecated.
 - **Traceability.** Every acceptance scenario names the test that covers it. Tests are mandatory, even though the Spec Kit tasks template calls them optional. Commits and PRs reference the feature and the FR and T IDs they implement.
