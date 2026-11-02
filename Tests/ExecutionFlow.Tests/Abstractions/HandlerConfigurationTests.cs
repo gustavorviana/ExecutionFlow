@@ -216,6 +216,79 @@ public class HandlerConfigurationTests
         Assert.Equal("inline", plan.Get<PlainHandler>().Id);
     }
 
+    // --- FR-005: plan from an assembly (shortcut) ---
+
+    private class TestOptions : ExecutionFlowOptions { }
+
+    [Fact]
+    public void UsePlanFromAssembly_AppliesFilteredConfigurations()
+    {
+        var options = new TestOptions();
+
+        options.UsePlanFromAssembly(typeof(ScanTarget.ScanAConfiguration).Assembly, InNamespace(typeof(ScanTarget.ScanAConfiguration)));
+
+        Assert.Equal(3, options.Plan!.Steps.Count);
+        Assert.Equal("scan-a", options.Plan.Get<ScanTarget.ScanAHandler>().Id);
+    }
+
+    [Fact]
+    public void UsePlanFromAssembly_Throws_WhenPlanAlreadyRegistered()
+    {
+        var options = new TestOptions();
+        options.UsePlan(new ExecutionPlanner().Build());
+
+        Assert.Throws<InvalidOperationException>(() =>
+            options.UsePlanFromAssembly(typeof(ScanTarget.ScanAConfiguration).Assembly, InNamespace(typeof(ScanTarget.ScanAConfiguration))));
+    }
+
+    [Fact]
+    public void UsePlanFromAssembly_UsesPolicy()
+    {
+        var assembly = typeof(PolicyTarget.PolicyDependentConfiguration).Assembly;
+        var filter = InNamespace(typeof(PolicyTarget.PolicyDependentConfiguration));
+
+        Assert.Throws<InvalidOperationException>(() => new TestOptions().UsePlanFromAssembly(assembly, filter));
+
+        var options = new TestOptions();
+        options.UsePlanFromAssembly(assembly, filter, MissingPrerequisite.SkipDependents);
+        Assert.False(options.Plan!.Get<PolicyTarget.PolicyDependentHandler>().Enabled);
+    }
+
+    // --- FR-006 ---
+
+    private class TestSetup : ExecutionFlowSetup<TestOptions>
+    {
+        protected override void OnConfigured(TestOptions options) { }
+    }
+
+    [Fact]
+    public void HandlerBuilder_IsAbstract_WithNoPublicConstructor()
+    {
+        Assert.True(typeof(HandlerBuilder).IsAbstract);
+        Assert.Empty(typeof(HandlerBuilder).GetConstructors());
+        Assert.Empty(typeof(HandlerBuilder<PlainHandler>).GetConstructors());
+    }
+
+    [Fact]
+    public void GetPlanOf_Throws_WhenHandlerNotRegistered()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => new TestSetup().Configure(o =>
+        {
+            o.Add(typeof(PrerequisiteHandler));
+            o.GetPlanOf<PlainHandler>().Enabled(false);
+        }));
+
+        Assert.Contains(typeof(PlainHandler).FullName!, ex.Message);
+    }
+
+    [Fact]
+    public void GetPlanOf_ReturnsSameBuilder_ForSameHandler()
+    {
+        var options = new TestOptions();
+
+        Assert.Same(options.GetPlanOf<PlainHandler>(), options.GetPlanOf(typeof(PlainHandler)));
+    }
+
     private static Func<Type, bool> InNamespace(Type marker) => t => t.Namespace == marker.Namespace;
 
     // Test types

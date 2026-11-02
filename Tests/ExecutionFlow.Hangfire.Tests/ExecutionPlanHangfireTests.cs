@@ -55,9 +55,9 @@ public class ExecutionPlanHangfireTests
         Assert.True(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), enabled.Options));
     }
 
-    /// <summary>014-handler-configuration AC-002.6: without Enabled on the builder, SetJobAutoRun applies (it used to throw).</summary>
+    /// <summary>014-handler-configuration AC-006.2: a handler of the user plan ignores the options layer, even without Enabled on the builder.</summary>
     [Fact]
-    public void SetJobAutoRun_Applies_WhenBuilderDoesNotSetEnabled()
+    public void GetPlanOf_IsIgnored_ForUserPlanHandler()
     {
         var planner = new ExecutionPlanner();
         planner.Add<BrandHandler>();
@@ -66,11 +66,11 @@ public class ExecutionPlanHangfireTests
         var setup = new HangfireSetup();
         setup.Configure(o =>
         {
-            o.SetJobAutoRun<BrandHandler>(false);
+            o.GetPlanOf<BrandHandler>().Enabled(false);
             o.UsePlan(plan);
         });
 
-        Assert.False(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), setup.Options));
+        Assert.True(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), setup.Options));
     }
 
     /// <summary>014-handler-configuration AC-002.5: the builder's Enabled wins over SetJobAutoRun, set before or after UsePlan.</summary>
@@ -85,7 +85,7 @@ public class ExecutionPlanHangfireTests
         setup.Configure(o =>
         {
             o.UsePlan(plan);
-            o.SetJobAutoRun<BrandHandler>(false);
+            o.GetPlanOf<BrandHandler>().Enabled(false);
         });
 
         Assert.True(RecurringJobResolver.IsAutoRun(typeof(BrandHandler), setup.Options));

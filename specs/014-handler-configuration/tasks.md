@@ -66,6 +66,27 @@ No setup: the projects and test projects already exist.
 - [X] T014 [P] [US4] Tests in `Tests/ExecutionFlow.Hangfire.Tests/HandlerConfigurationHangfireTests.cs`: `HandlerConfigurationHangfireTests.Queue_WinsOverAttribute`, `Retry_WinsOverAttributeAndOption` (AC-004.1, AC-004.2)
 - [X] T015 [US4] `HandlerBuilderExtensions.Queue(...)` and `.AutomaticRetry(int attempts, params int[] delaysInSeconds)` storing Hangfire filter instances under `Hangfire:`-prefixed keys in `Src/ExecutionFlow.Hangfire/HandlerBuilderExtensions.cs`; `HandlerJobFilterProvider` adds the step's filters and drops the handler's attribute filters of the same type, and a builder retry also replaces `DisableRecurringRetries` (FR-004; depends on T006)
 
+## Phase 8: FR-005 shortcut (added 2026-11-02)
+
+- [X] T019 [P] [US3] Tests `HandlerConfigurationTests.UsePlanFromAssembly_AppliesFilteredConfigurations`, `UsePlanFromAssembly_Throws_WhenPlanAlreadyRegistered`, `UsePlanFromAssembly_UsesPolicy` in `Tests/ExecutionFlow.Tests/Abstractions/HandlerConfigurationTests.cs` (AC-005.1..AC-005.3)
+- [X] T020 [US3] `ExecutionFlowOptions.UsePlanFromAssembly(Assembly, Func<Type, bool> predicate = null, MissingPrerequisite policy = Throw)` in `Src/ExecutionFlow/ExecutionFlowOptions.cs`, plus a README note on option A: one plan per provider, chosen with the assembly/namespace filter (FR-005; depends on T019)
+
+## Phase 9: FR-006 internal planner and the options layer (regenerated 2026-11-02 from the revised plan)
+
+**Goal**: two planners per provider's options. The internal planner (class attributes + `options.GetPlanOf<T>()`) decides handlers outside the user plan and forms the automatic plan; a handler in the user plan drops its `GetPlanOf` values as a whole (one warning) and keeps its attributes per item. `SetJobAutoRun`/`SetJobTimeZone` become `[Obsolete]` shortcuts to `GetPlanOf`.
+
+**Independent Test**: `GetPlanOf<T>().Enabled(false)` turns `T` off without a user plan; with `T` in a user plan that doesn't set `Enabled`, `T` runs and one warning names it.
+
+- [X] T021 [US1] `HandlerBuilder` abstract with an internal constructor; `ExecutionPlanner.Add(Type)` creates a `HandlerBuilder<T>` internally, in `Src/ExecutionFlow/Abstractions/HandlerBuilder.cs` and `ExecutionPlanner.cs` (FR-006; done early on 2026-11-02; its test is written in T022)
+- [X] T026 Spec text fixes from the analysis (done 2026-11-02, with AC-006.7 and the R-006..R-009 confirmations), in `specs/014-handler-configuration/spec.md`: rewrite AC-002.5 on the single warning rule of research R-006 (analysis D1); update the `Amends` line for 005 FR-003/FR-008 and the "Enabled"/"Time zone" rows of the precedence table to `GetPlanOf<T>()` (I1); SC-003 "three tests" (I2); status "Implemented (FR-001..FR-005); FR-006 planned" (S1)
+- [X] T022 [P] [US2] Tests first: AC-006.1..AC-006.5 in `Tests/ExecutionFlow.Hangfire.Tests/HandlerConfigurationHangfireTests.cs` and `Tests/ExecutionFlow.Tests/AutomaticPlanTests.cs` (`GetPlanOf_AppliesWithoutUserPlan`, `UserPlan_ReplacesGetPlanOf_AsAWhole`, `UserPlan_KeepsAttributes_PerItem`, `ObsoleteOptions_RouteToGetPlanOf`, `GetPlanOf_DependsOn_FormsAutomaticPlan`), AC-006.6 in `Tests/ExecutionFlow.Tests/Abstractions/HandlerConfigurationTests.cs` (`HandlerBuilder_IsAbstract_WithNoPublicConstructor`), plus `HandlerConfigurationTests.GetPlanOf_Throws_WhenHandlerNotRegistered` (research R-007); convert the tests of the deprecated AC-002.6/AC-002.7 (`PerHandlerOption_Applies_WhenBuilderDoesNotSetItem`, `OptionTurningOffPrerequisite_FollowsPlanPolicy`, `ExecutionPlanHangfireTests.SetJobAutoRun_Applies_WhenBuilderDoesNotSetEnabled`) into AC-006.1/AC-006.2 cases
+- [X] T023 [US2] Core internal planner in `Src/ExecutionFlow/ExecutionFlowOptions.cs`: private `ExecutionPlanner` never built directly; public `GetPlanOf<THandler>()` and `GetPlanOf(Type)` (research R-008) returning the handler's builder, created on first call with its `[DependsOn]`/`[DependentRun]` preloaded, `ThrowIfLocked`; at `Configure` a `GetPlanOf` for a type that isn't a registered recurring handler throws naming it (R-007); protected virtuals `IsRecurringHandlerEnabledByDefault()` and `DefaultRecurringTimeZone` (R-009) replacing `IsRecurringHandlerEnabled` (depends on T022)
+- [X] T027 [US2] `ResolvePlan` in `Src/ExecutionFlow/ExecutionFlowOptions.cs` following plan.md "Internal planner and options layer": (1) user plan → one trace warning per handler in it with `GetPlanOf` values (R-006), merge the user step's schedule/Id/name, re-resolve with `ConfiguredEnabled ?? global`; (2) no user plan and dependencies/run modes in attributes or `GetPlanOf` → automatic plan from every registered handler using the `GetPlanOf` builders, `Build(AutomaticPlanMissingPrerequisite)`, re-resolve; (3) otherwise merge each `GetPlanOf` builder's schedule/Id/name into the registration. Add internal `IsEnabled(type)` and `ResolveTimeZoneId(type)` (plan step → `GetPlanOf` → attribute → global; intervals → none) (FR-006, R-003; depends on T023)
+- [X] T024 [US2] Hangfire in `Src/ExecutionFlow.Hangfire/HangfireOptions.cs`, `HangfireSetup.cs` and `Infrastructure/RecurringJobResolver.cs`: `SetJobAutoRun`/`SetJobTimeZone` (both overloads) `[Obsolete("Use GetPlanOf<T>().Enabled(...)")]` / `[Obsolete("Use GetPlanOf<T>().TimeZone(...)")]` calling `GetPlanOf`; override `IsRecurringHandlerEnabledByDefault()` with `GlobalRecurringAutoRun` and `DefaultRecurringTimeZone` with `RecurringTimeZone`; `RecurringJobResolver.IsAutoRun`/`ResolveTimeZoneId` call the core resolution; remove the internal `RecurringAutoRun`/`RecurringTimeZones` and the old warnings superseded by R-006; keep the interval + time-zone warning (012) on the effective time zone (FR-006; depends on T027)
+- [X] T028 [US2] Move every internal use of the obsolete methods (tests, including `Tests/ExecutionFlow.Hangfire.Tests/IntervalRegistrationTests.cs` for the 012 interval + time-zone warning, `Examples/`, README) to `GetPlanOf`, keeping only the tests that assert the obsolete shortcuts; the build has obsolete warnings only there; README section "Handler configuration" explains the internal planner vs the user planner and `GetPlanOf<T>()`; one-line notes under 005 FR-003/FR-008 (FR-006; depends on T024)
+- [X] T025 Update `specs/011-local-hosting` (spec FR-002, AC-002.2..AC-002.4, AC-003.4, plan, tasks T003, whose `IsRecurringHandlerEnabled` override becomes the R-009 virtuals): no `SetJobAutoRun<T>`/`SetJobTimeZone<T>` in `HostingOptions`, only `GetPlanOf<T>()` and the global options (decided 2026-11-02); `HostingOptions` overrides the R-009 virtuals
+- [X] T029 Run `quickstart.md` scenarios 1-7, the full suite, and `/speckit-analyze` (depends on T026..T028, T025)
+
 ## Phase 7: Polish & Cross-Cutting
 
 - [X] T016 [P] README: configuration classes (inline and class), the precedence table per item, the warnings, Hangfire extensions; the `[Timeout]` example is already removed (R-005)
@@ -74,19 +95,16 @@ No setup: the projects and test projects already exist.
 
 ## Dependencies & Execution Order
 
-- T001 → T002 → T003 (green build) → T005 → T006 → T007 → T009, T010 → T011; T013 after T005; T015 after T006 → T016..T018
-- Story order: US1 (MVP) → US2 → US3 → US4. US3 and US4 only need T005/T006 and can run in parallel with US2.
+- Done: T001..T021 (FR-001..FR-005, `HandlerBuilder` abstract).
+- FR-006: T026 (spec text) and T022 (tests) → T023 → T027 → T024 → T028 → T025 → T029.
 
 ## Parallel Opportunities
 
-- Test files T004, T008, T012, T014 can be written in parallel once T002 compiles.
-- US3 (T013) and US4 (T015) in parallel with US2.
-- T016 and T017 in parallel at the end.
+- T026 (spec text) and T022 (tests) in parallel.
+- T025 (011 spec) can be written while T023..T028 are implemented.
 
 ## Implementation Strategy
 
-1. Foundation: T001..T003 (rename and migrate, green build).
-2. MVP: T004..T007.
-3. Precedence and warnings: T008..T011.
-4. Assembly scan and Hangfire extensions: T012..T015.
-5. Docs, amendments and validation: T016..T018.
+1. Done: FR-001..FR-005.
+2. FR-006: spec text and tests first (T026, T022), then the core internal planner and resolution (T023, T027), then Hangfire and the obsolete shortcuts (T024), then callers and docs (T028).
+3. Align 011 (T025) and validate (T029).

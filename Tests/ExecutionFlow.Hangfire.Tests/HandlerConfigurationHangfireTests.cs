@@ -80,61 +80,80 @@ public class HandlerConfigurationHangfireTests
         var messages = CaptureTrace(() => setup = Configure(o =>
         {
             o.UsePlan(plan);
-            o.SetJobAutoRun<CronHandler>(false);
-            o.SetJobTimeZone<CronHandler>("Europe/Lisbon");
+            o.GetPlanOf<CronHandler>().Enabled(false).TimeZone("Europe/Lisbon");
         }));
 
         Assert.True(RecurringJobResolver.IsAutoRun(typeof(CronHandler), setup!.Options));
         Assert.Equal("America/Sao_Paulo", RecurringJobResolver.ResolveTimeZoneId(setup.RecurringHandlers[typeof(CronHandler)], setup.Options));
-        Assert.Contains(messages, m => m.Contains(typeof(CronHandler).FullName!) && m.Contains("SetJobAutoRun"));
-        Assert.Contains(messages, m => m.Contains(typeof(CronHandler).FullName!) && m.Contains("SetJobTimeZone"));
+        Assert.Single(messages, m => m.Contains(typeof(CronHandler).FullName!) && m.Contains("GetPlanOf"));
+    }
+
+    // --- FR-006: internal planner and the options layer ---
+
+    [Fact]
+    public void GetPlanOf_AppliesWithoutUserPlan()
+    {
+        var setup = Configure(o =>
+        {
+            o.Add(typeof(CronHandler));
+            o.GetPlanOf<CronHandler>().Enabled(false).TimeZone("America/Sao_Paulo");
+        });
+
+        Assert.Null(setup.Options.Plan);
+        Assert.False(RecurringJobResolver.IsAutoRun(typeof(CronHandler), setup.Options));
+        Assert.Equal("America/Sao_Paulo", RecurringJobResolver.ResolveTimeZoneId(setup.RecurringHandlers[typeof(CronHandler)], setup.Options));
     }
 
     [Fact]
-    public void PerHandlerOption_Applies_WhenBuilderDoesNotSetItem()
+    public void UserPlan_ReplacesGetPlanOf_AsAWhole()
     {
         var plan = Plan(p => p.Add<CronHandler>());
+        HangfireSetup? setup = null;
 
+        var messages = CaptureTrace(() => setup = Configure(o =>
+        {
+            o.GetPlanOf<CronHandler>().Enabled(false).TimeZone("Europe/Lisbon");
+            o.UsePlan(plan);
+        }));
+
+        // The user plan doesn't set Enabled or TimeZone, and still the options layer doesn't count.
+        Assert.True(RecurringJobResolver.IsAutoRun(typeof(CronHandler), setup!.Options));
+        Assert.Null(RecurringJobResolver.ResolveTimeZoneId(setup.RecurringHandlers[typeof(CronHandler)], setup.Options));
+        Assert.Single(messages, m => m.Contains(typeof(CronHandler).FullName!) && m.Contains("GetPlanOf"));
+    }
+
+    [Fact]
+    public void UserPlan_KeepsAttributes_PerItem()
+    {
+        var plan = Plan(p =>
+        {
+            p.Add<CronHandler>();
+            p.Add<DecoratedHandler>().DependsOn<CronHandler>().RunMode(DependentRunMode.OwnSchedule);
+        });
+
+        var setup = Configure(o => o.UsePlan(plan));
+        var registration = setup.RecurringHandlers[typeof(DecoratedHandler)];
+
+        Assert.Equal("*/10 * * * *", registration.Cron);
+        Assert.Equal("a", RecurringJobResolver.ResolveId(registration, new DefaultRecurringServiceIdGenerator()));
+        Assert.Equal("Europe/Lisbon", RecurringJobResolver.ResolveTimeZoneId(registration, setup.Options));
+    }
+
+#pragma warning disable CS0618 // AC-006.4 checks the obsolete shortcuts.
+    [Fact]
+    public void ObsoleteOptions_RouteToGetPlanOf()
+    {
         var setup = Configure(o =>
         {
-            o.UsePlan(plan);
+            o.Add(typeof(CronHandler));
             o.SetJobAutoRun<CronHandler>(false);
-            o.SetJobTimeZone<CronHandler>("Europe/Lisbon");
+            o.SetJobTimeZone<CronHandler>("America/Sao_Paulo");
         });
 
         Assert.False(RecurringJobResolver.IsAutoRun(typeof(CronHandler), setup.Options));
-        Assert.Equal("Europe/Lisbon", RecurringJobResolver.ResolveTimeZoneId(setup.RecurringHandlers[typeof(CronHandler)], setup.Options));
+        Assert.Equal("America/Sao_Paulo", RecurringJobResolver.ResolveTimeZoneId(setup.RecurringHandlers[typeof(CronHandler)], setup.Options));
     }
-
-    [Fact]
-    public void OptionTurningOffPrerequisite_FollowsPlanPolicy()
-    {
-        var throwing = Plan(p =>
-        {
-            p.Add<CronHandler>();
-            p.Add<DependentHandler>().DependsOn<CronHandler>();
-        });
-        var skipping = Plan(p =>
-        {
-            p.Add<CronHandler>();
-            p.Add<DependentHandler>().DependsOn<CronHandler>();
-        }, MissingPrerequisite.SkipDependents);
-
-        Assert.Throws<InvalidOperationException>(() => Configure(o =>
-        {
-            o.UsePlan(throwing);
-            o.SetJobAutoRun<CronHandler>(false);
-        }));
-
-        var setup = Configure(o =>
-        {
-            o.UsePlan(skipping);
-            o.SetJobAutoRun<CronHandler>(false);
-        });
-        var dependent = setup.Options.Plan!.Get<DependentHandler>();
-        Assert.False(dependent.Enabled);
-        Assert.Contains(nameof(CronHandler), dependent.SkipReason);
-    }
+#pragma warning restore CS0618
 
     [Fact]
     public void Builder_WinsOverAttribute_ForIdTimeZoneAndName()

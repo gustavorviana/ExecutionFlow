@@ -52,21 +52,6 @@ namespace ExecutionFlow.Hangfire
 
         protected override void OnConfigured(HangfireOptions options)
         {
-            foreach (var kvp in options.RecurringAutoRun)
-            {
-                var handlerType = kvp.Key;
-                if (!RecurringHandlers.ContainsKey(handlerType))
-                    throw new InvalidOperationException(
-                        $"SetJobAutoRun references type '{handlerType.FullName}' which is not registered as a recurring handler.");
-            }
-
-            foreach (var handlerType in options.RecurringTimeZones.Keys)
-            {
-                if (!RecurringHandlers.ContainsKey(handlerType))
-                    throw new InvalidOperationException(
-                        $"SetJobTimeZone references type '{handlerType.FullName}' which is not registered as a recurring handler.");
-            }
-
             ValidateTimeZone(options.RecurringTimeZone, "RecurringTimeZone");
 
             foreach (var registration in RecurringHandlers.Values)
@@ -84,24 +69,8 @@ namespace ExecutionFlow.Hangfire
                     throw new InvalidOperationException(
                         $"Recurring handler '{registration.HandlerType.FullName}' has no schedule. Add [Recurring(\"<cron>\")] or [RecurringInterval(\"hh:mm:ss\")] to the class.");
 
-                ExecutionPlanStep step = null;
-                options.Plan?.TryGet(registration.HandlerType, out step);
-
-                // The plan's builder wins over a per-handler option; say so, since the option would otherwise look applied.
-                if (step?.ConfiguredEnabled != null && options.RecurringAutoRun.ContainsKey(registration.HandlerType))
-                    Trace.TraceWarning(
-                        "ExecutionFlow: '{0}' sets Enabled in the execution plan, so its SetJobAutoRun is ignored.",
-                        registration.HandlerType.FullName);
-
-                if (step?.TimeZone != null && options.RecurringTimeZones.ContainsKey(registration.HandlerType) && !registration.Interval.HasValue)
-                    Trace.TraceWarning(
-                        "ExecutionFlow: '{0}' sets TimeZone in the execution plan, so its SetJobTimeZone is ignored.",
-                        registration.HandlerType.FullName);
-
                 // An interval has no time zone: a time zone set for this handler has no effect (the global one is ignored quietly).
-                var ignoredTimeZone = registration.Interval.HasValue
-                    ? step?.TimeZone ?? (options.RecurringTimeZones.TryGetValue(registration.HandlerType, out var option) ? option : null)
-                    : null;
+                var ignoredTimeZone = registration.Interval.HasValue ? options.ConfiguredTimeZoneOf(registration.HandlerType) : null;
                 if (ignoredTimeZone != null)
                 {
                     ValidateTimeZone(ignoredTimeZone, registration.HandlerType.FullName);

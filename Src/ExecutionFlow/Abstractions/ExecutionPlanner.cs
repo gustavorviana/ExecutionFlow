@@ -67,7 +67,9 @@ namespace ExecutionFlow.Abstractions
                 throw new ArgumentException(
                     $"'{handlerType.FullName}' is not a recurring handler: only IHandler implementations can be in the execution plan.", nameof(handlerType));
 
-            return Register(new HandlerBuilder(this, handlerType));
+            var builderType = typeof(HandlerBuilder<>).MakeGenericType(handlerType);
+            var builder = (HandlerBuilder)Activator.CreateInstance(builderType, BindingFlags.NonPublic | BindingFlags.Instance, null, new object[] { this }, null);
+            return Register(builder);
         }
 
         /// <summary>Configures a handler with a configuration class, as <c>configuration.Configure(Add&lt;THandler&gt;())</c>.</summary>
@@ -181,6 +183,27 @@ namespace ExecutionFlow.Abstractions
             return new ExecutionPlan(steps, missingPrerequisite);
         }
 
+        /// <summary>Whether the handler was already declared in this planner.</summary>
+        internal bool Contains(Type handlerType) => _entries.ContainsKey(handlerType);
+
+        /// <summary>Puts the declared handlers in <paramref name="order"/>, keeping the others after them.</summary>
+        internal void Reorder(IReadOnlyList<Type> order)
+        {
+            var position = new Dictionary<Type, int>(TypeComparer);
+            for (var i = 0; i < order.Count; i++)
+                if (!position.ContainsKey(order[i]))
+                    position.Add(order[i], i);
+
+            var sorted = _entryOrder
+                .Select((entry, index) => (entry, key: position.TryGetValue(entry.HandlerType, out var p) ? p : order.Count + index))
+                .OrderBy(x => x.key)
+                .Select(x => x.entry)
+                .ToList();
+
+            _entryOrder.Clear();
+            _entryOrder.AddRange(sorted);
+        }
+
         internal void ThrowIfBuilt()
         {
             if (_built)
@@ -199,6 +222,7 @@ namespace ExecutionFlow.Abstractions
             foreach (var attribute in handlerType.GetCustomAttributes<DependsOnAttribute>(false))
                 builder.DependsOn(attribute.Prerequisite);
             builder.RunModeAttribute = handlerType.GetCustomAttribute<DependentRunAttribute>(false);
+            builder.HasExplicitValues = false;
 
             _entries.Add(handlerType, builder);
             _entryOrder.Add(builder);

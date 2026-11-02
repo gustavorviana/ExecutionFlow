@@ -36,13 +36,10 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             var attributes = handlerType.GetCustomAttributes(true).OfType<JobFilterAttribute>().ToList();
 
             // Settings from the plan's builder win over the class's attributes of the same type.
-            if (_options.Plan != null && _options.Plan.TryGet(handlerType, out var step))
+            foreach (var setting in _options.SettingsOf(handlerType).Values.OfType<JobFilterAttribute>())
             {
-                foreach (var setting in step.Settings.Values.OfType<JobFilterAttribute>())
-                {
-                    attributes.RemoveAll(a => a.GetType() == setting.GetType());
-                    attributes.Add(setting);
-                }
+                attributes.RemoveAll(a => a.GetType() == setting.GetType());
+                attributes.Add(setting);
             }
 
             var filters = attributes

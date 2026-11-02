@@ -108,6 +108,19 @@ public class AutomaticPlanTests
         Assert.Throws<InvalidOperationException>(() => setup.Options.AutomaticPlanMissingPrerequisite = MissingPrerequisite.SkipDependents);
     }
 
+    [Fact]
+    public void GetPlanOf_DependsOn_FormsAutomaticPlan()
+    {
+        var setup = Configure(o =>
+        {
+            o.Add(typeof(PrerequisiteHandler));
+            o.Add(typeof(PlainHandler));
+            o.GetPlanOf(typeof(PlainHandler)).DependsOn(typeof(PrerequisiteHandler));
+        });
+
+        Assert.Equal(new[] { typeof(PrerequisiteHandler) }, setup.Options.Plan!.Get(typeof(PlainHandler)).Prerequisites);
+    }
+
     // Test types (abstract, so assembly scans in other tests don't pick them up)
 
     private abstract class TestHandler : IHandler
@@ -118,6 +131,8 @@ public class AutomaticPlanTests
     private abstract class PrerequisiteHandler : TestHandler { }
 
     [DependsOn(typeof(PrerequisiteHandler))] private abstract class DependentHandler : TestHandler { }
+
+    private abstract class PlainHandler : TestHandler { }
 
     [DependsOn(typeof(DependentHandler))] private abstract class ChainedHandler : TestHandler { }
 

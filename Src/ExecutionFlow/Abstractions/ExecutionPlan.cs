@@ -54,7 +54,7 @@ namespace ExecutionFlow.Abstractions
 
         /// <summary>
         /// Re-resolves which steps run when the provider decides the enabled state of the steps whose builder didn't set it
-        /// (e.g. from <c>SetJobAutoRun</c>), applying <see cref="MissingPrerequisite"/> again: an unavailable prerequisite
+        /// (its global default), applying <see cref="MissingPrerequisite"/> again: an unavailable prerequisite
         /// throws or turns its dependents off in cascade, as at <see cref="ExecutionPlanner.Build(Abstractions.MissingPrerequisite)"/>.
         /// </summary>
         /// <param name="isEnabledByProvider">The provider's on/off for a handler whose builder didn't call <c>Enabled</c>.</param>

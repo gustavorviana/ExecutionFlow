@@ -13,13 +13,15 @@ namespace ExecutionFlow.Abstractions
     /// Precedence per item, lowest to highest: global default &lt; attribute &lt; per-handler option &lt; this builder.
     /// Dependencies are the exception: the class's <see cref="Attributes.DependsOnAttribute"/> and <see cref="DependsOn(Type)"/>
     /// merge, and only <see cref="RemoveDependency(Type)"/> or <see cref="ClearDependencies"/> drop one.
+    /// <para>Not created directly: <see cref="ExecutionPlanner"/> creates a <see cref="HandlerBuilder{THandler}"/> for each handler.</para>
     /// </remarks>
-    public class HandlerBuilder
+    public abstract class HandlerBuilder
     {
         private readonly ExecutionPlanner _owner;
         private readonly List<Type> _prerequisites = new List<Type>();
         private readonly Dictionary<string, object> _settings = new Dictionary<string, object>(StringComparer.Ordinal);
 
+        // Internal: only this assembly derives from it (HandlerBuilder<THandler>), so nobody else creates or extends one.
         internal HandlerBuilder(ExecutionPlanner owner, Type handlerType)
         {
             _owner = owner;
@@ -64,6 +66,9 @@ namespace ExecutionFlow.Abstractions
 
         private TimeSpan? _runModeInterval;
 
+        /// <summary>Whether a builder method was called (attribute values loaded at registration don't count).</summary>
+        internal bool HasExplicitValues { get; set; }
+
         /// <summary>The class's <see cref="Attributes.DependentRunAttribute"/>, used when <see cref="RunMode"/> isn't called.</summary>
         internal Attributes.DependentRunAttribute RunModeAttribute { get; set; }
 
@@ -98,6 +103,7 @@ namespace ExecutionFlow.Abstractions
         {
             if (string.IsNullOrWhiteSpace(cron)) throw new ArgumentException("The cron expression cannot be empty.", nameof(cron));
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             ConfiguredCron = cron;
             ConfiguredInterval = null;
             return this;
@@ -111,6 +117,7 @@ namespace ExecutionFlow.Abstractions
                 throw new ArgumentOutOfRangeException(nameof(interval), interval, "The interval must be at least one minute.");
 
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             ConfiguredInterval = interval;
             ConfiguredCron = null;
             return this;
@@ -122,6 +129,7 @@ namespace ExecutionFlow.Abstractions
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("The recurring job ID cannot be empty.", nameof(id));
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             ConfiguredId = id;
             return this;
         }
@@ -137,6 +145,7 @@ namespace ExecutionFlow.Abstractions
                 throw new ArgumentException($"The time zone of '{HandlerType.FullName}' cannot be null or empty.", nameof(timeZoneId));
 
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             ConfiguredTimeZone = timeZoneId;
             return this;
         }
@@ -149,6 +158,7 @@ namespace ExecutionFlow.Abstractions
                 throw new ArgumentException("The display name cannot be empty.", nameof(displayName));
 
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             ConfiguredDisplayName = displayName;
             return this;
         }
@@ -161,6 +171,7 @@ namespace ExecutionFlow.Abstractions
         public HandlerBuilder Enabled(bool enabled = true)
         {
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             ConfiguredEnabled = enabled;
             return this;
         }
@@ -175,6 +186,7 @@ namespace ExecutionFlow.Abstractions
         {
             if (prerequisite == null) throw new ArgumentNullException(nameof(prerequisite));
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
 
             if (ExecutionPlanner.TypeComparer.Equals(prerequisite, HandlerType))
                 throw new InvalidOperationException(
@@ -192,6 +204,7 @@ namespace ExecutionFlow.Abstractions
         {
             if (prerequisite == null) throw new ArgumentNullException(nameof(prerequisite));
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             _prerequisites.RemoveAll(p => ExecutionPlanner.TypeComparer.Equals(p, prerequisite));
             return this;
         }
@@ -200,6 +213,7 @@ namespace ExecutionFlow.Abstractions
         public HandlerBuilder ClearDependencies()
         {
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             _prerequisites.Clear();
             return this;
         }
@@ -224,6 +238,7 @@ namespace ExecutionFlow.Abstractions
             }
 
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             ConfiguredRunMode = mode;
             _runModeInterval = interval;
             return this;
@@ -240,6 +255,7 @@ namespace ExecutionFlow.Abstractions
                 throw new ArgumentOutOfRangeException(nameof(timeout), timeout, "The overlap timeout must be positive.");
 
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             IsOverlapConfigured = true;
             ConfiguredOverlapTimeout = timeout;
             return this;
@@ -249,6 +265,7 @@ namespace ExecutionFlow.Abstractions
         public HandlerBuilder AllowOverlap()
         {
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             IsOverlapConfigured = true;
             ConfiguredOverlapTimeout = null;
             return this;
@@ -264,6 +281,7 @@ namespace ExecutionFlow.Abstractions
         {
             if (string.IsNullOrWhiteSpace(key)) throw new ArgumentException("The setting key cannot be empty.", nameof(key));
             _owner.ThrowIfBuilt();
+            HasExplicitValues = true;
             _settings[key] = value;
             return this;
         }

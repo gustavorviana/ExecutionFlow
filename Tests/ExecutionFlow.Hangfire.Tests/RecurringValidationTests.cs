@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Also covers the obsolete SetJobAutoRun/SetJobTimeZone shortcuts (014 FR-006 routes them to GetPlanOf).
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
 

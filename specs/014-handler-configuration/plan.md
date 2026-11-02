@@ -1,12 +1,17 @@
 # Implementation Plan: Handler configuration classes (EF Core style)
 
-**Branch**: `feat/execution-plan-dependencies` | **Date**: 2026-11-02 | **Spec**: [spec.md](spec.md)
+**Branch**: `feat/execution-plan-dependencies` | **Date**: 2026-11-02 (revised for FR-005/FR-006) | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `specs/014-handler-configuration/spec.md`. Decisions in [research.md](research.md).
 
 ## Summary
 
-`ExecutionPlanner` becomes the single orchestrator of handler configuration. `HandlerBuilder<T>` replaces `ExecutionPlanEntry`: `Add<T>()` returns it, and `IHandlerConfiguration<T>` classes receive it through `ApplyConfiguration` / `ApplyConfigurationsFromAssembly`. Each builder call records an **explicit value per item** on the built step; items not called stay unset. Providers resolve every item independently as builder > per-handler option > attribute > global default, warn when the builder overrides a per-handler option, and apply provider settings stored as named settings on the step (Hangfire: queue and retries as job filters).
+`ExecutionPlanner` is the single place where handlers are configured, through one builder, `HandlerBuilder<T>` (FR-001..FR-004, implemented). Two planners feed each provider's options (FR-006):
+
+- the **internal planner**: the class's attributes plus `options.GetPlanOf<T>()`, the options layer (the obsolete `SetJobAutoRun`/`SetJobTimeZone` call it). Without a user plan it decides each handler's items and forms the automatic plan (013);
+- the **user planner**: `UsePlan(...)` / `UsePlanFromAssembly(...)` (FR-005) / configuration classes. A handler in it drops its internal-planner `GetPlanOf` values as a whole (with a warning); its attributes still apply item by item.
+
+Providers read one resolved view per handler, so Hangfire and the local host behave the same.
 
 ## Technical Context
 
@@ -22,22 +27,20 @@
 
 **Project Type**: library
 
-**Performance Goals**: N/A (configuration time; filter lookup per job stays a dictionary read)
+**Performance Goals**: N/A (configuration time)
 
-**Constraints**: core dependency-free; existing behavior kept except the confirmed `SetJobAutoRun` + plan change
+**Constraints**: core dependency-free; v1.0.2 API kept (obsolete, not removed); behavior changes only as confirmed in the spec
 
 **Scale/Scope**: tens of handlers
-
-**Note**: no timeout extension — Hangfire 1.8 has no execution-timeout filter (research R-005); the README's `[Timeout]` example is removed.
 
 ## Constitution Check
 
 *Gate before Phase 0; re-checked after Phase 1.*
 
-- I. Dependency-free core: ✅ builder, configuration interface and named settings are core-only; the provider reads them.
-- II. Processors isolated: ✅ Hangfire extensions live in `ExecutionFlow.Hangfire`.
-- V. Minimal public surface / breaking changes: ⚠️ removes `ExecutionPlanEntry` (replaced by `HandlerBuilder<T>`), and replaces the `SetJobAutoRun` + plan error with "builder wins + warning". Both are 1.3.0 (unreleased) and confirmed by the maintainer in spec Clarifications (2026-11-02); no major bump.
-- VII. Tested, traceable behavior: ✅ every AC names a test; the two tests asserting the removed error become precedence tests (SC-003).
+- I. Dependency-free core: ✅ planners, builder, options layer and resolution live in the core; Hangfire only reads the resolved view and adds its extensions.
+- II. Processors isolated: ✅ the same core resolution serves Hangfire and the local host (011).
+- V. Breaking changes: ⚠️ `ExecutionPlanEntry` removed and the `SetJobAutoRun` + plan error turned into "user plan replaces the options layer" (1.3.0, unreleased, confirmed in spec Clarifications). `SetJobAutoRun`/`SetJobTimeZone` become `[Obsolete]`, not removed, so v1.0.2 code compiles and behaves the same without a plan. New public API: `GetPlanOf<T>()`, `GetPlanOf(Type)` (research R-008), `UsePlanFromAssembly`, `ApplyConfigurationsFromAssembly(assembly, predicate)`.
+- VII. Tested, traceable behavior: ✅ every active AC names a test; tests of the deprecated AC-002.6/AC-002.7 are removed or converted (T022).
 
 Post-design re-check: ✅ unchanged.
 
@@ -54,35 +57,47 @@ specs/014-handler-configuration/
 ├── quickstart.md
 ├── contracts/public-api.md
 ├── checklists/requirements.md
-└── tasks.md            # /speckit-tasks
+└── tasks.md
 ```
 
 ### Source Code (repository root)
 
 | Package | Change | Breaking? |
 | ------- | ------ | --------- |
-| `ExecutionFlow` | New `IHandlerConfiguration<T>`, `HandlerBuilder`/`HandlerBuilder<T>`; `ExecutionPlanner.ApplyConfiguration`/`ApplyConfigurationsFromAssembly`; `Add` returns the builder; `ExecutionPlanStep` gains explicit values and settings; `ExecutionPlanEntry` removed | Yes, 1.3.0 unreleased (confirmed) |
-| `ExecutionFlow.Hangfire` | Item resolution through the step; warnings; builder extensions `Queue`, `AutomaticRetry`; filters from settings | `SetJobAutoRun` + plan no longer throws (confirmed) |
+| `ExecutionFlow` | `HandlerBuilder` (abstract) / `HandlerBuilder<T>`, `IHandlerConfiguration<T>`, planner `Apply…`; `ExecutionFlowOptions.UsePlanFromAssembly`, `GetPlanOf<T>()`, `GetPlanOf(Type)`, internal planner and per-handler resolution | 1.3.0 only (confirmed) |
+| `ExecutionFlow.Hangfire` | `SetJobAutoRun`/`SetJobTimeZone` `[Obsolete]` → `GetPlanOf`; `RecurringAutoRun`/`RecurringTimeZones` dictionaries replaced by the core resolution; `Queue`/`AutomaticRetry` extensions | No (obsolete only) |
 
 ```text
-Src/ExecutionFlow/Abstractions/IHandlerConfiguration.cs, HandlerBuilder.cs, ExecutionPlanner.cs, ExecutionPlanStep.cs, ExecutionPlan.cs
-Src/ExecutionFlow.Hangfire/HandlerBuilderExtensions.cs, HangfireOptions.cs, HangfireSetup.cs
-Src/ExecutionFlow.Hangfire/Infrastructure/RecurringJobResolver.cs, HandlerJobFilterProvider.cs
-Tests/ExecutionFlow.Tests/Abstractions/HandlerConfigurationTests.cs (+ migrated ExecutionPlannerTests)
-Tests/ExecutionFlow.Hangfire.Tests/HandlerConfigurationHangfireTests.cs (+ migrated plan tests)
+Src/ExecutionFlow/ExecutionFlowOptions.cs                       # internal planner, GetPlanOf, ResolvePlan
+Src/ExecutionFlow/Abstractions/HandlerBuilder.cs, ExecutionPlanner.cs, ExecutionPlan.cs
+Src/ExecutionFlow.Hangfire/HangfireOptions.cs, HangfireSetup.cs
+Src/ExecutionFlow.Hangfire/Infrastructure/RecurringJobResolver.cs
+Tests/ExecutionFlow.Tests/Abstractions/HandlerConfigurationTests.cs, AutomaticPlanTests.cs
+Tests/ExecutionFlow.Hangfire.Tests/HandlerConfigurationHangfireTests.cs, ExecutionPlanHangfireTests.cs
 ```
 
 ## Design
 
-- **`HandlerBuilder`** (non-generic, used by `Add(Type)` and assembly scanning) and **`HandlerBuilder<T> : HandlerBuilder`** (fluent methods return `HandlerBuilder<T>`). Every call stores an explicit value: `Cron`/`Interval` (one clears the other), `Id`, `TimeZone` (null/empty → throws at call; unknown → throws at configuration, where the provider validates ids), `DisplayName`, `Enabled`, `DependsOn`/`RemoveDependency`/`ClearDependencies` (the attribute's `[DependsOn]` is loaded first, so remove/clear can drop it), `RunMode` (013), `NoOverlap`/`AllowOverlap`, and `HasSetting(string key, object value)` for provider extensions (R-004).
-- **`ExecutionPlanner`**: `Add<T>()`/`Add(Type)` return the builder and throw when the handler is already configured; `ApplyConfiguration<T>(IHandlerConfiguration<T>)` = `config.Configure(Add<T>())`; `ApplyConfigurationsFromAssembly(Assembly)` finds non-abstract classes implementing `IHandlerConfiguration<>`, throws for a class without a parameterless constructor, creates and applies each.
-- **`ExecutionPlanStep`** keeps today's members and gains the explicit values: `Cron`, `Interval`, `Id`, `TimeZone`, `ConfiguredEnabled` (bool?), `OverlapTimeout` (explicit value or `AllowOverlap`, R-002), `Settings` (read-only dictionary). `DisplayName`, `MinInterval`, `RunsOnOwnSchedule` keep their current resolution.
-- **Enabled and availability** (R-003): the plan records its `MissingPrerequisite` policy. At configuration, the provider computes each step's enabled state (`ConfiguredEnabled` ?? per-handler option ?? global) and re-runs the availability pass with the recorded policy, so a prerequisite turned off by `SetJobAutoRun` still throws or cascades.
-- **Item resolution in Hangfire**: `RecurringJobResolver` asks the step first for schedule, Id and time zone, then the option, then the registry (attribute), then the global default. `HangfireOptions.OnPlanRegistering` no longer throws on `SetJobAutoRun`; `HangfireSetup.OnConfigured` emits a trace warning for each step whose explicit value overrides a `SetJobAutoRun<T>` or `SetJobTimeZone<T>`, and for a time zone on an interval handler (012 rule).
-- **Provider settings**: `HandlerBuilderExtensions.Queue(...)` and `.AutomaticRetry(...)` store a Hangfire filter instance under a known key; `HandlerJobFilterProvider` adds the step's filter instances and drops the handler's attribute filters of the same type, so the builder wins (FR-004).
+### Builders and planners (implemented: FR-001..FR-005, T021)
+
+- `HandlerBuilder` is abstract with an internal constructor; `HandlerBuilder<T>` is the only concrete builder. Every call records an explicit value per item.
+- `ExecutionPlanner.Add<T>()`/`Add(Type)` return the builder; `ApplyConfiguration`, `ApplyConfigurationsFromAssembly(assembly[, predicate])`; configuring a handler twice throws.
+- `ExecutionFlowOptions.UsePlanFromAssembly(assembly, predicate, policy)` = `UsePlan(new ExecutionPlanner().ApplyConfigurationsFromAssembly(...).Build(policy))`.
+
+### Internal planner and options layer (FR-006, to implement)
+
+- `ExecutionFlowOptions` owns an internal `ExecutionPlanner` that is never built directly. `GetPlanOf<T>()` / `GetPlanOf(Type)` return that planner's builder for the handler, created on the first call (`Add`, which also loads the class's `[DependsOn]`/`[DependentRun]`); `ThrowIfLocked` applies. A `GetPlanOf` for a type that isn't a registered recurring handler throws at configuration, like `SetJobAutoRun` does today (R-007).
+- The **effective builder** of a handler is: the user plan's step when the handler is in the user plan; otherwise its internal `GetPlanOf` builder, if any; otherwise none (attributes and globals only).
+- `ResolvePlan` (at `Configure`, before `Lock`):
+  1. **User plan present**: for each handler in it that also has `GetPlanOf` values, write a trace warning naming the handler (R-006). Merge the user step's schedule/Id/name into the registration (as today). Re-resolve enabled steps with `ConfiguredEnabled ?? global` (the options layer never counts for them) and the plan's policy (R-003).
+  2. **No user plan, internal planner has dependencies or run modes** (attributes or `GetPlanOf`): form the automatic plan from every registered recurring handler (013), using the `GetPlanOf` builder where it exists, `Build(AutomaticPlanMissingPrerequisite)`, then re-resolve with `ConfiguredEnabled ?? global`.
+  3. **Otherwise**: no plan; each handler with a `GetPlanOf` builder has its schedule/Id/name merged into the registration.
+- Providers ask the core for the per-handler items they need: `IsEnabled(type)` (plan step → `Enabled`; else `GetPlanOf.ConfiguredEnabled ?? global`) and `ResolveTimeZoneId(type)` (plan step → `TimeZone`; else `GetPlanOf.ConfiguredTimeZone`; then attribute; then global; intervals → none). The global defaults stay provider options (`GlobalRecurringAutoRun`, `RecurringTimeZone`), passed through a protected virtual (R-009).
+- **Hangfire**: `SetJobAutoRun(type, x)` → `GetPlanOf(type).Enabled(x)`; `SetJobTimeZone(type, tz)` → `GetPlanOf(type).TimeZone(tz)`, both `[Obsolete]`. `RecurringJobResolver` uses the core resolution; `RecurringAutoRun`/`RecurringTimeZones` are removed (internal). The existing "references a type that isn't registered" errors move to the `GetPlanOf` check. The interval + time-zone warning (012) reads the effective builder's time zone.
 
 ## Complexity Tracking
 
 | Item | Why | Simpler alternative rejected |
 |---|---|---|
-| Availability re-evaluated at configuration (R-003) | `SetJobAutoRun` may be set after `Build`, and must keep cascading as the plan's policy says | evaluating only at `Build` (would miss options set later) |
+| Internal planner kept apart from the user planner | maintainer decision: a handler in the user plan drops the options layer as a whole while attributes keep applying | one merged planner (would mix options into user plans, the deprecated AC-002.6) |
+| Enabled re-resolution with the global default (R-003) | the global `GlobalRecurringAutoRun` and the options layer are known only at `Configure`, after the plan was built | resolving at `Build` (options not available yet) |

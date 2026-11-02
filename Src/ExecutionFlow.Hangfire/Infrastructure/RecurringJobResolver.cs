@@ -16,21 +16,12 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         }
 
         /// <summary>
-        /// Plan builder &gt; per-handler option &gt; attribute &gt; global option; <c>null</c> means UTC. An interval has no
+        /// Plan step (or, outside the plan, GetPlanOf) &gt; attribute &gt; global option; <c>null</c> means UTC. An interval has no
         /// time zone, so it is always UTC.
         /// </summary>
         public static string ResolveTimeZoneId(RecurringJobRegistryInfo registration, HangfireOptions options)
         {
-            if (registration.Interval.HasValue)
-                return null;
-
-            if (options.Plan != null && options.Plan.TryGet(registration.HandlerType, out var step) && step.TimeZone != null)
-                return step.TimeZone;
-
-            if (options.RecurringTimeZones.TryGetValue(registration.HandlerType, out var configured))
-                return configured;
-
-            return registration.TimeZone ?? options.RecurringTimeZone;
+            return options.TimeZoneIdOf(registration);
         }
 
         public static TimeZoneInfo ResolveTimeZone(RecurringJobRegistryInfo registration, HangfireOptions options)
@@ -47,16 +38,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
         /// <summary>
         /// A handler in the plan: its step's resolved <see cref="ExecutionPlanStep.Enabled"/> (builder &gt; option &gt; global,
-        /// with the plan's missing-prerequisite policy). Otherwise the per-handler option &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.
+        /// with the plan's missing-prerequisite policy). Otherwise GetPlanOf's value &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.
         /// </summary>
         public static bool IsAutoRun(Type handlerType, HangfireOptions options)
         {
-            if (options.Plan != null && options.Plan.TryGet(handlerType, out var step))
-                return step.Enabled;
-
-            return options.RecurringAutoRun.TryGetValue(handlerType, out var autoRun)
-                ? autoRun
-                : options.GlobalRecurringAutoRun;
+            return options.IsAutoRun(handlerType);
         }
     }
 }

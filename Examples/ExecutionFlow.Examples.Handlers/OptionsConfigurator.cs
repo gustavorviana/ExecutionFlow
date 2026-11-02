@@ -13,7 +13,8 @@ namespace ExecutionFlow.Examples.Handlers
             options.RemoveOrphanRecurringJobs = true;
             options.SetJobIdGeneratorType<ExampleJobIdGenerator>();
             options.Scan(typeof(IHandlerMark).Assembly);
-            options.SetJobAutoRun<AutoRunDisabledHandler>(false);
+            options.GetPlanOf<AutoRunDisabledHandler>().Enabled(false);
+            options.AddStateHandler<Hooks.JobMonitor>();
 
             // Dependencies between recurring handlers: registers the plan's handlers and their run modes.
             options.UsePlan(CatalogPlan.Build());

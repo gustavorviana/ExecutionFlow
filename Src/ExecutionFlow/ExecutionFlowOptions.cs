@@ -1,6 +1,7 @@
 using ExecutionFlow.Abstractions;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 
@@ -211,6 +212,25 @@ namespace ExecutionFlow
         }
 
         /// <summary>
+        /// Shortcut for registering a plan made only of configuration classes: builds an <see cref="ExecutionPlanner"/> from
+        /// the <see cref="IHandlerConfiguration{THandler}"/> classes of <paramref name="assembly"/> that match
+        /// <paramref name="predicate"/>, and registers it with <see cref="UsePlan"/>. Use the planner directly to mix them
+        /// with inline configuration. Each provider gets its own plan: filter the classes that belong to it.
+        /// </summary>
+        /// <param name="assembly">The assembly with the configuration classes.</param>
+        /// <param name="predicate">Filter on the configuration classes (e.g. by namespace); <c>null</c> applies all.</param>
+        /// <param name="policy">What to do when a handler depends on one that isn't configured or is disabled.</param>
+        /// <exception cref="InvalidOperationException">A plan was already registered, or the plan is invalid.</exception>
+        public void UsePlanFromAssembly(Assembly assembly, Func<Type, bool> predicate = null, MissingPrerequisite policy = MissingPrerequisite.Throw)
+        {
+            ThrowIfLocked();
+            if (assembly == null) throw new ArgumentNullException(nameof(assembly));
+            if (Plan != null) throw new InvalidOperationException("An execution plan was already registered.");
+
+            UsePlan(new ExecutionPlanner().ApplyConfigurationsFromAssembly(assembly, predicate).Build(policy));
+        }
+
+        /// <summary>
         /// Called by <see cref="UsePlan"/> before the plan is stored, so a provider can validate and apply it.
         /// Throwing leaves no plan registered.
         /// </summary>
@@ -219,59 +239,177 @@ namespace ExecutionFlow
         {
         }
 
+        // The internal planner: the class's attributes plus GetPlanOf. It's never built directly; without a user plan it
+        // forms the automatic plan, otherwise its GetPlanOf values only apply to handlers outside the user plan.
+        private readonly ExecutionPlanner _internalPlanner = new ExecutionPlanner();
+        private readonly Dictionary<Type, HandlerBuilder> _optionsBuilders = new Dictionary<Type, HandlerBuilder>(new TypeEqualityComparer());
+
         /// <summary>
-        /// The provider's on/off for a recurring handler whose plan builder didn't call <see cref="HandlerBuilder.Enabled(bool)"/>
-        /// (e.g. a per-handler option, else a global one). Default: <c>true</c>.
+        /// Gets the builder of <typeparamref name="THandler"/> in these options, to configure it like in a plan
+        /// (<see cref="HandlerBuilder{THandler}"/>). Its values win over the class's attributes. When the handler is in a plan
+        /// registered with <see cref="UsePlan"/>, that plan's configuration replaces these values as a whole (attributes still
+        /// apply), and configuration writes a trace warning. The handler must also be registered with <see cref="Scan(Assembly)"/>
+        /// or <see cref="Add(Type)"/>.
         /// </summary>
+        /// <typeparam name="THandler">The recurring handler.</typeparam>
+        /// <exception cref="InvalidOperationException">The options are locked.</exception>
+        public HandlerBuilder<THandler> GetPlanOf<THandler>() where THandler : class, IHandler
+        {
+            return (HandlerBuilder<THandler>)GetPlanOf(typeof(THandler));
+        }
+
+        /// <summary>Gets the builder of <paramref name="handlerType"/> in these options; see <see cref="GetPlanOf{THandler}"/>.</summary>
         /// <param name="handlerType">The recurring handler type.</param>
-        protected internal virtual bool IsRecurringHandlerEnabled(Type handlerType)
+        /// <exception cref="ArgumentException">The type doesn't implement <see cref="IHandler"/>.</exception>
+        /// <exception cref="InvalidOperationException">The options are locked.</exception>
+        public HandlerBuilder GetPlanOf(Type handlerType)
+        {
+            ThrowIfLocked();
+            if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
+
+            if (!_optionsBuilders.TryGetValue(handlerType, out var builder))
+            {
+                builder = _internalPlanner.Add(handlerType);
+                _optionsBuilders.Add(handlerType, builder);
+            }
+
+            return builder;
+        }
+
+        /// <summary>The provider's global on/off for recurring handlers, used when nothing more specific sets it. Default: <c>true</c>.</summary>
+        protected virtual bool IsRecurringHandlerEnabledByDefault()
         {
             return true;
         }
 
+        /// <summary>The provider's global time zone ID for cron schedules, or <c>null</c> for UTC. Default: <c>null</c>.</summary>
+        protected virtual string DefaultRecurringTimeZone => null;
+
         /// <summary>
-        /// Without <see cref="UsePlan"/>, forms the automatic plan when a registered recurring handler has
-        /// <see cref="Attributes.DependsOnAttribute"/> or <see cref="Attributes.DependentRunAttribute"/>, so those attributes
-        /// are never silently ignored. Every registered recurring handler joins it, in registration order; whether each
-        /// runs is decided afterwards by the provider's on/off, in <see cref="ResolvePlan"/>.
+        /// Whether the recurring handler runs on its schedule: its plan step's resolved <see cref="ExecutionPlanStep.Enabled"/>
+        /// when it's in the plan, else <see cref="GetPlanOf{THandler}"/>'s value, else the provider's global default.
         /// </summary>
-        private void FormAutomaticPlan()
+        /// <param name="handlerType">The recurring handler type.</param>
+        protected bool ResolveRecurringHandlerEnabled(Type handlerType)
         {
-            if (Plan != null || !_recurringOrder.Any(t =>
-                    t.IsDefined(typeof(Attributes.DependsOnAttribute), false) || t.IsDefined(typeof(Attributes.DependentRunAttribute), false)))
-                return;
+            if (Plan != null && Plan.TryGet(handlerType, out var step))
+                return step.Enabled;
 
-            var planner = new ExecutionPlanner();
-            foreach (var handlerType in _recurringOrder)
-                planner.Add(handlerType);
-
-            Plan = planner.Build(AutomaticPlanMissingPrerequisite);
+            return (_optionsBuilders.TryGetValue(handlerType, out var builder) ? builder.ConfiguredEnabled : null)
+                ?? IsRecurringHandlerEnabledByDefault();
         }
 
         /// <summary>
-        /// Applies the plan once the options are complete: the builder's schedule, ID and name replace the attribute's in the
-        /// registrations (no per-handler option exists for them), and the plan's enabled steps are re-resolved with the
-        /// provider's on/off, applying its <see cref="ExecutionPlan.MissingPrerequisite"/> again.
+        /// The time zone ID the handler's cron is evaluated in, or <c>null</c> for UTC: plan step (or, outside the plan,
+        /// <see cref="GetPlanOf{THandler}"/>), then the attribute, then the provider's global default. An interval has none.
+        /// </summary>
+        /// <param name="registration">The handler's registration.</param>
+        protected string ResolveRecurringTimeZoneId(RecurringJobRegistryInfo registration)
+        {
+            if (registration == null) throw new ArgumentNullException(nameof(registration));
+            if (registration.Interval.HasValue)
+                return null;
+
+            return GetConfiguredTimeZone(registration.HandlerType) ?? registration.TimeZone ?? DefaultRecurringTimeZone;
+        }
+
+        /// <summary>
+        /// The time zone set specifically for the handler: its plan step's, or, outside the plan, <see cref="GetPlanOf{THandler}"/>'s;
+        /// <c>null</c> when none (attributes and globals not included).
+        /// </summary>
+        /// <param name="handlerType">The recurring handler type.</param>
+        protected string GetConfiguredTimeZone(Type handlerType)
+        {
+            if (Plan != null && Plan.TryGet(handlerType, out var step))
+                return step.TimeZone;
+
+            return _optionsBuilders.TryGetValue(handlerType, out var builder) ? builder.ConfiguredTimeZone : null;
+        }
+
+        /// <summary>The provider settings of the handler: its plan step's, or, outside the plan, <see cref="GetPlanOf{THandler}"/>'s.</summary>
+        /// <param name="handlerType">The recurring handler type.</param>
+        protected IReadOnlyDictionary<string, object> ResolveRecurringHandlerSettings(Type handlerType)
+        {
+            if (Plan != null && Plan.TryGet(handlerType, out var step))
+                return step.Settings;
+
+            return _optionsBuilders.TryGetValue(handlerType, out var builder) ? builder.Settings : EmptySettings;
+        }
+
+        private static readonly IReadOnlyDictionary<string, object> EmptySettings = new Dictionary<string, object>();
+
+        private bool NeedsAutomaticPlan()
+        {
+            return _recurringOrder.Any(t =>
+                    t.IsDefined(typeof(Attributes.DependsOnAttribute), false) || t.IsDefined(typeof(Attributes.DependentRunAttribute), false))
+                || _optionsBuilders.Values.Any(b => b.Prerequisites.Count > 0 || b.ConfiguredRunMode.HasValue);
+        }
+
+        private void MergeRegistration(Type handlerType, string cron, TimeSpan? interval, string id, string displayName,
+            bool overlapConfigured, TimeSpan? overlapTimeout)
+        {
+            if (!_recurringHandlers.TryGetValue(handlerType, out var registration))
+                return;
+
+            var resolvedCron = cron ?? (interval.HasValue ? null : registration.Cron);
+            var resolvedInterval = interval ?? (cron != null ? null : registration.Interval);
+
+            _recurringHandlers[handlerType] = new RecurringJobRegistryInfo(
+                handlerType, displayName ?? registration.DisplayName, resolvedCron, id ?? registration.Id, registration.TimeZone,
+                resolvedInterval, overlapConfigured ? overlapTimeout : registration.OverlapTimeout);
+        }
+
+        /// <summary>
+        /// Applies the planners once the options are complete. With a user plan, its handlers drop their
+        /// <see cref="GetPlanOf{THandler}"/> values (with a warning). Without one, the internal planner forms the automatic
+        /// plan when it has dependencies or run modes. Plan steps (or, without a plan, <see cref="GetPlanOf{THandler}"/>)
+        /// replace the attribute's schedule, ID and name in the registrations, and plan steps are re-resolved with
+        /// <c>ConfiguredEnabled ?? global default</c>, applying the plan's <see cref="ExecutionPlan.MissingPrerequisite"/> again.
         /// </summary>
         internal void ResolvePlan()
         {
-            FormAutomaticPlan();
-            if (Plan == null)
-                return;
-
-            foreach (var step in Plan.Steps)
+            foreach (var handlerType in _optionsBuilders.Keys)
             {
-                if (!_recurringHandlers.TryGetValue(step.HandlerType, out var registration))
-                    continue;
-
-                var cron = step.Cron ?? (step.Interval.HasValue ? null : registration.Cron);
-                var interval = step.Interval ?? (step.Cron != null ? null : registration.Interval);
-
-                _recurringHandlers[step.HandlerType] = new RecurringJobRegistryInfo(
-                    step.HandlerType, step.DisplayName, cron, step.Id ?? registration.Id, registration.TimeZone, interval, registration.OverlapTimeout);
+                if (!_recurringHandlers.ContainsKey(handlerType))
+                    throw new InvalidOperationException(
+                        $"GetPlanOf references type '{handlerType.FullName}' which is not registered as a recurring handler. Register it with Scan or Add.");
             }
 
-            Plan = Plan.Reevaluate(IsRecurringHandlerEnabled);
+            if (Plan != null)
+            {
+                foreach (var step in Plan.Steps)
+                {
+                    if (_optionsBuilders.TryGetValue(step.HandlerType, out var ignored) && ignored.HasExplicitValues)
+                        Trace.TraceWarning(
+                            "ExecutionFlow: '{0}' is in the execution plan, so its GetPlanOf configuration (including SetJobAutoRun and SetJobTimeZone) is ignored.",
+                            step.HandlerType.FullName);
+                }
+            }
+            else if (NeedsAutomaticPlan())
+            {
+                foreach (var handlerType in _recurringOrder)
+                    if (!_internalPlanner.Contains(handlerType))
+                        _internalPlanner.Add(handlerType);
+
+                _internalPlanner.Reorder(_recurringOrder);
+                Plan = _internalPlanner.Build(AutomaticPlanMissingPrerequisite);
+            }
+            else
+            {
+                foreach (var pair in _optionsBuilders)
+                {
+                    var b = pair.Value;
+                    MergeRegistration(pair.Key, b.ConfiguredCron, b.ConfiguredInterval, b.ConfiguredId, b.ConfiguredDisplayName,
+                        b.IsOverlapConfigured, b.ConfiguredOverlapTimeout);
+                }
+
+                return;
+            }
+
+            foreach (var step in Plan.Steps)
+                MergeRegistration(step.HandlerType, step.Cron, step.Interval, step.Id, step.DisplayName, false, null);
+
+            Plan = Plan.Reevaluate(_ => IsRecurringHandlerEnabledByDefault());
         }
 
         /// <summary>

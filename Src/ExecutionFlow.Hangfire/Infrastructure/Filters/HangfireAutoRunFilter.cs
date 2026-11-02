@@ -47,10 +47,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure.Filters
             if (handlerType == null)
                 return false;
 
-            if (_options.RecurringAutoRun.TryGetValue(handlerType, out var autoRun))
-                return autoRun;
-
-            return _options.GlobalRecurringAutoRun;
+            return _options.IsAutoRun(handlerType);
         }
 
         private static bool IsRecurringJob(ElectStateContext context)

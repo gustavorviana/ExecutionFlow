@@ -52,3 +52,22 @@ namespace ExecutionFlow.Tests.Abstractions.NoDefaultConstructorTarget
         public void Configure(HandlerBuilder<NoDefaultConstructorHandler> handler) { }
     }
 }
+
+namespace ExecutionFlow.Tests.Abstractions.PolicyTarget
+{
+    public class MissingPrerequisiteHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    public class PolicyDependentHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    /// <summary>Depends on a handler that no configuration in this namespace configures.</summary>
+    public class PolicyDependentConfiguration : IHandlerConfiguration<PolicyDependentHandler>
+    {
+        public void Configure(HandlerBuilder<PolicyDependentHandler> handler) => handler.DependsOn<MissingPrerequisiteHandler>();
+    }
+}
