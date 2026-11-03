@@ -22,6 +22,13 @@ Related: [research.md](research.md) R-002 (producer-only, was ADR-0005), [consti
 
 **Actors**: the consumer app (runs handlers: full mode), the producer app (publishes, and queries or cancels jobs: producer-only mode), and the app without DI (uses `HangfireSetup` and `FlowEngineJobActivator` directly).
 
+## Clarifications
+
+### Session 2026-11-03
+
+- Q: What is the built-in activator for? → A: Internal use only, a fallback for apps that don't use Microsoft DI; it isn't meant to be the app's DI. The documentation of `HangfireSetup` recommends Microsoft DI (`AddHangfireToExecutionFlow`) (maintainer, 2026-11-03).
+- Q: Restrict what the activator creates (an "ExecutionFlow only" mode)? → A: No. Only make it reliable, without changing what it creates or the lifetimes of FR-004 (maintainer, 2026-11-03). Compatible change: no version bump beyond the normal one (constitution V).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Register handlers with startup validation (Priority: P1)
@@ -99,6 +106,8 @@ As an app without DI, I want ExecutionFlow to activate handlers and their depend
 
 - **FR-004 Built-in activator (no DI)**: `FlowEngineJobActivator` activates jobs and their dependencies. Registered types are singletons, other concrete types are transient, interfaces and abstract types must be registered, and a single public constructor is required. *(Story 4)*
   - **AC-004.1**: **Given** a `FlowEngineJobActivator`, **When** registered and unregistered types are resolved, **Then** it follows those lifetime and registration rules. Tests: `FlowEngineJobActivatorTests.DefaultRegistrations_JobActivator_Returns_Self`, `FlowEngineJobActivatorTests.DefaultRegistrations_IServiceProvider_Returns_Self`, `FlowEngineJobActivatorTests.DefaultRegistrations_Registry_Returns_Registry`, `FlowEngineJobActivatorTests.GetService_UnregisteredConcreteType_CreatesInstance`, `FlowEngineJobActivatorTests.GetService_UnregisteredConcreteType_CreatesNewInstanceEachTime`, `FlowEngineJobActivatorTests.AddSingleton_WithInstance_ReturnsExactInstance`, `FlowEngineJobActivatorTests.AddSingleton_WithType_CreatesSingleton`, `FlowEngineJobActivatorTests.AddSingleton_WithFunc_LazyEvaluatesOnce`, `FlowEngineJobActivatorTests.GetService_Interface_WithoutRegistration_Throws`, `FlowEngineJobActivatorTests.GetService_Abstract_WithoutRegistration_Throws`, `FlowEngineJobActivatorTests.ActivateJob_DelegatesToGetService`, `FlowEngineJobActivatorTests.Constructor_Injection_ResolvesParameters`, `FlowEngineJobActivatorTests.RegisterLoggerFactory_CreatesExecutionLoggerFactory`, `HangfireSetupTests.ConfigureActivator_Sets_JobActivator_Current`
+  - **AC-004.2**: **Given** types whose constructors depend on each other in a cycle, **When** one of them is resolved, **Then** the activator throws `InvalidOperationException` naming the chain, instead of overflowing the stack and ending the process. Test: `FlowEngineJobActivatorTests.GetService_ConstructorCycle_ThrowsNamingTheChain`
+  - **AC-004.3**: **Given** a registered type resolved by many threads at the same time, **When** its singleton is created, **Then** its constructor runs once and every caller gets the same instance. Tests: `FlowEngineJobActivatorTests.AddSingleton_WithType_CreatesOnce_WhenResolvedConcurrently`, `FlowEngineJobActivatorTests.AddSingleton_WithFunc_RunsOnce_WhenResolvedConcurrently`
 
 - **FR-005 Microsoft DI**: *(Stories 2, 3)*
   - `AddHangfireToExecutionFlow(configure?)` (full mode) registers handlers and hooks (transient), option values, logger factories, `IJobIdGenerator`, `IExecutionFlowRegistry`, `IHangfireJobName`, `HangfireJobDispatcher`, `IHangfireDispatcher`/`IEventDispatcher`/`IRecurringTrigger`, `IExecutionManager` (the setup's), and `ExecutionFlowStartupService`, which calls `StartExecutionFlow()` at host start.

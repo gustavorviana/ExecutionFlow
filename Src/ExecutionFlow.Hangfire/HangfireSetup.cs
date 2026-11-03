@@ -1,4 +1,4 @@
-using ExecutionFlow.Abstractions;
+﻿using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure;
 using ExecutionFlow.Hangfire.Infrastructure.Filters;
 using Hangfire;
@@ -101,9 +101,15 @@ namespace ExecutionFlow.Hangfire
         }
 
         /// <summary>
-        /// Sets the current <see cref="JobActivator"/> to a <see cref="FlowEngineJobActivator"/> backed by this setup,
-        /// enabling Hangfire to resolve ExecutionFlow handlers.
+        /// For apps without Microsoft DI: sets the current <see cref="JobActivator"/> to this setup's built-in activator, so
+        /// Hangfire can resolve ExecutionFlow handlers.
         /// </summary>
+        /// <remarks>
+        /// <b>Prefer Microsoft DI</b> (<c>services.AddHangfireToExecutionFlow(...)</c> in
+        /// <c>ExecutionFlow.Hangfire.DependencyInjection</c>). The built-in activator is an internal fallback for apps without a
+        /// container: it only exists to activate ExecutionFlow's handlers, hooks and loggers, and isn't meant to be the app's
+        /// DI (no scopes, no disposal, no registration API).
+        /// </remarks>
         /// <returns>This instance for chaining.</returns>
         public HangfireSetup ConfigureActivator()
         {
@@ -123,7 +129,7 @@ namespace ExecutionFlow.Hangfire
         /// </summary>
         /// <param name="jobClient">The Hangfire background job client. If <c>null</c>, a default client is created.</param>
         /// <param name="jobStorage">The Hangfire job storage. If <c>null</c>, <see cref="JobStorage.Current"/> is used.</param>
-        /// <param name="serviceProvider">The service provider for resolving dependencies. If <c>null</c>, the current job activator is used.</param>
+        /// <param name="serviceProvider">The service provider for resolving dependencies. If <c>null</c>, this setup's built-in activator is used (see <see cref="ConfigureActivator"/>); prefer Microsoft DI.</param>
         /// <returns>A fully configured <see cref="IHangfireDispatcher"/>.</returns>
         public IHangfireDispatcher Build(IBackgroundJobClient jobClient = null, JobStorage jobStorage = null, IServiceProvider serviceProvider = null)
         {

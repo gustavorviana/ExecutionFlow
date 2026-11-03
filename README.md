@@ -67,6 +67,8 @@ setup.ConfigureActivator().Build();
 using var server = new BackgroundJobServer();
 ```
 
+> **Prefer DI.** Without DI, ExecutionFlow uses a small built-in activator. It's an internal fallback that only activates ExecutionFlow's handlers, hooks and loggers, not a DI container for your app (no scopes, no disposal). If your app can use Microsoft DI, use `AddHangfireToExecutionFlow` instead.
+
 ### 3. Publish
 
 ```csharp
@@ -614,7 +616,7 @@ provider.StartExecutionFlow();   // registers Hangfire filters and recurring job
 ```
 
 - Hangfire's filters and job activator are process-wide, so only **one full Hangfire setup** is active per process: a second full `Build()` replaces the previous one's filters (its dispatcher keeps publishing, but its hooks stop). Producer-only setups are unlimited. This limit is Hangfire's, not ExecutionFlow's.
-- Without DI, call `setup.ConfigureActivator()` so Hangfire activates handlers through the setup; `Build()` and `ConfigureActivator()` share the same activator, in either order.
+- Without DI, call `setup.ConfigureActivator()` so Hangfire activates handlers through the setup; `Build()` and `ConfigureActivator()` share the same activator, in either order. The built-in activator is an internal fallback (registered types are singletons, other concrete types are transient, a constructor cycle throws); prefer Microsoft DI.
 
 ## Configuration Reference
 
