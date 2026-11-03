@@ -40,6 +40,7 @@ namespace ExecutionFlow.Hangfire
                 return null;
 
             return GetConfiguredName(job)
+                ?? GetPlanTriggerName(job)
                 ?? GetJobDisplayName(job)
                 ?? GetHandlerDisplayName(job)
                 ?? GetCarriedTypeDisplayName(job)

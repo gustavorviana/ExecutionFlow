@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ExecutionFlow.Tests" />
+    <InternalsVisibleTo Include="ExecutionFlow.Hosting" />
   </ItemGroup>
 
 </Project>

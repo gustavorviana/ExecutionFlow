@@ -1,3 +1,4 @@
+using ExecutionFlow.Abstractions;
 using System;
 using System.Collections.Generic;
 
@@ -9,13 +10,43 @@ namespace ExecutionFlow.Hangfire
     public class HangfireOptions : ExecutionFlowOptions
     {
         private readonly List<Type> _stateHandlerTypes = new List<Type>();
-        internal Dictionary<Type, bool> RecurringAutoRun { get; } = new Dictionary<Type, bool>();
         internal Type JobNameType { get; private set; } = typeof(DefaultHangfireJobName);
         internal Type JobIdGeneratorType { get; private set; } = typeof(DefaultRecurringServiceIdGenerator);
 
         /// <summary>Gets or sets whether recurring jobs auto-start when enqueued. Default is <c>true</c>.</summary>
         public bool GlobalRecurringAutoRun { get => _globalRecurringAutoRun; set { ThrowIfLocked(); _globalRecurringAutoRun = value; } }
         private bool _globalRecurringAutoRun = true;
+
+        /// <summary>
+        /// In Hangfire, <see cref="ExecutionFlowOptions.UsePlan"/> registers every handler of the plan as a recurring handler,
+        /// right away. A disabled step doesn't run on its schedule, like <see cref="SetJobAutoRun(Type, bool)"/> <c>false</c>,
+        /// and a dependent is only enqueued after a new completed cycle of every prerequisite; otherwise its run ends in the
+        /// <c>PrerequisitesNotMet</c> state. A handler in the plan ignores its <see cref="ExecutionFlowOptions.GetPlanOf{THandler}"/>
+        /// values (and the obsolete <c>SetJobAutoRun</c>/<c>SetJobTimeZone</c>), with a trace warning.
+        /// </summary>
+        /// <param name="plan">The plan built with <see cref="ExecutionPlanner"/>.</param>
+        protected override void OnPlanRegistering(ExecutionPlan plan)
+        {
+            foreach (var step in plan.Steps)
+                Add(step.HandlerType);
+        }
+
+        /// <summary><see cref="GlobalRecurringAutoRun"/>.</summary>
+        protected override bool IsRecurringHandlerEnabledByDefault()
+        {
+            return GlobalRecurringAutoRun;
+        }
+
+        /// <summary><see cref="RecurringTimeZone"/>.</summary>
+        protected override string DefaultRecurringTimeZone => RecurringTimeZone;
+
+        internal bool IsAutoRun(Type handlerType) => ResolveRecurringHandlerEnabled(handlerType);
+
+        internal string TimeZoneIdOf(RecurringJobRegistryInfo registration) => ResolveRecurringTimeZoneId(registration);
+
+        internal string ConfiguredTimeZoneOf(Type handlerType) => GetConfiguredTimeZone(handlerType);
+
+        internal IReadOnlyDictionary<string, object> SettingsOf(Type handlerType) => ResolveRecurringHandlerSettings(handlerType);
         internal Dictionary<Type, object> OptionValues { get; } = new Dictionary<Type, object>();
 
         /// <summary>Gets or sets whether orphan recurring jobs (not registered in the setup) are automatically removed. Default is <c>false</c>.</summary>
@@ -63,9 +94,11 @@ namespace ExecutionFlow.Hangfire
         /// <summary>
         /// Sets whether a specific recurring handler runs on its schedule. A handler that doesn't auto-run is registered
         /// with a schedule that never fires, so it only runs when triggered manually. Applies to the whole storage.
+        /// Obsolete: same as <c>GetPlanOf&lt;T&gt;().Enabled(autoRun)</c>.
         /// </summary>
         /// <typeparam name="T">The handler type.</typeparam>
         /// <param name="autoRun">Whether to run the handler on its schedule.</param>
+        [Obsolete("Use GetPlanOf<T>().Enabled(...).")]
         public void SetJobAutoRun<T>(bool autoRun)
         {
             SetJobAutoRun(typeof(T), autoRun);
@@ -77,28 +110,29 @@ namespace ExecutionFlow.Hangfire
         /// </summary>
         /// <param name="handlerType">The handler type.</param>
         /// <param name="autoRun">Whether to run the handler on its schedule.</param>
+        [Obsolete("Use GetPlanOf(handlerType).Enabled(...).")]
         public void SetJobAutoRun(Type handlerType, bool autoRun)
         {
             ThrowIfLocked();
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
-            RecurringAutoRun[handlerType] = autoRun;
+
+            GetPlanOf(handlerType).Enabled(autoRun);
         }
 
         /// <summary>
         /// Gets or sets the default time zone ID for recurring schedules (e.g. "America/Sao_Paulo").
         /// <c>null</c> (default) means UTC. Overridden by <see cref="ExecutionFlow.Attributes.RecurringAttribute.TimeZone"/>
-        /// and by <see cref="SetJobTimeZone(Type, string)"/>.
+        /// and by <see cref="ExecutionFlowOptions.GetPlanOf{THandler}"/>'s <c>TimeZone</c>.
         /// </summary>
         public string RecurringTimeZone { get => _recurringTimeZone; set { ThrowIfLocked(); _recurringTimeZone = value; } }
         private string _recurringTimeZone;
-
-        internal Dictionary<Type, string> RecurringTimeZones { get; } = new Dictionary<Type, string>();
 
         /// <summary>
         /// Sets the time zone ID for a specific recurring handler. Takes precedence over the attribute and the global default.
         /// </summary>
         /// <typeparam name="T">The handler type.</typeparam>
         /// <param name="timeZoneId">The time zone ID (e.g. "America/Sao_Paulo").</param>
+        [Obsolete("Use GetPlanOf<T>().TimeZone(...).")]
         public void SetJobTimeZone<T>(string timeZoneId)
         {
             SetJobTimeZone(typeof(T), timeZoneId);
@@ -109,12 +143,13 @@ namespace ExecutionFlow.Hangfire
         /// </summary>
         /// <param name="handlerType">The handler type.</param>
         /// <param name="timeZoneId">The time zone ID (e.g. "America/Sao_Paulo").</param>
+        [Obsolete("Use GetPlanOf(handlerType).TimeZone(...).")]
         public void SetJobTimeZone(Type handlerType, string timeZoneId)
         {
             ThrowIfLocked();
             if (handlerType == null) throw new ArgumentNullException(nameof(handlerType));
             if (string.IsNullOrEmpty(timeZoneId)) throw new ArgumentNullException(nameof(timeZoneId));
-            RecurringTimeZones[handlerType] = timeZoneId;
+            GetPlanOf(handlerType).TimeZone(timeZoneId);
         }
 
         /// <summary>

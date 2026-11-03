@@ -43,7 +43,7 @@ public class HandlerJobFilterProviderTests
         return registry;
     }
 
-    // --- Unregistered event handler (REQ-008) ---
+    // --- Unregistered event handler (FR-008) ---
 
     [Fact]
     public void RetryUnregisteredEventJobs_DefaultsToFalse()

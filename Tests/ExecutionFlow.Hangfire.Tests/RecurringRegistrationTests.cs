@@ -11,7 +11,7 @@ using NSubstitute;
 namespace ExecutionFlow.Hangfire.Tests;
 
 /// <summary>
-/// recurring-jobs REQ-002, REQ-003, REQ-006, REQ-007, REQ-008. These call <see cref="HangfireSetup.Build"/>,
+/// 005-recurring-jobs FR-002, FR-003, FR-006, FR-007, FR-008. These call <see cref="HangfireSetup.Build"/>,
 /// which touches Hangfire's static filters, so they run alone and remove what they add.
 /// </summary>
 [Collection(GlobalHangfireStateCollection.Name)]
@@ -65,7 +65,7 @@ public class RecurringRegistrationTests : IDisposable
         }
     }
 
-    // --- REQ-002 / REQ-007: IDs ---
+    // --- FR-002 / FR-007: IDs ---
 
     [Fact]
     public void Build_UsesFullNameAsId_WhenNoExplicitId()
@@ -127,7 +127,7 @@ public class RecurringRegistrationTests : IDisposable
         _connection.Received().GetAllEntriesFromHash("recurring-job:stable-report");
     }
 
-    // --- REQ-008: time zone precedence (option > attribute > global > UTC) ---
+    // --- FR-008: time zone precedence (option > attribute > global > UTC) ---
 
     [Fact]
     public void Build_UsesUtc_ByDefault()
@@ -173,7 +173,7 @@ public class RecurringRegistrationTests : IDisposable
         Assert.Equal("Europe/Lisbon", RecurringHash(typeof(NewYorkHandler).FullName!)["TimeZoneId"]);
     }
 
-    // --- REQ-003: auto-run off = Cron.Never, no auto-run filter ---
+    // --- FR-003: auto-run off = Cron.Never, no auto-run filter ---
 
     [Fact]
     public void Build_RegistersCronNever_WhenAutoRunIsOff()
@@ -185,6 +185,33 @@ public class RecurringRegistrationTests : IDisposable
         });
 
         Assert.Equal(Cron.Never(), RecurringHash(typeof(DailyHandler).FullName!)["Cron"]);
+    }
+
+    [Fact]
+    public void Build_RegistersDependentWithCronNever()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<NewYorkHandler>();
+        planner.Add<DailyHandler>().DependsOn<NewYorkHandler>();
+        var plan = planner.Build();
+
+        Build(o => o.UsePlan(plan));
+
+        Assert.Equal(Cron.Never(), RecurringHash(typeof(DailyHandler).FullName!)["Cron"]);
+        Assert.Equal("0 8 * * *", RecurringHash(typeof(NewYorkHandler).FullName!)["Cron"]);
+    }
+
+    [Fact]
+    public void Build_RegistersOwnScheduleDependentWithItsCron()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<NewYorkHandler>();
+        planner.Add<DailyHandler>().DependsOn<NewYorkHandler>().RunMode(DependentRunMode.OwnSchedule);
+        var plan = planner.Build();
+
+        Build(o => o.UsePlan(plan));
+
+        Assert.Equal("0 8 * * *", RecurringHash(typeof(DailyHandler).FullName!)["Cron"]);
     }
 
     [Fact]
@@ -221,7 +248,7 @@ public class RecurringRegistrationTests : IDisposable
         Assert.Empty(added.OfType<HangfireAutoRunFilter>());
     }
 
-    // --- REQ-006: orphan cleanup only touches ExecutionFlow recurring jobs ---
+    // --- FR-006: orphan cleanup only touches ExecutionFlow recurring jobs ---
 
     [Fact]
     public void Build_RemovesOnlyExecutionFlowOrphans()

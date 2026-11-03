@@ -156,6 +156,71 @@ public class FlowEngineJobActivatorTests
         Assert.IsType<ExecutionLoggerFactory>(factory);
     }
 
+    // AC-004.2
+    [Fact]
+    public void GetService_ConstructorCycle_ThrowsNamingTheChain()
+    {
+        var activator = Create();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => activator.GetService(typeof(CycleA)));
+
+        Assert.Contains(nameof(CycleA), ex.Message);
+        Assert.Contains(nameof(CycleB), ex.Message);
+
+        // A cycle through a registered type is caught too.
+        activator.AddSingleton<ICycleService>(typeof(CycleThroughRegistration));
+        Assert.Throws<InvalidOperationException>(() => activator.GetService(typeof(ICycleService)));
+    }
+
+    // AC-004.3
+    [Fact]
+    public void AddSingleton_WithType_CreatesOnce_WhenResolvedConcurrently()
+    {
+        var activator = Create();
+        activator.AddSingleton<SlowService>();
+        SlowService.Reset();
+
+        var results = ResolveConcurrently(activator, typeof(SlowService));
+
+        Assert.Equal(1, SlowService.Created);
+        Assert.All(results, r => Assert.Same(results[0], r));
+    }
+
+    // AC-004.3
+    [Fact]
+    public void AddSingleton_WithFunc_RunsOnce_WhenResolvedConcurrently()
+    {
+        var activator = Create();
+        var calls = 0;
+        activator.AddSingleton(() =>
+        {
+            Interlocked.Increment(ref calls);
+            Thread.Sleep(50);
+            return new SimpleService();
+        });
+
+        var results = ResolveConcurrently(activator, typeof(SimpleService));
+
+        Assert.Equal(1, calls);
+        Assert.All(results, r => Assert.Same(results[0], r));
+    }
+
+    private static object[] ResolveConcurrently(FlowEngineJobActivator activator, Type type)
+    {
+        const int threads = 16;
+        using var start = new Barrier(threads);
+        var tasks = Enumerable.Range(0, threads)
+            .Select(_ => Task.Factory.StartNew(() =>
+            {
+                start.SignalAndWait();
+                return activator.GetService(type)!;
+            }, TaskCreationOptions.LongRunning))
+            .ToArray();
+
+        Task.WaitAll(tasks);
+        return tasks.Select(t => t.Result).ToArray();
+    }
+
     // --- Test types ---
 
     public class SimpleService { }
@@ -176,5 +241,26 @@ public class FlowEngineJobActivatorTests
     public class TestLoggerFactory : IExecutionLoggerFactory
     {
         public IExecutionLogger CreateLogger(FlowParameters parameters) => null!;
+    }
+
+    public class CycleA { public CycleA(CycleB b) { } }
+    public class CycleB { public CycleB(CycleA a) { } }
+
+    public interface ICycleService { }
+    public class CycleThroughRegistration : ICycleService { public CycleThroughRegistration(ICycleService self) { } }
+
+    public class SlowService
+    {
+        private static int _created;
+
+        public static int Created => _created;
+
+        public static void Reset() => _created = 0;
+
+        public SlowService()
+        {
+            Interlocked.Increment(ref _created);
+            Thread.Sleep(50);
+        }
     }
 }

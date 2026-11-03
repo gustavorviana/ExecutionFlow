@@ -7,7 +7,7 @@ using System.ComponentModel;
 
 namespace ExecutionFlow.Hangfire.Tests;
 
-/// <summary>job-naming-and-dashboard REQ-001: the fixed ExecutionFlow rules, without Hangfire's attributes.</summary>
+/// <summary>008-job-naming-and-dashboard FR-001: the fixed ExecutionFlow rules, without Hangfire's attributes.</summary>
 public class JobDisplayNameResolverTests
 {
     private readonly IJobIdGenerator _idGenerator = Substitute.For<IJobIdGenerator>();

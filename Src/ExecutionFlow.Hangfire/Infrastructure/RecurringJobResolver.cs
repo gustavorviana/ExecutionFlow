@@ -15,13 +15,13 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return registration.Id ?? idGenerator.GenerateId(registration.HandlerType);
         }
 
-        /// <summary>Per-handler option &gt; attribute &gt; global option; <c>null</c> means UTC.</summary>
+        /// <summary>
+        /// Plan step (or, outside the plan, GetPlanOf) &gt; attribute &gt; global option; <c>null</c> means UTC. An interval has no
+        /// time zone, so it is always UTC.
+        /// </summary>
         public static string ResolveTimeZoneId(RecurringJobRegistryInfo registration, HangfireOptions options)
         {
-            if (options.RecurringTimeZones.TryGetValue(registration.HandlerType, out var configured))
-                return configured;
-
-            return registration.TimeZone ?? options.RecurringTimeZone;
+            return options.TimeZoneIdOf(registration);
         }
 
         public static TimeZoneInfo ResolveTimeZone(RecurringJobRegistryInfo registration, HangfireOptions options)
@@ -30,12 +30,19 @@ namespace ExecutionFlow.Hangfire.Infrastructure
             return timeZoneId == null ? TimeZoneInfo.Utc : TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
         }
 
-        /// <summary>Per-handler option &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.</summary>
+        /// <summary>The cron to register on schedule: the attribute's cron, or the interval's exact cron or ticker.</summary>
+        public static string ResolveCron(RecurringJobRegistryInfo registration)
+        {
+            return registration.Interval.HasValue ? IntervalCron.ToCron(registration.Interval.Value) : registration.Cron;
+        }
+
+        /// <summary>
+        /// A handler in the plan: its step's resolved <see cref="ExecutionPlanStep.Enabled"/> (builder &gt; option &gt; global,
+        /// with the plan's missing-prerequisite policy). Otherwise GetPlanOf's value &gt; <see cref="HangfireOptions.GlobalRecurringAutoRun"/>.
+        /// </summary>
         public static bool IsAutoRun(Type handlerType, HangfireOptions options)
         {
-            return options.RecurringAutoRun.TryGetValue(handlerType, out var autoRun)
-                ? autoRun
-                : options.GlobalRecurringAutoRun;
+            return options.IsAutoRun(handlerType);
         }
     }
 }

@@ -401,7 +401,7 @@ public class DispatcherTests
         _connection.GetStateData(jobId).Returns(new StateData { Name = stateName });
     }
 
-    // --- Reservation key (custom-id-and-deduplication REQ-007, REQ-009) ---
+    // --- Reservation key (004-custom-id-and-deduplication FR-007, FR-009) ---
 
     [Fact]
     public void Publish_SkipIfExists_ReturnsFalse_WhenReservedJobIsScheduled()
@@ -506,7 +506,7 @@ public class DispatcherTests
         _connection.DidNotReceiveWithAnyArgs().CreateWriteTransaction();
     }
 
-    // --- Per-event behavior (custom-id-and-deduplication REQ-006) ---
+    // --- Per-event behavior (004-custom-id-and-deduplication FR-006) ---
 
     [Fact]
     public void Publish_UsesEventAttribute_OverGlobalBehavior()

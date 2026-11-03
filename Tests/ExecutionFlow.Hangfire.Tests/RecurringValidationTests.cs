@@ -1,9 +1,10 @@
+#pragma warning disable CS0618 // Also covers the obsolete SetJobAutoRun/SetJobTimeZone shortcuts (014 FR-006 routes them to GetPlanOf).
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Attributes;
 
 namespace ExecutionFlow.Hangfire.Tests;
 
-/// <summary>recurring-jobs AC-001.3 and REQ-008: configuration errors surface at Configure.</summary>
+/// <summary>005-recurring-jobs AC-001.3 and FR-008: configuration errors surface at Configure.</summary>
 public class RecurringValidationTests
 {
     [Fact]

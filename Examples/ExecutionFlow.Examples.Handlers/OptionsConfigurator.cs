@@ -1,4 +1,5 @@
 ﻿using ExecutionFlow.Examples.Handlers.Recurring;
+using ExecutionFlow.Examples.Handlers.Recurring.Plan;
 using ExecutionFlow.Hangfire;
 using ExecutionFlow.Hangfire.Console;
 
@@ -10,8 +11,13 @@ namespace ExecutionFlow.Examples.Handlers
         {
             options.ConfigureConsole();
             options.RemoveOrphanRecurringJobs = true;
+            options.SetJobIdGeneratorType<ExampleJobIdGenerator>();
             options.Scan(typeof(IHandlerMark).Assembly);
-            options.SetJobAutoRun<AutoRunDisabledHandler>(false);
+            options.GetPlanOf<AutoRunDisabledHandler>().Enabled(false);
+            options.AddStateHandler<Hooks.JobMonitor>();
+
+            // Dependencies between recurring handlers: registers the plan's handlers and their run modes.
+            options.UsePlan(CatalogPlan.Build());
         }
     }
 }

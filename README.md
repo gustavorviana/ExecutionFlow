@@ -15,6 +15,7 @@ A lightweight abstraction layer over [Hangfire](https://www.hangfire.io/) for st
 | **ExecutionFlow.Hangfire.DependencyInjection** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.DependencyInjection.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.DependencyInjection) | ASP.NET Core DI extensions |
 | **ExecutionFlow.Hangfire.Console** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.Console.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.Console) | Console logging + progress bars (requires [Hangfire.Console](https://github.com/pieceofsummer/Hangfire.Console)) |
 | **ExecutionFlow.Extensions.Logging** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Extensions.Logging.svg)](https://www.nuget.org/packages/ExecutionFlow.Extensions.Logging) | Sends `context.Log` to the application's `ILogger` (Serilog, Application Insights...) |
+| **ExecutionFlow.Hosting** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hosting.svg)](https://www.nuget.org/packages/ExecutionFlow.Hosting) | Runs recurring handlers inside the .NET Generic Host without Hangfire, locally and isolated ([README](Src/ExecutionFlow.Hosting/README.md)) |
 
 ## Quick Start
 
@@ -65,6 +66,8 @@ setup.ConfigureActivator().Build();
 
 using var server = new BackgroundJobServer();
 ```
+
+> **Prefer DI.** Without DI, ExecutionFlow uses a small built-in activator. It's an internal fallback that only activates ExecutionFlow's handlers, hooks and loggers, not a DI container for your app (no scopes, no disposal). If your app can use Microsoft DI, use `AddHangfireToExecutionFlow` instead.
 
 ### 3. Publish
 
@@ -312,7 +315,7 @@ To veto or change a job's state, write a Hangfire filter instead of a hook.
 
 ## Recurring Job Control
 
-Every `IHandler` needs `[Recurring("<cron>")]`; a recurring handler without it fails at `Configure`.
+Every `IHandler` needs a schedule, `[Recurring("<cron>")]` or `[RecurringInterval("hh:mm:ss")]`; a recurring handler without one, or with both, fails at `Configure`.
 
 ```csharp
 [Recurring("0 8 * * *", Id = "daily-report", TimeZone = "America/Sao_Paulo")]
@@ -320,13 +323,13 @@ public class DailyReportHandler : IHandler { ... }
 ```
 
 - `Id` (optional): a stable recurring job ID. Without it, the ID is the handler's full type name (or your `IJobIdGenerator`), so renaming the class creates a new job. An explicit `Id` always wins over the generator.
-- `TimeZone` (optional): the time zone the cron is evaluated in. Precedence: `SetJobTimeZone<T>` > attribute `TimeZone` > `RecurringTimeZone` > UTC. On .NET Framework only Windows time zone IDs exist; unknown IDs fail at `Configure`.
+- `TimeZone` (optional): the time zone the cron is evaluated in. Precedence: `GetPlanOf<T>().TimeZone(...)` > attribute `TimeZone` > `RecurringTimeZone` > UTC. On .NET Framework only Windows time zone IDs exist; unknown IDs fail at `Configure`.
 
 ```csharp
 options.RecurringTimeZone = "America/Sao_Paulo";           // default time zone (null = UTC)
-options.SetJobTimeZone<DailyReportHandler>("Europe/Lisbon"); // per handler, wins over the attribute
+options.GetPlanOf<DailyReportHandler>().TimeZone("Europe/Lisbon"); // per handler, wins over the attribute
 options.GlobalRecurringAutoRun = true;                    // default: run all on schedule
-options.SetJobAutoRun<DataSyncHandler>(false);            // never runs on schedule, only via Trigger
+options.GetPlanOf<DataSyncHandler>().Enabled(false);      // never runs on schedule, only via Trigger
 options.DisableRecurringRetries = true;                   // default: no retries for recurring
 options.RemoveOrphanRecurringJobs = true;                 // remove ExecutionFlow recurring jobs no longer in code
 ```
@@ -342,7 +345,119 @@ trigger.Trigger(typeof(DataSyncHandler));   // uses the handler's ID (explicit I
 trigger.Trigger("my-job-id");
 ```
 
-Overlapping runs: if a run takes longer than the schedule interval, Hangfire starts the next one in parallel. Add `[DisableConcurrentExecution(timeoutInSeconds: 600)]` to the handler to prevent it.
+### Interval schedules
+
+**Prefer `[Recurring]` with a cron expression on Hangfire.** `[RecurringInterval]` is an alternative for "every N of time":
+
+```csharp
+[RecurringInterval("00:15:00")]                    // every 15 minutes
+[RecurringInterval("01:30:00", Id = "price-sync")] // every 90 minutes, with a stable ID
+```
+
+- The format is `[d.]hh:mm:ss` (e.g. `"10:00:00"`, `"1.00:00:00"`); the minimum is one minute. An interval has no time zone: `RecurringTimeZone` doesn't apply to it, and a per-handler time zone (`GetPlanOf<T>().TimeZone(...)`) for it is ignored with a trace warning.
+- An interval with an exact cron equivalent (it divides an hour, or a day in whole hours) is registered as that cron in UTC, so it's aligned to the clock: every 15 minutes runs at :00, :15, :30, :45.
+- Any other interval (7 min, 90 min, 5 h) runs on a per-minute recurring job that skips each minute until the interval has passed since the last run, with about one minute of precision. Skipped minutes create no job, so nothing shows in the dashboard. A manual `Trigger` always runs and counts as the last run.
+
+### Overlapping runs
+
+If a run takes longer than the schedule, Hangfire starts the next one in parallel. Add `[NoOverlap(timeoutSeconds)]` to prevent it: a run that starts while another one is in progress waits for it, and fails if the timeout passes first. The timeout is mandatory.
+
+```csharp
+[Recurring("*/5 * * * *"), NoOverlap(600)]
+public class ImportHandler : IHandler { ... }
+```
+
+`[NoOverlap]` is part of the core package, so handlers don't depend on Hangfire's `[DisableConcurrentExecution]` (which still works). In an execution plan, `entry.NoOverlap(TimeSpan)` takes precedence over the attribute, and dependents never overlap.
+
+### Execution plan
+
+Declare which recurring handlers wait for which with `ExecutionPlanner`, and register the plan on the options with `UsePlan`:
+
+```csharp
+var planner = new ExecutionPlanner();
+planner.Add<CategorySyncHandler>();
+planner.Add<ProductSyncHandler>().DependsOn<CategorySyncHandler>();
+
+options.UsePlan(planner.Build());
+```
+
+`UsePlan` lives on the core `ExecutionFlowOptions`, so the same plan works with any execution provider. See `Examples/` for every plan feature.
+
+**Without a planner (automatic plan).** Put the dependencies on the handlers and register them with `Scan` or `Add`; when `UsePlan` isn't called and a registered handler has `[DependsOn]` or `[DependentRun]`, the registered handlers form a plan with the same rules:
+
+```csharp
+[Recurring("*/10 * * * *")]
+public class CategorySyncHandler : IHandler { ... }
+
+[DependsOn(typeof(CategorySyncHandler))]
+[DependentRun(DependentRunMode.MinInterval, "00:20:00")]   // optional; or DependentRunMode.OwnSchedule
+public class ProductSyncHandler : IHandler { ... }
+
+options.Scan(typeof(CategorySyncHandler).Assembly);
+options.AutomaticPlanMissingPrerequisite = MissingPrerequisite.Throw; // default; or SkipDependents
+```
+
+In the automatic plan, `GetPlanOf<T>().Enabled(...)`/`GlobalRecurringAutoRun` turn handlers on or off. With `UsePlan`, the explicit plan is the only one: `[DependsOn]` and `[DependentRun]` on handlers outside it are ignored. In a plan, `RunMode(...)` on the builder replaces the class's `[DependentRun]`.
+
+### Handler configuration (EF Core style)
+
+`ExecutionPlanner` is the single place to configure handlers. `Add<T>()` returns a `HandlerBuilder<T>`, and the same builder is passed to `IHandlerConfiguration<T>` classes, like EF Core's `IEntityTypeConfiguration<T>`:
+
+```csharp
+public class ProductSyncConfiguration : IHandlerConfiguration<ProductSyncHandler>
+{
+    public void Configure(HandlerBuilder<ProductSyncHandler> handler)
+    {
+        handler.Cron("*/10 * * * *")                  // or .Interval(TimeSpan.FromMinutes(90))
+               .Id("product-sync")
+               .TimeZone("America/Sao_Paulo")
+               .DisplayName("Product Sync")
+               .DependsOn<CategorySyncHandler>()     // .RemoveDependency<X>() / .ClearDependencies()
+               .RunMode(DependentRunMode.MinInterval, TimeSpan.FromMinutes(20)) // or DependentRunMode.OwnSchedule
+               .NoOverlap(TimeSpan.FromMinutes(10))  // or .AllowOverlap()
+               .Queue("reports")                     // Hangfire extension
+               .AutomaticRetry(3);                   // Hangfire extension
+    }
+}
+
+var planner = new ExecutionPlanner();
+planner.ApplyConfigurationsFromAssembly(typeof(ProductSyncConfiguration).Assembly); // or ApplyConfiguration(new ...)
+planner.Add<CategorySyncHandler>().Enabled(true);                                   // inline, same builder
+options.UsePlan(planner.Build());
+```
+
+Like EF's fluent API over data annotations, the builder changes **only what it calls**; every other item keeps its attribute, option or default. Configuring the same handler twice (two classes, or a class and `Add<T>()`) throws.
+
+| Item | Default | Global option | Attribute | Per-handler option | Builder (wins) |
+|---|---|---|---|---|---|
+| Schedule | — | — | `[Recurring]` / `[RecurringInterval]` | — | `Cron` / `Interval` |
+| Id | `IJobIdGenerator` | — | `Id = ...` | — | `Id` |
+| Time zone | UTC | `RecurringTimeZone` | `TimeZone = ...` | `GetPlanOf<T>().TimeZone` | `TimeZone` |
+| Display name | class name | — | `[DisplayName]` | — | `DisplayName` |
+| Enabled | on | `GlobalRecurringAutoRun` | — | `GetPlanOf<T>().Enabled` | `Enabled` |
+| Dependencies | none | — | `[DependsOn]` (merged) | — | `DependsOn` / `RemoveDependency` / `ClearDependencies` |
+| Run mode | triggered | — | `[DependentRun]` | — | `RunMode` |
+| Overlap | allowed | — | `[NoOverlap]` | — | `NoOverlap` / `AllowOverlap` |
+| Queue, retries | Hangfire's, `DisableRecurringRetries` | — | `[Queue]`, `[AutomaticRetry]` | — | `Queue`, `AutomaticRetry` |
+
+Loading only configuration classes? `UsePlanFromAssembly` builds the planner for you:
+
+```csharp
+options.UsePlanFromAssembly(typeof(ProductSyncConfiguration).Assembly,
+    t => t.Namespace.EndsWith(".Hangfire"),          // optional filter
+    MissingPrerequisite.Throw);                        // optional policy
+```
+
+**One plan per provider.** A configuration class doesn't say which provider runs it: each provider's options get their own plan, so filter the classes (by assembly or namespace) that belong to each one, and do the same with `Scan(assembly, predicate)`. A handler registered in two providers runs in both.
+
+**Two planners.** Each provider's options have an internal planner: the class's attributes plus `options.GetPlanOf<T>()`, which returns the same `HandlerBuilder<T>` and wins over the attributes. It decides the handlers that aren't in your plan, and forms the automatic plan when they have dependencies. When a handler **is** in your plan (`UsePlan`, `UsePlanFromAssembly`, configuration classes), your plan replaces its `GetPlanOf` values as a whole and `Configure` writes one trace warning; the class's attributes still apply item by item. `GetPlanOf<T>()` only configures: the handler must be registered with `Scan` or `Add`.
+
+```csharp
+options.Scan(typeof(DataSyncHandler).Assembly);
+options.GetPlanOf<DataSyncHandler>().Enabled(false).TimeZone("Europe/Lisbon");
+```
+
+`SetJobAutoRun<T>` and `SetJobTimeZone<T>` are obsolete shortcuts for `GetPlanOf<T>().Enabled(...)` and `.TimeZone(...)`.
 
 ## Hangfire Native Attributes
 
@@ -352,7 +467,6 @@ Hangfire attributes on handlers are propagated automatically:
 [Queue("critical")]
 [AutomaticRetry(Attempts = 3, DelaysInSeconds = new[] { 60, 300, 900 })]
 [DisableConcurrentExecution(300)]
-[Timeout("00:10:00")]
 public class ImportHandler : IHandler<ImportEvent> { ... }
 ```
 
@@ -502,7 +616,7 @@ provider.StartExecutionFlow();   // registers Hangfire filters and recurring job
 ```
 
 - Hangfire's filters and job activator are process-wide, so only **one full Hangfire setup** is active per process: a second full `Build()` replaces the previous one's filters (its dispatcher keeps publishing, but its hooks stop). Producer-only setups are unlimited. This limit is Hangfire's, not ExecutionFlow's.
-- Without DI, call `setup.ConfigureActivator()` so Hangfire activates handlers through the setup; `Build()` and `ConfigureActivator()` share the same activator, in either order.
+- Without DI, call `setup.ConfigureActivator()` so Hangfire activates handlers through the setup; `Build()` and `ConfigureActivator()` share the same activator, in either order. The built-in activator is an internal fallback (registered types are singletons, other concrete types are transient, a constructor cycle throws); prefer Microsoft DI.
 
 ## Configuration Reference
 

@@ -29,6 +29,7 @@ namespace ExecutionFlow.Abstractions
         {
             if (configure == null) throw new ArgumentNullException(nameof(configure));
             configure(Options);
+            Options.ResolvePlan();
             Options.Lock();
 
             EventHandlers = Options.EventHandlers;

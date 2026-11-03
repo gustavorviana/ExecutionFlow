@@ -4,10 +4,10 @@
 
 ## Specs
 
-- Capability: <!-- e.g. docs/specs/dispatching -->
-- Requirements: <!-- e.g. REQ-003, AC-003.2 -->
-- Tasks: <!-- e.g. TASK-005 -->
-- ADR: <!-- link, if any -->
+- Feature: <!-- e.g. specs/003-dispatching -->
+- Requirements: <!-- e.g. FR-003, AC-003.2 -->
+- Tasks: <!-- e.g. T005 -->
+- Amends: <!-- earlier features whose behavior changes, if any -->
 
 ## Checklist
 

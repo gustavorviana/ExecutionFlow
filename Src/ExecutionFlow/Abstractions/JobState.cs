@@ -17,6 +17,12 @@ namespace ExecutionFlow.Abstractions
         Cancelled,
 
         /// <summary>The job is scheduled to be enqueued later (a delayed publish, or a failed job waiting for an automatic retry).</summary>
-        Scheduled
+        Scheduled,
+
+        /// <summary>
+        /// A dependent recurring job was due but didn't run, because a prerequisite in the execution plan hadn't completed a
+        /// new cycle since its previous run. Listing and counting jobs in this state isn't supported yet: those calls return empty.
+        /// </summary>
+        PrerequisitesNotMet
     }
 }

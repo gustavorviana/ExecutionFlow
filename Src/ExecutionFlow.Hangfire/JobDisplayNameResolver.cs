@@ -3,6 +3,7 @@ using ExecutionFlow.Hangfire.Infrastructure;
 using Hangfire.Common;
 using System;
 using System.ComponentModel;
+using System.Linq;
 
 namespace ExecutionFlow.Hangfire
 {
@@ -47,6 +48,7 @@ namespace ExecutionFlow.Hangfire
                 return null;
 
             return GetConfiguredName(job)
+                ?? GetPlanTriggerName(job)
                 ?? GetHandlerDisplayName(job)
                 ?? GetCarriedTypeDisplayName(job)
                 ?? GetFallbackName(job);
@@ -71,7 +73,47 @@ namespace ExecutionFlow.Hangfire
         protected string GetHandlerDisplayName(Job job)
         {
             var handler = HangfireJobInfo.Create(job)?.GetHandler(Registry);
-            return handler?.HandlerType == null ? null : GetExplicitDisplayName(handler);
+            if (handler?.HandlerType == null)
+                return null;
+
+            return GetPlanDisplayName(handler.HandlerType) ?? GetExplicitDisplayName(handler);
+        }
+
+        /// <summary>
+        /// Names the internal job that fires a trigger postponed by a dependent's minimum interval after the dependent, e.g.
+        /// "Product Sync (postponed trigger)", instead of the dispatcher type. <c>null</c> for any other job.
+        /// </summary>
+        /// <param name="job">The Hangfire job.</param>
+        protected string GetPlanTriggerName(Job job)
+        {
+            if (job?.Type != typeof(HangfireJobDispatcher) || job.Method.Name != nameof(HangfireJobDispatcher.TriggerPlanDependent))
+                return null;
+
+            var dependentId = job.Args?.Count > 1 ? job.Args[1] as string : null;
+            if (string.IsNullOrEmpty(dependentId))
+                return null;
+
+            var registration = Registry.RecurringHandlers.Values
+                .FirstOrDefault(r => RecurringJobResolver.ResolveId(r, _idGenerator) == dependentId);
+
+            var dependentName = registration == null
+                ? dependentId
+                : GetPlanDisplayName(registration.HandlerType) ?? GetExplicitDisplayName(registration) ?? dependentId;
+
+            return dependentName + " (postponed trigger)";
+        }
+
+        /// <summary>
+        /// The execution plan step's display name (<see cref="HandlerBuilder.DisplayName(string)"/>), when the setup has a
+        /// plan with this handler and the name isn't just the class name.
+        /// </summary>
+        private string GetPlanDisplayName(Type handlerType)
+        {
+            var plan = (Registry as HangfireSetup)?.Options?.Plan;
+            if (plan == null || !plan.TryGet(handlerType, out var step))
+                return null;
+
+            return step.DisplayName != handlerType.Name ? step.DisplayName : null;
         }
 
         /// <summary>
