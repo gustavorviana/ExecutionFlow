@@ -25,14 +25,16 @@ namespace ExecutionFlow.Examples.Hosting
   <h2>Runs</h2>
   <table id="runs"><thead><tr><th>Handler</th><th>Started</th><th>Ended</th><th>Status</th></tr></thead><tbody></tbody></table>
   <script>
-    const cell = v => `<td>${v ?? ''}</td>`;
+    // Every value is rendered as text, never as HTML: a failed run's status carries the exception message.
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    const cell = v => `<td>${esc(v)}</td>`;
     async function refresh() {
       const plan = await (await fetch('/api/plan')).json();
       document.querySelector('#plan tbody').innerHTML = plan.map(s =>
-        `<tr data-handler="${s.handler}">${cell(s.handler)}${cell(s.enabled)}${cell(s.mode)}${cell(s.prerequisites.join(', '))}${cell(s.minInterval)}</tr>`).join('');
+        `<tr data-handler="${esc(s.handler)}">${cell(s.handler)}${cell(s.enabled)}${cell(s.mode)}${cell(s.prerequisites.join(', '))}${cell(s.minInterval)}</tr>`).join('');
       const runs = await (await fetch('/api/runs?take=50')).json();
       document.querySelector('#runs tbody').innerHTML = runs.map(r =>
-        `<tr data-handler="${r.handler}" class="${r.status.split(':')[0]}">${cell(r.handler)}${cell(r.startedAt)}${cell(r.endedAt)}${cell(r.status)}</tr>`).join('');
+        `<tr data-handler="${esc(r.handler)}" class="${esc(r.status.split(':')[0])}">${cell(r.handler)}${cell(r.startedAt)}${cell(r.endedAt)}${cell(r.status)}</tr>`).join('');
     }
     document.getElementById('run-once').onclick = async () => {
       const result = await (await fetch('/api/run-once', { method: 'POST' })).json();

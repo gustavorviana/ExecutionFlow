@@ -35,7 +35,16 @@ Console.WriteLine("===========================================");
 // ---------------------------------------------------------------------------------------------------------------------
 // Publishing and managing jobs. Try: POST /api/orders/42, GET /api/jobs/order-42, DELETE /api/jobs/order-42.
 // ---------------------------------------------------------------------------------------------------------------------
-var api = app.MapGroup("/api");
+// Like the dashboard (LocalRequestsOnlyAuthorizationFilter), these endpoints only answer local requests: they cancel,
+// retry and trigger jobs. Replace this filter with RequireAuthorization() when exposing them beyond localhost.
+var api = app.MapGroup("/api").AddEndpointFilter(async (context, next) =>
+{
+    var connection = context.HttpContext.Connection;
+    var isLocal = connection.RemoteIpAddress is null
+        || System.Net.IPAddress.IsLoopback(connection.RemoteIpAddress)
+        || connection.RemoteIpAddress.Equals(connection.LocalIpAddress);
+    return isLocal ? await next(context) : Results.StatusCode(StatusCodes.Status403Forbidden);
+});
 
 // Publish (deduplicated by custom ID: a second publish while order-42 is active returns 409) and schedule.
 api.MapPost("/orders/{id}", (string id, IEventDispatcher dispatcher) =>
