@@ -15,6 +15,7 @@ A lightweight abstraction layer over [Hangfire](https://www.hangfire.io/) for st
 | **ExecutionFlow.Hangfire.DependencyInjection** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.DependencyInjection.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.DependencyInjection) | ASP.NET Core DI extensions |
 | **ExecutionFlow.Hangfire.Console** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hangfire.Console.svg)](https://www.nuget.org/packages/ExecutionFlow.Hangfire.Console) | Console logging + progress bars (requires [Hangfire.Console](https://github.com/pieceofsummer/Hangfire.Console)) |
 | **ExecutionFlow.Extensions.Logging** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Extensions.Logging.svg)](https://www.nuget.org/packages/ExecutionFlow.Extensions.Logging) | Sends `context.Log` to the application's `ILogger` (Serilog, Application Insights...) |
+| **ExecutionFlow.Hosting** | [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.Hosting.svg)](https://www.nuget.org/packages/ExecutionFlow.Hosting) | Runs recurring handlers inside the .NET Generic Host without Hangfire, locally and isolated ([README](Src/ExecutionFlow.Hosting/README.md)) |
 
 ## Quick Start
 

@@ -13,12 +13,14 @@
     <Project Path="Examples/ExecutionFlow.Examples.Shared/ExecutionFlow.Examples.Shared.csproj" />
     <Project Path="Examples/ExecutionFlow.Examples.Configuration/ExecutionFlow.Examples.Configuration.csproj" />
     <Project Path="Examples/ExecutionFlow.Examples.Consumer/ExecutionFlow.Examples.Consumer.csproj" />
+    <Project Path="Examples/ExecutionFlow.Examples.Hosting/ExecutionFlow.Examples.Hosting.csproj" />
   </Folder>
   <Folder Name="/Src/">
     <Project Path="Src/ExecutionFlow.Extensions.Logging/ExecutionFlow.Extensions.Logging.csproj" />
     <Project Path="Src/ExecutionFlow.Hangfire.Console/ExecutionFlow.Hangfire.Console.csproj" />
     <Project Path="Src/ExecutionFlow.Hangfire/ExecutionFlow.Hangfire.csproj" />
     <Project Path="Src/ExecutionFlow/ExecutionFlow.csproj" />
+    <Project Path="Src/ExecutionFlow.Hosting/ExecutionFlow.Hosting.csproj" />
     <Project Path="Src/ExecutionFlow.Hangfire.DependencyInjection/ExecutionFlow.Hangfire.DependencyInjection.csproj" Id="2974a71b-abc4-43a4-bdc1-3bfbf98c42b2" />
   </Folder>
   <Folder Name="/Tests/">
@@ -26,5 +28,7 @@
     <Project Path="Tests/ExecutionFlow.Hangfire.Tests/ExecutionFlow.Hangfire.Tests.csproj" Id="10804094-9766-4db6-ae28-f7bc5528cc83" />
     <Project Path="Tests/ExecutionFlow.Extensions.Logging.Tests/ExecutionFlow.Extensions.Logging.Tests.csproj" />
     <Project Path="Tests/ExecutionFlow.Tests/ExecutionFlow.Tests.csproj" />
+    <Project Path="Tests/ExecutionFlow.Hosting.Tests/ExecutionFlow.Hosting.Tests.csproj" />
+    <Project Path="Tests/ExecutionFlow.Hosting.NetStandard.Tests/ExecutionFlow.Hosting.NetStandard.Tests.csproj" />
   </Folder>
 </Solution>

@@ -45,3 +45,4 @@ None of these can go into the core without breaking the dependency-free core (ol
 - **Rationale**: handlers come from `Scan`, which already uses reflection.
 - **Alternatives considered**: none recorded.
 - **Consequences**: the package isn't trimming-safe, the same as the core `Scan`.
+- **Superseded at implementation (2026-11-02)**: each scheduler is one `RecurringHandlerHost` instance registered as `IHostedService` through a factory, one per scheduled handler; no `MakeGenericType` is needed. Internal detail, no observable change.
