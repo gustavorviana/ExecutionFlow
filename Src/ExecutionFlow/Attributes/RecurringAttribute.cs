@@ -9,7 +9,12 @@ namespace ExecutionFlow.Attributes
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class RecurringAttribute : Attribute
     {
-        /// <summary>Gets the cron expression (e.g., "*/5 * * * *" for every 5 minutes).</summary>
+        /// <summary>
+        /// Gets the cron expression (e.g., "*/5 * * * *" for every 5 minutes). A 6-field cron has a leading seconds field
+        /// (e.g. "*/30 * * * * *" for every 30 seconds). Hangfire runs a recurring job at most once per scheduler polling
+        /// interval (<c>HangfireOptions.SchedulePollingInterval</c>, 15 seconds by default) and warns about a cron that can
+        /// run more often; the local host runs it to the second.
+        /// </summary>
         public string Cron { get; }
 
         /// <summary>

@@ -10,6 +10,7 @@ namespace ExecutionFlow.Hosting
     {
         internal const string IntervalFromEndKey = "Hosting:IntervalFromEnd";
         internal const string SkipWhenOverlappingKey = "Hosting:SkipWhenOverlapping";
+        internal const string LogSkippedOccurrencesKey = "Hosting:LogSkippedOccurrences";
 
         /// <summary>
         /// Counts the handler's interval from the end of its previous run (<c>true</c>) or on a fixed cadence from the host
@@ -37,6 +38,20 @@ namespace ExecutionFlow.Hosting
             where THandler : class, IHandler
         {
             return handler.HasSetting(SkipWhenOverlappingKey, skip);
+        }
+
+        /// <summary>
+        /// Logs the handler's skipped occurrences (<c>true</c>) or not (<c>false</c>). Wins over
+        /// <see cref="HostingOptions.LogSkippedOccurrences"/>.
+        /// </summary>
+        /// <typeparam name="THandler">The recurring handler.</typeparam>
+        /// <param name="handler">The handler's builder.</param>
+        /// <param name="log">Whether to log the skipped occurrences.</param>
+        /// <returns>The builder, for chaining.</returns>
+        public static HandlerBuilder<THandler> LogSkippedOccurrences<THandler>(this HandlerBuilder<THandler> handler, bool log = true)
+            where THandler : class, IHandler
+        {
+            return handler.HasSetting(LogSkippedOccurrencesKey, log);
         }
     }
 }

@@ -121,6 +121,158 @@ namespace ExecutionFlow.Hosting.Tests
             await Wait.Until(() => host.Probe.Started<EveryMinute>() == 1, "the other handler keeps running");
         }
 
+        // 015 AC-004.1
+        [Fact]
+        public async Task Execute_RunsIntervalOfSeconds_WhenIntervalElapses()
+        {
+            await using var host = new TestHost(o => o.Add(typeof(EveryFiveSeconds)));
+            await host.StartAsync();
+
+            await host.Advance(TimeSpan.FromSeconds(4));
+            Assert.Equal(0, host.Probe.Started<EveryFiveSeconds>());
+
+            await host.Advance(TimeSpan.FromSeconds(1));
+            await Wait.Until(() => host.Probe.Started<EveryFiveSeconds>() == 1, "the 5-second interval ran");
+
+            await host.Advance(TimeSpan.FromSeconds(5));
+            await Wait.Until(() => host.Probe.Started<EveryFiveSeconds>() == 2, "the next 5-second occurrence ran");
+        }
+
+        // 015 AC-004.2
+        [Fact]
+        public async Task Execute_CountsSecondsFromEnd_WhenConfigured()
+        {
+            await using var host = new TestHost(o =>
+            {
+                o.Add(typeof(EveryFiveSeconds));
+                o.IntervalFromEnd = true;
+            });
+            host.Probe.On<EveryFiveSeconds>(ct => Task.Delay(TimeSpan.FromSeconds(2), host.Time, ct));
+            await host.StartAsync();
+
+            // Runs at 12:00:05 and ends at 12:00:07, so the next run is at 12:00:12.
+            await host.Advance(TimeSpan.FromSeconds(7));
+            await Wait.Until(() => host.Probe.Ended<EveryFiveSeconds>() == 1, "the first run ended");
+
+            await host.Advance(TimeSpan.FromSeconds(4));
+            Assert.Equal(1, host.Probe.Started<EveryFiveSeconds>());
+
+            await host.Advance(TimeSpan.FromSeconds(1));
+            await Wait.Until(() => host.Probe.Started<EveryFiveSeconds>() == 2, "the next run is 5 s after the end");
+        }
+
+        // 015 AC-004.3
+        [Fact]
+        public async Task Start_DoesNotWarn_ForIntervalOfSeconds()
+        {
+            await using var host = new TestHost(o => o.Add(typeof(EveryFiveSeconds)));
+            await host.StartAsync();
+            await host.Advance(TimeSpan.FromSeconds(5));
+
+            Assert.Empty(host.Logs.At(LogLevel.Warning));
+        }
+
+        // 015 AC-004.4
+        [Fact]
+        public async Task Execute_OverlapsIntervalOfSeconds_ByDefault()
+        {
+            await using var host = new TestHost(o =>
+            {
+                o.Add(typeof(EverySecond));
+                o.MaxConcurrency = 8;
+            });
+            host.Probe.On<EverySecond>(ct => Task.Delay(TimeSpan.FromSeconds(3), host.Time, ct));
+            await host.StartAsync();
+
+            await host.Advance(TimeSpan.FromSeconds(3));
+            await Wait.Until(() => host.Probe.Started<EverySecond>() == 3, "a run started every second");
+            Assert.True(host.Probe.MaxRunning<EverySecond>() >= 3, "the runs overlapped");
+        }
+
+        // 015 AC-004.4
+        [Fact]
+        public async Task Execute_SkipsIntervalOfSeconds_WhenSkipWhenOverlapping()
+        {
+            await using var host = new TestHost(o =>
+            {
+                o.Add(typeof(NoOverlapSecond));
+                o.SkipWhenOverlapping = true;
+            });
+            host.Probe.On<NoOverlapSecond>(ct => Task.Delay(TimeSpan.FromSeconds(3), host.Time, ct));
+            await host.StartAsync();
+
+            // 12:00:01 runs until 12:00:04; 12:00:02 and 12:00:03 are skipped.
+            await host.Advance(TimeSpan.FromSeconds(3));
+            await Wait.Until(() => host.Logs.At(LogLevel.Information).Count(m => m.Contains("skipped") && m.Contains(typeof(NoOverlapSecond).FullName!)) == 2,
+                "the occurrences during the run were skipped");
+            Assert.Equal(1, host.Probe.Started<NoOverlapSecond>());
+            Assert.Equal(1, host.Probe.MaxRunning<NoOverlapSecond>());
+        }
+
+        // 015 SC-002
+        [Fact]
+        public async Task Execute_KeepsSecondCadence_WithoutDrift()
+        {
+            await using var host = new TestHost(o => o.Add(typeof(EverySecond)));
+            await host.StartAsync();
+
+            await host.Advance(TimeSpan.FromSeconds(100));
+            await Wait.Until(() => host.Probe.Started<EverySecond>() == 100, "one run per second for 100 seconds");
+
+            await host.Advance(TimeSpan.FromMilliseconds(999), TimeSpan.FromMilliseconds(999));
+            await TestHost.Settle();
+            Assert.Equal(100, host.Probe.Started<EverySecond>());
+
+            await host.Advance(TimeSpan.FromMilliseconds(1));
+            await Wait.Until(() => host.Probe.Started<EverySecond>() == 101, "the 101st run is on the second");
+        }
+
+        // 015 AC-001.1
+        [Fact]
+        public async Task Execute_RunsSixFieldCron_EverySeconds()
+        {
+            await using var host = new TestHost(o => o.Add(typeof(EveryThirtySecondsCron)));
+            await host.StartAsync();
+
+            await host.Advance(TimeSpan.FromSeconds(29));
+            Assert.Equal(0, host.Probe.Started<EveryThirtySecondsCron>());
+
+            await host.Advance(TimeSpan.FromSeconds(1));
+            await Wait.Until(() => host.Probe.Started<EveryThirtySecondsCron>() == 1, "the cron ran at :30");
+
+            await host.Advance(TimeSpan.FromSeconds(30));
+            await Wait.Until(() => host.Probe.Started<EveryThirtySecondsCron>() == 2, "the cron ran at :00");
+        }
+
+        // 015 AC-001.2
+        [Fact]
+        public async Task Execute_RunsSixFieldCron_FromPlan()
+        {
+            var plan = Plan(p => p.Add<Unscheduled>().Cron("*/10 * * * * *"));
+            await using var host = new TestHost(o => o.UsePlan(plan));
+            await host.StartAsync();
+
+            await host.Advance(TimeSpan.FromSeconds(9));
+            Assert.Equal(0, host.Probe.Started<Unscheduled>());
+
+            await host.Advance(TimeSpan.FromSeconds(21));
+            await Wait.Until(() => host.Probe.Started<Unscheduled>() == 3, "the plan's cron ran every 10 s");
+        }
+
+        // 015 AC-001.3
+        [Fact]
+        public async Task Execute_ReadsFiveFieldCron_AsMinutes()
+        {
+            await using var host = new TestHost(o => o.Add(typeof(EveryMinuteCron)));
+            await host.StartAsync();
+
+            await host.Advance(TimeSpan.FromSeconds(59));
+            Assert.Equal(0, host.Probe.Started<EveryMinuteCron>());
+
+            await host.Advance(TimeSpan.FromSeconds(1));
+            await Wait.Until(() => host.Probe.Started<EveryMinuteCron>() == 1, "the 5-field cron ran on the whole minute");
+        }
+
         // AC-003.6
         [Fact]
         public async Task Execute_KeepsFixedCadence_ForIntervalByDefault()

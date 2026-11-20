@@ -33,7 +33,16 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <summary>The cron to register on schedule: the attribute's cron, or the interval's exact cron or ticker.</summary>
         public static string ResolveCron(RecurringJobRegistryInfo registration)
         {
-            return registration.Interval.HasValue ? IntervalCron.ToCron(registration.Interval.Value) : registration.Cron;
+            return ResolveCron(registration, interval => interval);
+        }
+
+        /// <summary>
+        /// The cron to register on schedule, with the interval Hangfire actually runs
+        /// (<see cref="HangfireSetup.EffectiveIntervalOf"/>, specs/015-hosting-second-intervals FR-005).
+        /// </summary>
+        public static string ResolveCron(RecurringJobRegistryInfo registration, Func<TimeSpan, TimeSpan> effectiveInterval)
+        {
+            return registration.Interval.HasValue ? IntervalCron.ToCron(effectiveInterval(registration.Interval.Value)) : registration.Cron;
         }
 
         /// <summary>

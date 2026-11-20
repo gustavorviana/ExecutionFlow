@@ -175,9 +175,9 @@ namespace ExecutionFlow
                 throw new InvalidOperationException(
                     $"Recurring handler '{handlerType.FullName}' has an invalid interval '{value}'. Use the format [d.]hh:mm:ss, e.g. \"00:15:00\".");
 
-            if (interval < TimeSpan.FromMinutes(1))
+            if (interval < TimeSpan.FromSeconds(1))
                 throw new InvalidOperationException(
-                    $"Recurring handler '{handlerType.FullName}' has the interval '{value}', but the minimum is one minute.");
+                    $"Recurring handler '{handlerType.FullName}' has the interval '{value}', but the minimum is one second.");
 
             return interval;
         }

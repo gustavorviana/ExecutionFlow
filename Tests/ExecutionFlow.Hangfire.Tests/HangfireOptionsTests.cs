@@ -6,6 +6,25 @@ namespace ExecutionFlow.Hangfire.Tests;
 
 public class HangfireOptionsTests
 {
+    // 015 AC-005.7
+    [Fact]
+    public void SchedulePollingInterval_DefaultsToFifteenSeconds()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(15), new HangfireOptions().SchedulePollingInterval);
+    }
+
+    // 015 AC-005.7
+    [Theory]
+    [InlineData(0)]
+    [InlineData(999)]
+    [InlineData(-1000)]
+    public void SchedulePollingInterval_Throws_WhenBelowOneSecond(int milliseconds)
+    {
+        var options = new HangfireOptions();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.SchedulePollingInterval = TimeSpan.FromMilliseconds(milliseconds));
+    }
+
     [Fact]
     public void AutoRunRecurring_DefaultsToTrue()
     {
