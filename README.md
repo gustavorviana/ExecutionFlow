@@ -82,6 +82,35 @@ var result = dispatcher.Publish(new SendEmailEvent { To = "user@mail.com", Subje
 // result.Enqueued = true
 ```
 
+### Without Hangfire (local host)
+
+Recurring handlers can also run inside your app, with no Hangfire and no storage:
+
+```csharp
+[RecurringInterval("00:00:05")]               // every 5 seconds; intervals go down to one second
+public class PulseHandler : IHandler
+{
+    public Task HandleAsync(FlowContext context, CancellationToken ct)
+    {
+        context.Log.Info("pulse");
+        return Task.CompletedTask;
+    }
+}
+
+[Recurring("0 8 * * *")]                      // cron, as in Hangfire; 6 fields add seconds: "*/10 * * * * *"
+public class DailyReportHandler : IHandler
+{
+    public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+}
+
+builder.Services.AddExecutionFlowHosting(options =>
+{
+    options.Scan(typeof(PulseHandler).Assembly);
+});
+```
+
+The same handlers, schedules (cron or interval) and execution plans work in both providers. See the [ExecutionFlow.Hosting README](Src/ExecutionFlow.Hosting/README.md) for cadence, overlap and run-once mode.
+
 ## Handlers
 
 ### Event Handler (`IHandler<TEvent>`) - fire-and-forget
