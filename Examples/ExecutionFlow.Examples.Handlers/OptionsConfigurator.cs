@@ -11,6 +11,11 @@ namespace ExecutionFlow.Examples.Handlers
         {
             options.ConfigureConsole();
             options.RemoveOrphanRecurringJobs = true;
+
+            // Hangfire checks recurring jobs once per BackgroundJobServerOptions.SchedulePollingInterval (15 s by default).
+            // Keep this equal to the servers' value: schedules more frequent than it get a warning, and intervals with
+            // seconds are raised to it (see IntervalPulseHandler).
+            options.SchedulePollingInterval = TimeSpan.FromSeconds(15);
             options.SetJobIdGeneratorType<ExampleJobIdGenerator>();
             options.Scan(typeof(IHandlerMark).Assembly);
             options.GetPlanOf<AutoRunDisabledHandler>().Enabled(false);

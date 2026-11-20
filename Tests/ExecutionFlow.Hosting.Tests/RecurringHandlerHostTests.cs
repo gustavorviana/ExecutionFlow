@@ -227,6 +227,27 @@ namespace ExecutionFlow.Hosting.Tests
             await Wait.Until(() => host.Probe.Started<EverySecond>() == 101, "the 101st run is on the second");
         }
 
+        // 015 FR-003, research R-002: the local host waits the exact interval, fractions of a second included.
+        [Fact]
+        public async Task Execute_HonorsFractionalInterval_FromPlan()
+        {
+            var plan = Plan(p => p.Add<Unscheduled>().Interval(TimeSpan.FromMilliseconds(1500)));
+            await using var host = new TestHost(o => o.UsePlan(plan));
+            await host.StartAsync();
+
+            var step = TimeSpan.FromMilliseconds(100);
+            await host.Advance(TimeSpan.FromMilliseconds(1400), step);
+            Assert.Equal(0, host.Probe.Started<Unscheduled>());
+
+            await host.Advance(step, step);
+            await Wait.Until(() => host.Probe.Started<Unscheduled>() == 1, "the run started at 1.5 s");
+
+            await host.Advance(TimeSpan.FromMilliseconds(1400), step);
+            Assert.Equal(1, host.Probe.Started<Unscheduled>());
+            await host.Advance(step, step);
+            await Wait.Until(() => host.Probe.Started<Unscheduled>() == 2, "the next run started at 3.0 s");
+        }
+
         // 015 AC-001.1
         [Fact]
         public async Task Execute_RunsSixFieldCron_EverySeconds()

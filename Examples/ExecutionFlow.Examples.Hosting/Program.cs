@@ -15,7 +15,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<RunLog>();
 
 // The plan: FetchRates triggers RecalculatePrices (at least 20 s apart); PublishReport keeps its own schedule but only runs
-// after a new cycle of RecalculatePrices. Backup skips an occurrence while its previous run is still running.
+// after a new cycle of RecalculatePrices. Backup skips an occurrence while its previous run is still running, without
+// logging each skip.
 var planner = new ExecutionPlanner();
 planner.Add<FetchRatesHandler>();
 planner.Add<RecalculatePricesHandler>()
@@ -25,7 +26,8 @@ planner.Add<PublishReportHandler>()
     .DependsOn<RecalculatePricesHandler>()
     .RunMode(DependentRunMode.OwnSchedule);
 planner.Add<BackupHandler>()
-    .SkipWhenOverlapping();
+    .SkipWhenOverlapping()
+    .LogSkippedOccurrences(false);   // its skipped occurrences would log a line every 5 s
 var plan = planner.Build();
 
 builder.Services.AddExecutionFlowHosting(options =>
@@ -35,6 +37,7 @@ builder.Services.AddExecutionFlowHosting(options =>
     // Outside the plan: FlakyImport runs on its attribute's cron; Cleanup is registered but turned off.
     options.Add(typeof(FlakyImportHandler));
     options.Add(typeof(CleanupHandler));
+    options.Add(typeof(PulseHandler));   // every second
     options.GetPlanOf<CleanupHandler>().Enabled(false);
 
     options.MaxConcurrency = 4;

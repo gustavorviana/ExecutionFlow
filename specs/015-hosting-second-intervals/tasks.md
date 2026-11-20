@@ -86,3 +86,8 @@ No setup: existing packages and test projects (plan, Structure Decision).
 3. **Complete**: + US3 (T011–T013), then T014–T015. One minor version.
 
 Commits reference the feature and IDs, e.g. `feat(015): core interval minimum of 1 second (FR-003, T001)`.
+
+## Phase 7: Convergence
+
+- [X] T016 Add `RecurringHandlerHostTests.Execute_HonorsFractionalInterval_FromPlan` in `Tests/ExecutionFlow.Hosting.Tests/RecurringHandlerHostTests.cs`: a plan handler with `Interval(TimeSpan.FromMilliseconds(1500))` doesn't run at 1.4 s and runs at 1.5 s on the fake clock (advance in 100 ms steps) per plan: R-002 / FR-003 (partial)
+- [X] T017 Use the new APIs in an example under `Examples/` (a 6-field `[Recurring]` or second-level `[RecurringInterval]`, `HangfireOptions.SchedulePollingInterval`, and `HostingOptions.LogSkippedOccurrences` where the example uses the local host) and confirm `dotnet build` passes, completing T014's done criterion per T014 (partial)
