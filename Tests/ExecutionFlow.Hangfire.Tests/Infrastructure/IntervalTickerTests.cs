@@ -132,6 +132,54 @@ public class IntervalTickerTests
         Assert.False(_hashes.ContainsKey(IntervalTickerStore.LastRunKey));
     }
 
+    // --- 015-hosting-second-intervals AC-005.6: the second-level ticker ---
+
+    [Fact]
+    public void OnCreating_Cancels_WhenSecondIntervalNotElapsed()
+    {
+        var setup = CreateSetup(typeof(NinetySecondsHandler));
+        Create(setup, typeof(NinetySecondsHandler)); // 10:00:03, stored to the second
+
+        _now = Start.AddSeconds(89);
+        Assert.True(Create(setup, typeof(NinetySecondsHandler)).Canceled);
+    }
+
+    [Fact]
+    public void OnCreating_Creates_WhenSecondIntervalElapsed()
+    {
+        var setup = CreateSetup(typeof(NinetySecondsHandler));
+        Create(setup, typeof(NinetySecondsHandler));
+
+        _now = Start.AddSeconds(90);
+        Assert.False(Create(setup, typeof(NinetySecondsHandler)).Canceled);
+        Assert.Equal(Start.AddSeconds(90).Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _hashes[IntervalTickerStore.LastRunKey][typeof(NinetySecondsHandler).FullName!]);
+    }
+
+    [Fact]
+    public void Trigger_Runs_WhenSecondIntervalNotElapsed()
+    {
+        var setup = CreateSetup(typeof(NinetySecondsHandler));
+        Create(setup, typeof(NinetySecondsHandler));
+
+        _now = Start.AddSeconds(10);
+        Assert.False(Create(setup, typeof(NinetySecondsHandler), bySchedule: false).Canceled);
+
+        // The manual run counts as the last run.
+        _now = Start.AddSeconds(95);
+        Assert.True(Create(setup, typeof(NinetySecondsHandler)).Canceled);
+    }
+
+    [Fact]
+    public void OnCreating_Ignores_SecondIntervalWithExactCron()
+    {
+        var setup = CreateSetup(typeof(ThirtySecondsHandler));
+
+        Create(setup, typeof(ThirtySecondsHandler));
+        Assert.False(Create(setup, typeof(ThirtySecondsHandler)).Canceled);
+        Assert.False(_hashes.ContainsKey(IntervalTickerStore.LastRunKey));
+    }
+
     // Test types
 
     private abstract class TestHandler : IHandler
@@ -143,4 +191,6 @@ public class IntervalTickerTests
     [RecurringInterval("00:07:00")] private abstract class SevenMinutesHandler : TestHandler { }
     [RecurringInterval("00:15:00")] private abstract class FifteenMinutesHandler : TestHandler { }
     [Recurring("*/5 * * * *")] private abstract class CronHandler : TestHandler { }
+    [RecurringInterval("00:01:30")] private abstract class NinetySecondsHandler : TestHandler { }
+    [RecurringInterval("00:00:30")] private abstract class ThirtySecondsHandler : TestHandler { }
 }

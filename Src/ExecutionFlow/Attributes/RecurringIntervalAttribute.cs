@@ -11,10 +11,12 @@ namespace ExecutionFlow.Attributes
     /// <para>
     /// Prefer <see cref="RecurringAttribute"/> with a cron expression when running on Hangfire: an interval with an exact
     /// cron equivalent (one that divides an hour, or a day in whole hours) is registered as that cron anyway, aligned to the
-    /// UTC clock, and any other interval needs a per-minute check, with about one minute of precision.
+    /// UTC clock, and any other interval needs a per-minute check, with about one minute of precision. An interval with seconds
+    /// is bounded by Hangfire's scheduler polling interval (<c>HangfireOptions.SchedulePollingInterval</c>, 15 seconds by
+    /// default): a lower one is raised to it with a warning. The local host runs any interval to the second.
     /// </para>
     /// <para>
-    /// An interval means "every N of time", not a time of day, so it has no time zone. The minimum is one minute.
+    /// An interval means "every N of time", not a time of day, so it has no time zone. The minimum is one second.
     /// </para>
     /// </remarks>
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
@@ -35,7 +37,7 @@ namespace ExecutionFlow.Attributes
         /// <summary>
         /// Initializes a new instance of <see cref="RecurringIntervalAttribute"/>.
         /// </summary>
-        /// <param name="interval">The interval in the invariant <see cref="TimeSpan"/> format <c>[d.]hh:mm:ss</c>, at least one minute.</param>
+        /// <param name="interval">The interval in the invariant <see cref="TimeSpan"/> format <c>[d.]hh:mm:ss</c>, at least one second.</param>
         public RecurringIntervalAttribute(string interval)
         {
             Interval = interval;

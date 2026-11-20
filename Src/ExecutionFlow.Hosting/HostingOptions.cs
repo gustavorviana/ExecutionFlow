@@ -66,6 +66,16 @@ namespace ExecutionFlow.Hosting
         public bool SkipWhenOverlapping { get => _skipWhenOverlapping; set { ThrowIfLocked(); _skipWhenOverlapping = value; } }
         private bool _skipWhenOverlapping;
 
+        /// <summary>
+        /// Gets or sets whether a skipped occurrence is logged: a dependent on its own schedule whose prerequisites have no new
+        /// cycle, or an occurrence skipped by <see cref="SkipWhenOverlapping"/>. Default is <c>true</c>. Turning it off affects
+        /// only these lines; errors, warnings and the startup report are still logged. A handler overrides it with
+        /// <see cref="HandlerBuilderExtensions.LogSkippedOccurrences{THandler}"/>.
+        /// </summary>
+        /// <remarks>With intervals of seconds, these lines can repeat every second.</remarks>
+        public bool LogSkippedOccurrences { get => _logSkippedOccurrences; set { ThrowIfLocked(); _logSkippedOccurrences = value; } }
+        private bool _logSkippedOccurrences = true;
+
 #if NET8_0_OR_GREATER
         /// <summary>Gets or sets the time source for every clock read and delay. Default is <see cref="TimeProvider.System"/>.</summary>
         public TimeProvider TimeProvider
@@ -115,6 +125,12 @@ namespace ExecutionFlow.Hosting
         internal bool SkipWhenOverlappingOf(Type handlerType)
         {
             return SettingsOf(handlerType).TryGetValue(HandlerBuilderExtensions.SkipWhenOverlappingKey, out var value) ? (bool)value : SkipWhenOverlapping;
+        }
+
+        /// <summary>The handler's <see cref="HandlerBuilderExtensions.LogSkippedOccurrences{THandler}"/>, else <see cref="LogSkippedOccurrences"/>.</summary>
+        internal bool LogSkippedOccurrencesOf(Type handlerType)
+        {
+            return SettingsOf(handlerType).TryGetValue(HandlerBuilderExtensions.LogSkippedOccurrencesKey, out var value) ? (bool)value : LogSkippedOccurrences;
         }
     }
 }

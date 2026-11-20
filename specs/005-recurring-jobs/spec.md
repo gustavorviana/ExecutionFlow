@@ -237,6 +237,7 @@ From [010-execution-plan](../010-execution-plan/spec.md) User Stories 1 and 3: d
 ## Assumptions
 
 - Out of scope: seconds-level cron precision; per-server on/off (use queues, RN-005).
+  - *Amended by [015-hosting-second-intervals](../015-hosting-second-intervals/spec.md) FR-001, FR-002: 6-field crons (with seconds) are supported in both providers.*
 - Open questions: none.
 
 ### Breaking and behavior changes in 1.2.0

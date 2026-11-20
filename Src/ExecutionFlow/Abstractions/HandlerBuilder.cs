@@ -98,7 +98,7 @@ namespace ExecutionFlow.Abstractions
         public IReadOnlyDictionary<string, object> Settings => _settings;
 
         /// <summary>Schedules the handler with a cron expression, replacing any interval (from the builder or the class).</summary>
-        /// <param name="cron">The cron expression.</param>
+        /// <param name="cron">The cron expression: 5 fields, or 6 with a leading seconds field (e.g. "*/30 * * * * *").</param>
         public HandlerBuilder Cron(string cron)
         {
             if (string.IsNullOrWhiteSpace(cron)) throw new ArgumentException("The cron expression cannot be empty.", nameof(cron));
@@ -110,11 +110,15 @@ namespace ExecutionFlow.Abstractions
         }
 
         /// <summary>Schedules the handler every <paramref name="interval"/>, replacing any cron (from the builder or the class).</summary>
-        /// <param name="interval">The interval, at least one minute.</param>
+        /// <param name="interval">
+        /// The interval, at least one second. Fractions of a second are kept; each provider decides how to honor them
+        /// (the local host waits the exact value, Hangfire truncates to the second).
+        /// </param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="interval"/> is below one second.</exception>
         public HandlerBuilder Interval(TimeSpan interval)
         {
-            if (interval < TimeSpan.FromMinutes(1))
-                throw new ArgumentOutOfRangeException(nameof(interval), interval, "The interval must be at least one minute.");
+            if (interval < TimeSpan.FromSeconds(1))
+                throw new ArgumentOutOfRangeException(nameof(interval), interval, "The interval must be at least one second.");
 
             _owner.ThrowIfBuilt();
             HasExplicitValues = true;

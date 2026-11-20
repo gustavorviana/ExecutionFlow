@@ -280,6 +280,117 @@ public class RecurringRegistrationTests : IDisposable
         Assert.Empty(_removedRecurringIds);
     }
 
+    // --- 015-hosting-second-intervals FR-002: crons in Hangfire ---
+
+    private List<string> BuildAndCaptureTrace(Action<HangfireOptions> configure)
+    {
+        var listener = new CollectingTraceListener();
+        System.Diagnostics.Trace.Listeners.Add(listener);
+        try
+        {
+            Build(configure);
+        }
+        finally
+        {
+            System.Diagnostics.Trace.Listeners.Remove(listener);
+        }
+
+        lock (listener.Messages)
+            return listener.Messages.ToList();
+    }
+
+    private static bool WarnsAbout(IEnumerable<string> messages, Type handlerType) =>
+        messages.Any(m => m.Contains(handlerType.FullName!) && m.Contains("SchedulePollingInterval"));
+
+    // AC-002.1
+    [Fact]
+    public void Build_RegistersSixFieldCron_Unchanged()
+    {
+        Build(o => o.Add(typeof(EveryThirtySecondsHandler)));
+
+        Assert.Equal("*/30 * * * * *", RecurringHash(typeof(EveryThirtySecondsHandler).FullName!)["Cron"]);
+    }
+
+    // AC-002.2
+    [Fact]
+    public void Configure_Warns_WhenSixFieldCronIsBelowPollingMinimum()
+    {
+        var messages = BuildAndCaptureTrace(o => o.Add(typeof(EveryFiveSecondsHandler)));
+
+        Assert.Single(messages, m => m.Contains(typeof(EveryFiveSecondsHandler).FullName!) && m.Contains("*/5 * * * * *") && m.Contains("00:00:15"));
+        Assert.Equal("*/5 * * * * *", RecurringHash(typeof(EveryFiveSecondsHandler).FullName!)["Cron"]);
+    }
+
+    // AC-002.3
+    [Fact]
+    public void Configure_DoesNotWarn_WhenCronIsAtOrAbovePollingMinimum()
+    {
+        var messages = BuildAndCaptureTrace(o =>
+        {
+            o.Add(typeof(EveryThirtySecondsHandler));
+            o.Add(typeof(DailyHandler));
+        });
+
+        Assert.False(WarnsAbout(messages, typeof(EveryThirtySecondsHandler)));
+        Assert.False(WarnsAbout(messages, typeof(DailyHandler)));
+    }
+
+    // AC-002.4
+    [Fact]
+    public void Configure_Warns_WhenIrregularCronHasGapBelowPollingMinimum()
+    {
+        var messages = BuildAndCaptureTrace(o => o.Add(typeof(IrregularCronHandler)));
+
+        Assert.True(WarnsAbout(messages, typeof(IrregularCronHandler)));
+    }
+
+    // AC-002.5
+    [Fact]
+    public void Configure_Warns_WhenFiveFieldCronIsBelowPollingMinimum()
+    {
+        var messages = BuildAndCaptureTrace(o =>
+        {
+            o.SchedulePollingInterval = TimeSpan.FromSeconds(90);
+            o.Add(typeof(EveryMinuteCronHandler));
+        });
+
+        Assert.True(WarnsAbout(messages, typeof(EveryMinuteCronHandler)));
+        Assert.Equal("* * * * *", RecurringHash(typeof(EveryMinuteCronHandler).FullName!)["Cron"]);
+    }
+
+    // AC-002.6
+    [Fact]
+    public void Configure_WarnsOnlyForRegisteredSchedules()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<EveryThirtySecondsHandler>();
+        planner.Add<EveryFiveSecondsHandler>().Enabled(false);
+        planner.Add<OwnScheduleFiveSecondsHandler>().DependsOn<EveryThirtySecondsHandler>().RunMode(DependentRunMode.OwnSchedule);
+        planner.Add<TriggeredFiveSecondsHandler>().DependsOn<EveryThirtySecondsHandler>();
+        var plan = planner.Build();
+
+        var messages = BuildAndCaptureTrace(o => o.UsePlan(plan));
+
+        Assert.True(WarnsAbout(messages, typeof(EveryFiveSecondsHandler)));
+        Assert.True(WarnsAbout(messages, typeof(OwnScheduleFiveSecondsHandler)));
+        Assert.False(WarnsAbout(messages, typeof(TriggeredFiveSecondsHandler)));
+    }
+
+    private sealed class CollectingTraceListener : System.Diagnostics.TraceListener
+    {
+        public List<string> Messages { get; } = new();
+
+        public override void Write(string? message) => Add(message);
+
+        public override void WriteLine(string? message) => Add(message);
+
+        private void Add(string? message)
+        {
+            lock (Messages)
+                Messages.Add(message ?? string.Empty);
+        }
+    }
+
     public static void NativeRecurringJob() { }
 
     // Test types
@@ -304,6 +415,42 @@ public class RecurringRegistrationTests : IDisposable
 
     [Recurring("0 8 * * *", TimeZone = "America/New_York")]
     public class NewYorkHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Recurring("*/30 * * * * *")]
+    public class EveryThirtySecondsHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Recurring("*/5 * * * * *")]
+    public class EveryFiveSecondsHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Recurring("0,5 * * * * *")]
+    public class IrregularCronHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Recurring("* * * * *")]
+    public class EveryMinuteCronHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Recurring("*/5 * * * * *")]
+    public class OwnScheduleFiveSecondsHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    [Recurring("*/5 * * * * *")]
+    public class TriggeredFiveSecondsHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
     }

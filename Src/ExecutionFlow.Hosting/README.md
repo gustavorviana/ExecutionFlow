@@ -22,12 +22,15 @@ The local host runs **locally and isolated**. It coordinates nothing outside its
 ## Schedules
 
 - A cron is evaluated in the handler's time zone: the plan's or `GetPlanOf<T>().TimeZone(...)`, then `[Recurring(TimeZone = ...)]`, then `HostingOptions.RecurringTimeZone`, then UTC. A cron with 6 fields includes seconds.
+- Intervals run from **one second** (`[RecurringInterval("00:00:01")]`), and a cron can have a leading seconds field (`[Recurring("*/10 * * * * *")]`); both run to the second.
 - An interval counts on a fixed cadence **from the host start**, unlike Hangfire's clock-aligned exact crons. `HostingOptions.IntervalFromEnd` (or `handler.IntervalFromEnd()` in the plan or `GetPlanOf<T>()`) counts from the end of the previous run instead.
 - The first run is at the first occurrence after the host starts, never at startup.
 
 ## Overlap
 
-Runs of the same handler may overlap, as in Hangfire. `[NoOverlap(seconds)]` or `NoOverlap(...)` in the plan turns it off: a new run waits for the running one up to the timeout, then fails with an error log. `HostingOptions.SkipWhenOverlapping` (or `handler.SkipWhenOverlapping()`) skips the occurrence instead. Dependents in the plan never overlap themselves.
+Runs of the same handler may overlap, as in Hangfire. `[NoOverlap(seconds)]` or `NoOverlap(...)` in the plan turns it off: a new run waits for the running one up to the timeout, then fails with an error log. `HostingOptions.SkipWhenOverlapping` (or `handler.SkipWhenOverlapping()`) skips the occurrence instead. Dependents in the plan never overlap themselves. With short intervals (seconds), a run that takes longer than the interval overlaps the next ones by default: consider `NoOverlap`, `SkipWhenOverlapping` or `IntervalFromEnd`.
+
+Each skipped occurrence (an overlap skip, or a dependent on its own schedule without a new cycle of its prerequisites) is logged at `Information`. With intervals of seconds that can be one line per second: `HostingOptions.LogSkippedOccurrences = false` (or `handler.LogSkippedOccurrences(false)` in the plan or `GetPlanOf<T>()`) turns these lines off. Errors, warnings and the startup report are still logged.
 
 ## Execution plan
 

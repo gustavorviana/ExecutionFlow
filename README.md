@@ -4,7 +4,12 @@
 [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.svg)](https://www.nuget.org/packages/ExecutionFlow)
 [![License](https://img.shields.io/github/license/gustavorviana/ExecutionFlow)](https://github.com/gustavorviana/ExecutionFlow/blob/main/LICENSE)
 
-A lightweight abstraction layer over [Hangfire](https://www.hangfire.io/) for structured background job execution with handler-based architecture, lifecycle hooks, and built-in logging.
+A lightweight .NET framework for background jobs: handlers, recurring schedules (cron or intervals down to one second), execution plans with dependencies between jobs, overlap control, lifecycle hooks, and built-in logging.
+
+You write handlers against a dependency-free core, and choose where they run:
+
+- **[Hangfire](https://www.hangfire.io/)** (`ExecutionFlow.Hangfire`): persistent queues, retries, distributed workers and the dashboard.
+- **The .NET Generic Host** (`ExecutionFlow.Hosting`): recurring handlers inside your app, without Hangfire or storage.
 
 ## Packages
 
@@ -76,6 +81,35 @@ var result = dispatcher.Publish(new SendEmailEvent { To = "user@mail.com", Subje
 // result.JobId   = Hangfire job ID (or custom ID if event implements ICustomIdEvent)
 // result.Enqueued = true
 ```
+
+### Without Hangfire (local host)
+
+Recurring handlers can also run inside your app, with no Hangfire and no storage:
+
+```csharp
+[RecurringInterval("00:00:05")]               // every 5 seconds; intervals go down to one second
+public class PulseHandler : IHandler
+{
+    public Task HandleAsync(FlowContext context, CancellationToken ct)
+    {
+        context.Log.Info("pulse");
+        return Task.CompletedTask;
+    }
+}
+
+[Recurring("0 8 * * *")]                      // cron, as in Hangfire; 6 fields add seconds: "*/10 * * * * *"
+public class DailyReportHandler : IHandler
+{
+    public Task HandleAsync(FlowContext context, CancellationToken ct) => Task.CompletedTask;
+}
+
+builder.Services.AddExecutionFlowHosting(options =>
+{
+    options.Scan(typeof(PulseHandler).Assembly);
+});
+```
+
+The same handlers, schedules (cron or interval) and execution plans work in both providers. See the [ExecutionFlow.Hosting README](Src/ExecutionFlow.Hosting/README.md) for cadence, overlap and run-once mode.
 
 ## Handlers
 
@@ -354,9 +388,33 @@ trigger.Trigger("my-job-id");
 [RecurringInterval("01:30:00", Id = "price-sync")] // every 90 minutes, with a stable ID
 ```
 
-- The format is `[d.]hh:mm:ss` (e.g. `"10:00:00"`, `"1.00:00:00"`); the minimum is one minute. An interval has no time zone: `RecurringTimeZone` doesn't apply to it, and a per-handler time zone (`GetPlanOf<T>().TimeZone(...)`) for it is ignored with a trace warning.
+- The format is `[d.]hh:mm:ss` (e.g. `"00:00:30"`, `"10:00:00"`, `"1.00:00:00"`); the minimum is one second (`HandlerBuilder.Interval(TimeSpan)` also accepts fractions of a second). An interval has no time zone: `RecurringTimeZone` doesn't apply to it, and a per-handler time zone (`GetPlanOf<T>().TimeZone(...)`) for it is ignored with a trace warning.
 - An interval with an exact cron equivalent (it divides an hour, or a day in whole hours) is registered as that cron in UTC, so it's aligned to the clock: every 15 minutes runs at :00, :15, :30, :45.
 - Any other interval (7 min, 90 min, 5 h) runs on a per-minute recurring job that skips each minute until the interval has passed since the last run, with about one minute of precision. Skipped minutes create no job, so nothing shows in the dashboard. A manual `Trigger` always runs and counts as the last run.
+
+#### Schedules below one minute
+
+A cron can have a leading seconds field (`sec min hour day month weekday`), and an interval can have seconds:
+
+```csharp
+[Recurring("*/30 * * * * *")]     // every 30 seconds
+[RecurringInterval("00:00:30")]   // the same, as an interval
+```
+
+Hangfire checks recurring jobs once per **scheduler polling interval** (`BackgroundJobServerOptions.SchedulePollingInterval`, 15 seconds by default), so it can't run a recurring job more often than that, and there's no exact-second guarantee. ExecutionFlow can't see the server's options: set `HangfireOptions.SchedulePollingInterval` to the same value (default 15 s).
+
+- An interval with seconds below the polling interval is **raised** to it, with a trace warning when Hangfire is built. `"00:00:05"` runs as `*/15 * * * * *`.
+- An interval with seconds that divides a minute (15, 20, 30 s) is registered as a 6-field cron; any other (45 s, `"00:01:30"`) runs on a per-second recurring job that skips until the interval has passed, like the per-minute one. Fractions of a second are truncated.
+- An interval in whole minutes is registered exactly as above.
+- A cron that can run more often than the polling interval (e.g. `*/5 * * * * *`) is registered unchanged, with a trace warning.
+
+```csharp
+builder.Services.AddHangfireServer(o => o.SchedulePollingInterval = TimeSpan.FromSeconds(5));
+// ...
+options.SchedulePollingInterval = TimeSpan.FromSeconds(5);   // keep it equal to the server's value
+```
+
+The local host (`ExecutionFlow.Hosting`) runs intervals from one second and 6-field crons to the second, without these limits.
 
 ### Overlapping runs
 

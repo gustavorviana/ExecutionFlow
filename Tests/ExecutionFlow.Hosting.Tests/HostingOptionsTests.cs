@@ -110,5 +110,29 @@ namespace ExecutionFlow.Hosting.Tests
             Assert.True(planOptions.IntervalFromEndOf(typeof(EveryMinute)));
             Assert.True(planOptions.SkipWhenOverlappingOf(typeof(EveryMinute)));
         }
+
+        // 015 AC-007.3
+        [Fact]
+        public void PerHandlerLogSkippedOccurrences_WinsOverGlobal()
+        {
+            var options = Configure(o =>
+            {
+                o.Add(typeof(EveryMinute));
+                o.Add(typeof(EveryMinuteB));
+                o.LogSkippedOccurrences = false;
+                o.GetPlanOf<EveryMinute>().LogSkippedOccurrences(true);
+            }).Options;
+            Assert.True(options.LogSkippedOccurrencesOf(typeof(EveryMinute)));
+            Assert.False(options.LogSkippedOccurrencesOf(typeof(EveryMinuteB)));
+
+            // In the plan, the reverse: the step turns it off, the global default keeps it on.
+            var planner = new ExecutionPlanner();
+            planner.Add<EveryMinute>().LogSkippedOccurrences(false);
+            planner.Add<EveryMinuteB>();
+            var plan = planner.Build();
+            var planOptions = Configure(o => o.UsePlan(plan)).Options;
+            Assert.False(planOptions.LogSkippedOccurrencesOf(typeof(EveryMinute)));
+            Assert.True(planOptions.LogSkippedOccurrencesOf(typeof(EveryMinuteB)));
+        }
     }
 }

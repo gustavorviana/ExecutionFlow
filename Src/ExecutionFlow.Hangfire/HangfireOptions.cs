@@ -88,6 +88,27 @@ namespace ExecutionFlow.Hangfire
         public bool CreateOnDeduplicationLockTimeout { get => _createOnDeduplicationLockTimeout; set { ThrowIfLocked(); _createOnDeduplicationLockTimeout = value; } }
         private bool _createOnDeduplicationLockTimeout = false;
 
+        /// <summary>
+        /// Gets or sets the scheduler polling interval of the app's Hangfire servers
+        /// (<c>BackgroundJobServerOptions.SchedulePollingInterval</c>, set in <c>AddHangfireServer</c>). Keep it equal to the
+        /// servers' value: ExecutionFlow doesn't read or change the servers' options. Hangfire checks recurring jobs once per
+        /// polling cycle, so schedules more frequent than this get a warning when Hangfire is built, and intervals with a seconds
+        /// part are raised to it. Default is 15 seconds, Hangfire's default.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">The value is below one second.</exception>
+        public TimeSpan SchedulePollingInterval
+        {
+            get => _schedulePollingInterval;
+            set
+            {
+                ThrowIfLocked();
+                if (value < TimeSpan.FromSeconds(1))
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "SchedulePollingInterval must be at least one second.");
+                _schedulePollingInterval = value;
+            }
+        }
+        private TimeSpan _schedulePollingInterval = TimeSpan.FromSeconds(15);
+
         /// <summary>Gets the list of registered state handler types.</summary>
         public IReadOnlyList<Type> StateHandlerTypes => _stateHandlerTypes;
 

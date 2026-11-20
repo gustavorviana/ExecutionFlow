@@ -3,7 +3,7 @@ using ExecutionFlow.Attributes;
 
 namespace ExecutionFlow.Tests.Attributes;
 
-/// <summary>012-interval-and-overlap FR-001: interval schedules declared with <see cref="RecurringIntervalAttribute"/>.</summary>
+/// <summary>012-interval-and-overlap FR-001 and 015-hosting-second-intervals FR-003: interval schedules declared with <see cref="RecurringIntervalAttribute"/>.</summary>
 public class IntervalScheduleTests
 {
     private class TestOptions : ExecutionFlowOptions { }
@@ -63,10 +63,21 @@ public class IntervalScheduleTests
     }
 
     [Theory]
-    [InlineData(typeof(ThirtySecondsHandler))]
+    [InlineData(typeof(OneSecondHandler), 1)]
+    [InlineData(typeof(ThirtySecondsHandler), 30)]
+    public void Configure_Accepts_IntervalOfOneSecond(Type handlerType, int seconds)
+    {
+        var options = new TestOptions();
+
+        options.Add(handlerType);
+
+        Assert.Equal(TimeSpan.FromSeconds(seconds), options.RecurringHandlers[handlerType].Interval);
+    }
+
+    [Theory]
     [InlineData(typeof(NegativeHandler))]
     [InlineData(typeof(ZeroHandler))]
-    public void Configure_Throws_WhenIntervalBelowOneMinute(Type handlerType)
+    public void Configure_Throws_WhenIntervalBelowOneSecond(Type handlerType)
     {
         var options = new TestOptions();
 
@@ -101,7 +112,8 @@ public class IntervalScheduleTests
     [RecurringInterval("00:15:00", Id = "price-sync")] private class IdHandler : TestHandler { }
     [Recurring("*/5 * * * *")] private class CronHandler : TestHandler { }
     [Recurring("*/5 * * * *"), RecurringInterval("00:15:00")] private abstract class BothHandler : TestHandler { }
-    [RecurringInterval("00:00:30")] private abstract class ThirtySecondsHandler : TestHandler { }
+    [RecurringInterval("00:00:01")] private class OneSecondHandler : TestHandler { }
+    [RecurringInterval("00:00:30")] private class ThirtySecondsHandler : TestHandler { }
     [RecurringInterval("-00:15:00")] private abstract class NegativeHandler : TestHandler { }
     [RecurringInterval("00:00:00")] private abstract class ZeroHandler : TestHandler { }
     [RecurringInterval("every 5 minutes")] private abstract class InvalidHandler : TestHandler { }

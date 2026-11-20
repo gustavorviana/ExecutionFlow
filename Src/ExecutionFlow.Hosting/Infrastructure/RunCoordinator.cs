@@ -59,7 +59,8 @@ namespace ExecutionFlow.Hosting.Infrastructure
 
             if (!_gate.TryBegin(handlerType, out var reason))
             {
-                _logger.LogInformation("ExecutionFlow: skipped '{Handler}': {Reason}.", handlerType.FullName, reason);
+                if (_setup.Options.LogSkippedOccurrencesOf(handlerType))
+                    _logger.LogInformation("ExecutionFlow: skipped '{Handler}': {Reason}.", handlerType.FullName, reason);
                 return;
             }
 
@@ -126,7 +127,8 @@ namespace ExecutionFlow.Hosting.Infrastructure
                     switch (await _overlapGuard.EnterAsync(handlerType, overlapTimeout.Value, skip, Stopping).ConfigureAwait(false))
                     {
                         case OverlapGuard.Result.Skipped:
-                            _logger.LogInformation("ExecutionFlow: skipped '{Handler}': its previous run is still running.", handlerType.FullName);
+                            if (_setup.Options.LogSkippedOccurrencesOf(handlerType))
+                                _logger.LogInformation("ExecutionFlow: skipped '{Handler}': its previous run is still running.", handlerType.FullName);
                             return false;
                         case OverlapGuard.Result.TimedOut:
                             _logger.LogError("ExecutionFlow: '{Handler}' failed: it waited more than {Timeout} for its previous run to end.",

@@ -234,7 +234,7 @@ namespace ExecutionFlow.Hangfire
                     GlobalJobFilters.Filters.Add(_gateFilter, PrerequisiteGateFilter.FilterOrder);
                 }
 
-                if (RecurringHandlers.Values.Any(r => r.Interval.HasValue && !IntervalCron.TryGetExactCron(r.Interval.Value, out _)))
+                if (RecurringHandlers.Values.Any(r => r.Interval.HasValue && !IntervalCron.TryGetExactCron(EffectiveIntervalOf(r.Interval.Value), out _)))
                 {
                     _tickerFilter = new IntervalTickerFilter(this);
                     GlobalJobFilters.Filters.Add(_tickerFilter);
@@ -273,6 +273,67 @@ namespace ExecutionFlow.Hangfire
         /// Whether the handler is a dependent in the execution plan that its prerequisites trigger: it has prerequisites and
         /// doesn't run on its own schedule.
         /// </summary>
+        /// <summary>
+        /// The interval Hangfire runs (specs/015-hosting-second-intervals FR-005): truncated to whole seconds; a whole number
+        /// of minutes stays as declared (the minute path of 012); an interval with a seconds part is raised to
+        /// <see cref="HangfireOptions.SchedulePollingInterval"/>.
+        /// </summary>
+        internal TimeSpan EffectiveIntervalOf(TimeSpan declared)
+        {
+            var interval = TruncateToSeconds(declared);
+            if (IntervalCron.IsWholeMinutes(interval))
+                return interval;
+
+            var minimum = Options.SchedulePollingInterval;
+            return interval < minimum ? minimum : interval;
+        }
+
+        /// <summary>
+        /// Whether the handler's own schedule is registered with Hangfire: every recurring handler, including one that doesn't
+        /// auto-run (its schedule can be turned back on) and a dependent on its own schedule, but not a dependent triggered by
+        /// the plan, which has none (specs/015-hosting-second-intervals FR-002).
+        /// </summary>
+        internal bool HasRegisteredSchedule(Type handlerType)
+        {
+            return !IsTriggeredByPlan(handlerType);
+        }
+
+        private static TimeSpan TruncateToSeconds(TimeSpan value)
+        {
+            return TimeSpan.FromTicks(value.Ticks - value.Ticks % TimeSpan.TicksPerSecond);
+        }
+
+        // One warning per handler whose schedule is more frequent than Hangfire checks recurring jobs (015 FR-002, FR-005).
+        // Emitted when recurring jobs are registered, so producer-only mode (BuildDispatcherOnly) never warns.
+        private void WarnIfBelowPollingInterval(RecurringJobRegistryInfo registration)
+        {
+            var minimum = Options.SchedulePollingInterval;
+
+            if (registration.Interval.HasValue)
+            {
+                var declared = registration.Interval.Value;
+                var truncated = TruncateToSeconds(declared);
+                if (truncated >= minimum)
+                    return;
+
+                if (IntervalCron.IsWholeMinutes(truncated))
+                    Trace.TraceWarning(
+                        "ExecutionFlow: '{0}' runs every {1}, but Hangfire checks recurring jobs every {2} (SchedulePollingInterval), so it doesn't run more often than that.",
+                        registration.HandlerType.FullName, declared, minimum);
+                else
+                    Trace.TraceWarning(
+                        "ExecutionFlow: '{0}' has the interval {1}, but Hangfire doesn't support less than {2} (SchedulePollingInterval), so {2} is used.",
+                        registration.HandlerType.FullName, declared, minimum);
+                return;
+            }
+
+            var gap = CronGap.MinimumGap(registration.Cron);
+            if (gap.HasValue && gap.Value < minimum)
+                Trace.TraceWarning(
+                    "ExecutionFlow: the cron '{0}' of '{1}' can run every {2}, but Hangfire checks recurring jobs every {3} (SchedulePollingInterval), so it doesn't run more often than that.",
+                    registration.Cron, registration.HandlerType.FullName, gap.Value, minimum);
+        }
+
         internal bool IsTriggeredByPlan(Type handlerType)
         {
             return Options.Plan != null && Options.Plan.TryGet(handlerType, out var step)
@@ -359,10 +420,13 @@ namespace ExecutionFlow.Hangfire
                         $"Recurring handlers '{otherHandler.FullName}' and '{registration.HandlerType.FullName}' resolve to the same job ID '{jobId}'.");
                 registeredIds.Add(jobId, registration.HandlerType);
 
+                if (HasRegisteredSchedule(registration.HandlerType))
+                    WarnIfBelowPollingInterval(registration);
+
                 // A handler that doesn't auto-run never fires on its own; it still runs through Trigger.
                 // A dependent triggered by its prerequisites never fires on schedule.
                 var cron = RecurringJobResolver.IsAutoRun(registration.HandlerType, Options) && !IsTriggeredByPlan(registration.HandlerType)
-                    ? RecurringJobResolver.ResolveCron(registration)
+                    ? RecurringJobResolver.ResolveCron(registration, EffectiveIntervalOf)
                     : Cron.Never();
 
                 recurringJobManager.AddOrUpdate<HangfireJobDispatcher>(

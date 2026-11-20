@@ -12,7 +12,8 @@ namespace ExecutionFlow.Hangfire.Infrastructure
     /// <remarks>
     /// Hash <c>executionflow:interval:lastrun</c> has one field per recurring job ID, with the start of the minute the last run
     /// started in (UTC ticks). Truncating to the minute keeps a 7-minute interval at 7 minutes even though the scheduler
-    /// fires a few seconds into each minute.
+    /// fires a few seconds into each minute. An interval with a seconds part truncates
+    /// to the second instead, in the same format, so a handler that changes path reads a compatible value.
     /// </remarks>
     internal static class IntervalTickerStore
     {
@@ -26,9 +27,15 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// (a manual trigger) always starts; a scheduled one starts once <paramref name="interval"/> has elapsed since the
         /// last run.
         /// </summary>
-        public static bool TryStartRun(IStorageConnection connection, string recurringJobId, TimeSpan interval, DateTime utcNow, bool force)
+        /// <param name="resolution">
+        /// What the start is truncated to: one minute for whole-minute intervals (as before), one second for an interval with
+        /// a seconds part (specs/015-hosting-second-intervals FR-005). Default is one minute.
+        /// </param>
+        public static bool TryStartRun(IStorageConnection connection, string recurringJobId, TimeSpan interval, DateTime utcNow, bool force,
+            TimeSpan? resolution = null)
         {
-            var minute = new DateTime(utcNow.Ticks - utcNow.Ticks % TimeSpan.TicksPerMinute, DateTimeKind.Utc);
+            var step = (resolution ?? TimeSpan.FromMinutes(1)).Ticks;
+            var minute = new DateTime(utcNow.Ticks - utcNow.Ticks % step, DateTimeKind.Utc);
 
             using (connection.AcquireDistributedLock(LockResource, LockTimeout))
             {
