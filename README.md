@@ -4,7 +4,12 @@
 [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.svg)](https://www.nuget.org/packages/ExecutionFlow)
 [![License](https://img.shields.io/github/license/gustavorviana/ExecutionFlow)](https://github.com/gustavorviana/ExecutionFlow/blob/main/LICENSE)
 
-A lightweight abstraction layer over [Hangfire](https://www.hangfire.io/) for structured background job execution with handler-based architecture, lifecycle hooks, and built-in logging.
+A lightweight .NET framework for background jobs: handlers, recurring schedules (cron or intervals down to one second), execution plans with dependencies between jobs, overlap control, lifecycle hooks, and built-in logging.
+
+You write handlers against a dependency-free core, and choose where they run:
+
+- **[Hangfire](https://www.hangfire.io/)** (`ExecutionFlow.Hangfire`): persistent queues, retries, distributed workers and the dashboard.
+- **The .NET Generic Host** (`ExecutionFlow.Hosting`): recurring handlers inside your app, without Hangfire or storage.
 
 ## Packages
 
