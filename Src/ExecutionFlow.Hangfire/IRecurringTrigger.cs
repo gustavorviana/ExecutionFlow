@@ -17,6 +17,8 @@ namespace ExecutionFlow.Hangfire
         /// Triggers a recurring job by its job identifier.
         /// </summary>
         /// <param name="jobId">The recurring job ID.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format (letters, digits, spaces and <c>_ - . + ` [ ] , =</c>).</exception>
         void Trigger(string jobId);
     }
 }

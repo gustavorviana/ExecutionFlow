@@ -21,8 +21,25 @@ namespace ExecutionFlow.Hangfire.Console
             { HandlerLogType.Success, ConsoleTextColor.Green }
         };
 
-        /// <summary>Gets or sets an optional custom formatter for log messages. When <c>null</c>, the default format is used.</summary>
+        /// <summary>
+        /// Gets or sets an optional custom formatter for log messages. When <c>null</c>, the default format is used:
+        /// <c>[LEVEL] message</c>, with placeholders filled like <c>ILogger</c> templates (each <c>{name}</c> takes the
+        /// argument in the same position).
+        /// </summary>
         public Func<HandlerLogType, string, object[], string> Formatter { get; set; }
+
+        /// <summary>
+        /// Gets or sets the lowest level written to the console. Default is <see cref="HandlerLogType.Trace"/> (everything).
+        /// <see cref="HandlerLogType.Success"/> is compared as <see cref="HandlerLogType.Information"/>.
+        /// </summary>
+        public HandlerLogType MinimumLevel { get; set; } = HandlerLogType.Trace;
+
+        internal bool IsEnabled(HandlerLogType level)
+        {
+            var effective = level == HandlerLogType.Success ? HandlerLogType.Information : level;
+            var minimum = MinimumLevel == HandlerLogType.Success ? HandlerLogType.Information : MinimumLevel;
+            return effective >= minimum;
+        }
 
         /// <summary>
         /// Gets the console text color associated with the specified log level.
@@ -49,17 +66,7 @@ namespace ExecutionFlow.Hangfire.Console
             if (Formatter != null)
                 return Formatter(level, message, args);
 
-            string formattedMessage;
-            try
-            {
-                formattedMessage = args != null && args.Length > 0 ? string.Format(message, args) : message;
-            }
-            catch (FormatException)
-            {
-                formattedMessage = message;
-            }
-
-            return $"[{level.ToString().ToUpperInvariant()}] {formattedMessage}";
+            return $"[{level.ToString().ToUpperInvariant()}] {LogMessageTemplate.Format(message, args)}";
         }
     }
 }

@@ -9,7 +9,7 @@ namespace ExecutionFlow.Examples.Handlers.Events
     {
         public Task HandleAsync(FlowContext<MessageProcessedEvent> context, CancellationToken cancellationToken)
         {
-            context.Log.Info($"Message of {context.Event.From} processed");
+            context.Log.Info("Message of {From} processed", context.Event.From);
             trigger.Trigger(typeof(RecurringCleanupHandler));
             trigger.Trigger(typeof(RecurringCleanupHandler).FullName);
             return Task.CompletedTask;

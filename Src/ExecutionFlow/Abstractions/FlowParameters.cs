@@ -12,7 +12,7 @@ namespace ExecutionFlow.Abstractions
     public class FlowParameters : IReadOnlyDictionary<string, object>
     {
         private readonly Dictionary<string, object> _items = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _readOnlyKeys = new HashSet<string>();
+        private readonly HashSet<string> _readOnlyKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         IEnumerable<string> IReadOnlyDictionary<string, object>.Keys => Keys;
 

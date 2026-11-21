@@ -1,3 +1,4 @@
+#pragma warning disable CS0618 // Also covers the obsolete SetJobAutoRun/SetJobTimeZone shortcuts (014 FR-006 routes them to GetPlanOf).
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 
@@ -5,6 +6,25 @@ namespace ExecutionFlow.Hangfire.Tests;
 
 public class HangfireOptionsTests
 {
+    // 015 AC-005.7
+    [Fact]
+    public void SchedulePollingInterval_DefaultsToFifteenSeconds()
+    {
+        Assert.Equal(TimeSpan.FromSeconds(15), new HangfireOptions().SchedulePollingInterval);
+    }
+
+    // 015 AC-005.7
+    [Theory]
+    [InlineData(0)]
+    [InlineData(999)]
+    [InlineData(-1000)]
+    public void SchedulePollingInterval_Throws_WhenBelowOneSecond(int milliseconds)
+    {
+        var options = new HangfireOptions();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.SchedulePollingInterval = TimeSpan.FromMilliseconds(milliseconds));
+    }
+
     [Fact]
     public void AutoRunRecurring_DefaultsToTrue()
     {
@@ -107,11 +127,13 @@ public class HangfireOptionsTests
 
     // Test types
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestRecurringHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class UnregisteredHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;

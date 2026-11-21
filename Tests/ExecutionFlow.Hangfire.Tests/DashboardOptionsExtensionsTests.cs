@@ -38,15 +38,16 @@ public class DashboardOptionsExtensionsTests
     }
 
     [Fact]
-    public void UseExecutionFlowJobNames_WithServiceProvider_Throws_WhenNotRegistered()
+    public void UseExecutionFlowJobNames_WithServiceProvider_FallsBackToDefaultName_WhenNotRegistered()
     {
         var provider = Substitute.For<IServiceProvider>();
         provider.GetService(typeof(IHangfireJobName)).Returns(null);
         var options = new DashboardOptions();
+        var job = CreateEventJob();
 
         options.UseExecutionFlowJobNames(provider);
 
-        Assert.Throws<InvalidOperationException>(() => options.DisplayNameFunc(null!, CreateEventJob()));
+        Assert.Equal(DefaultHangfireJobName.GetHangfireDefaultName(job), options.DisplayNameFunc(null!, job));
     }
 
     [Fact]

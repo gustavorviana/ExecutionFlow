@@ -9,8 +9,27 @@ namespace ExecutionFlow.Attributes
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
     public class RecurringAttribute : Attribute
     {
-        /// <summary>Gets the cron expression (e.g., "*/5 * * * *" for every 5 minutes).</summary>
+        /// <summary>
+        /// Gets the cron expression (e.g., "*/5 * * * *" for every 5 minutes). A 6-field cron has a leading seconds field
+        /// (e.g. "*/30 * * * * *" for every 30 seconds). Hangfire runs a recurring job at most once per scheduler polling
+        /// interval (<c>HangfireOptions.SchedulePollingInterval</c>, 15 seconds by default) and warns about a cron that can
+        /// run more often; the local host runs it to the second.
+        /// </summary>
         public string Cron { get; }
+
+        /// <summary>
+        /// Gets or sets an explicit, stable recurring job ID. When not set, the ID comes from the configured
+        /// job ID generator (by default the handler type's full name), so renaming the class changes the ID.
+        /// The ID can only contain letters, digits, spaces and <c>_ - . + ` [ ] , =</c> and can't start or end
+        /// with a space; otherwise registering the handler throws <see cref="System.ArgumentException"/> naming it.
+        /// </summary>
+        public string Id { get; set; }
+
+        /// <summary>
+        /// Gets or sets the time zone ID the cron expression is evaluated in (e.g. "America/Sao_Paulo").
+        /// When not set, the global default applies (UTC unless configured).
+        /// </summary>
+        public string TimeZone { get; set; }
 
         /// <summary>
         /// Initializes a new instance of <see cref="RecurringAttribute"/>.

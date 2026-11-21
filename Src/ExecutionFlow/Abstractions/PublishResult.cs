@@ -4,7 +4,7 @@ namespace ExecutionFlow.Abstractions
     /// Represents the result of a <see cref="IEventDispatcher.Publish{TEvent}"/> or <see cref="IEventDispatcher.Schedule{TEvent}"/> operation.
     /// <para>
     /// <see cref="Enqueued"/> is <c>false</c> only when all of the following conditions are met:
-    /// the event implements <see cref="ICustomIdEvent"/>, deduplication is enabled,
+    /// the event implements <see cref="ICustomIdEvent"/> with a non-empty <see cref="ICustomIdEvent.CustomId"/>, deduplication is enabled,
     /// and a job with the same <see cref="ICustomIdEvent.CustomId"/> is already running or pending.
     /// In all other cases, the job is always enqueued and <see cref="Enqueued"/> is <c>true</c>.
     /// </para>
@@ -12,8 +12,9 @@ namespace ExecutionFlow.Abstractions
     public class PublishResult
     {
         /// <summary>
-        /// Gets the job identifier. Returns the custom ID if the event implements <see cref="ICustomIdEvent"/>;
-        /// otherwise, returns the internal job ID. <c>null</c> when <see cref="Enqueued"/> is <c>false</c>.
+        /// Gets the job identifier. Returns the custom ID if the event implements <see cref="ICustomIdEvent"/>
+        /// with a non-empty <see cref="ICustomIdEvent.CustomId"/>; otherwise, returns the internal job ID.
+        /// <c>null</c> when <see cref="Enqueued"/> is <c>false</c>.
         /// </summary>
         public string JobId { get; }
 

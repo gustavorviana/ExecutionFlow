@@ -38,7 +38,8 @@ namespace ExecutionFlow.Hangfire.Console
 
         private static PerformContext GetPerformContext(FlowContext context)
         {
-            if (context.Parameters.TryGetValue(ContextConsts.Context, out var value) && value is PerformContext performContext)
+            var performContext = context.GetPerformContext();
+            if (performContext != null)
                 return performContext;
 
             throw new InvalidOperationException(

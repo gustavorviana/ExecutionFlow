@@ -1,4 +1,4 @@
-using ExecutionFlow.Hangfire;
+using ExecutionFlow.Abstractions;
 
 namespace ExecutionFlow.Examples.Shared.Events;
 

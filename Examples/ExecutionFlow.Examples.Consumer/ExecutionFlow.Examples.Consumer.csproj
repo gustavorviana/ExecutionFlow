@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Hangfire.AspNetCore" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
     <PackageReference Include="Hangfire.Console" />
     <PackageReference Include="Hangfire.SqlServer" />
     <PackageReference Include="Microsoft.Data.SqlClient" />

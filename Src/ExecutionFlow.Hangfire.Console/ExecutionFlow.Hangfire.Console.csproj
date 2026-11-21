@@ -19,4 +19,8 @@
     <PackageReference Include="Hangfire.Console" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExecutionFlow.Hangfire.Tests" />
+  </ItemGroup>
+
 </Project>

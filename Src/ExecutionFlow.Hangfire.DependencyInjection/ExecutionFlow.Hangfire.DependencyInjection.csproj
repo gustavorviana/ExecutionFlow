@@ -12,8 +12,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <!-- Lowest version the package needs, so apps on older runtimes aren't forced to upgrade (setup-and-configuration F-008). -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" VersionOverride="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>

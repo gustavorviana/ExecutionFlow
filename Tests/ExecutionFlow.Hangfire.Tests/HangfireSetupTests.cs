@@ -228,6 +228,53 @@ public class HangfireSetupTests
         Assert.Equal("job-1", result.JobId);
     }
 
+    [Fact]
+    public void BuildDispatcherOnly_ExposesExecutionManager()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+        var (storage, _, jobClient) = CreateHangfireMocks();
+
+        setup.BuildDispatcherOnly(jobClient, storage);
+
+        Assert.NotNull(setup.ExecutionManager);
+    }
+
+    // --- Options are a fixed snapshot after Configure (setup-and-configuration to-be item 2) ---
+
+    [Fact]
+    public void HangfireOptions_PropertySetters_Throw_AfterConfigure()
+    {
+        var setup = new HangfireSetup();
+        setup.Configure(opts => { });
+
+        Assert.Throws<InvalidOperationException>(() => setup.Options.GlobalRecurringAutoRun = false);
+        Assert.Throws<InvalidOperationException>(() => setup.Options.RemoveOrphanRecurringJobs = true);
+        Assert.Throws<InvalidOperationException>(() => setup.Options.DisableRecurringRetries = false);
+        Assert.Throws<InvalidOperationException>(() => setup.Options.RetryUnregisteredEventJobs = true);
+        Assert.Throws<InvalidOperationException>(() => setup.Options.HookErrorHandler = _ => { });
+        Assert.Throws<InvalidOperationException>(() => setup.Options.DeduplicationLockTimeout = TimeSpan.Zero);
+        Assert.Throws<InvalidOperationException>(() => setup.Options.CreateOnDeduplicationLockTimeout = true);
+        Assert.Throws<InvalidOperationException>(() => setup.Options.RecurringTimeZone = "UTC");
+        Assert.Throws<InvalidOperationException>(() => setup.Options.DeduplicationBehavior = DeduplicationBehavior.SkipIfExists);
+        Assert.Throws<InvalidOperationException>(() => setup.Options.OnTypeLoadFailure = _ => { });
+    }
+
+    [Fact]
+    public void HangfireOptions_PropertySetters_Work_InsideConfigure()
+    {
+        var setup = new HangfireSetup();
+
+        setup.Configure(opts =>
+        {
+            opts.GlobalRecurringAutoRun = false;
+            opts.DeduplicationBehavior = DeduplicationBehavior.SkipIfExists;
+        });
+
+        Assert.False(setup.Options.GlobalRecurringAutoRun);
+        Assert.Equal(DeduplicationBehavior.SkipIfExists, setup.Options.DeduplicationBehavior);
+    }
+
     // --- Test types ---
 
     public class OrderCreatedEvent { }
@@ -246,6 +293,7 @@ public class HangfireSetupTests
             Task.CompletedTask;
     }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class InlineHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken ct) =>

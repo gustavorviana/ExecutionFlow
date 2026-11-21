@@ -10,9 +10,18 @@ dotnet add package ExecutionFlow.Hangfire.Console
 
 ## Setup
 
+Hangfire must have Hangfire.Console enabled, and `ConfigureConsole` doesn't enable it for you:
+
 ```csharp
-options.ConfigureConsole();
+GlobalConfiguration.Configuration.UseConsole();   // or services.AddHangfire(c => c.UseConsole())
+
+options.ConfigureConsole(console =>
+{
+    console.MinimumLevel = HandlerLogType.Information;   // default: Trace (everything)
+});
 ```
+
+Calling `ConfigureConsole()` more than once registers the logger only once.
 
 ## Usage
 
@@ -27,6 +36,10 @@ public async Task HandleAsync(FlowContext<MyEvent> context, CancellationToken ct
     context.Log.Success("Done!");
 }
 ```
+
+Messages use `ILogger`-style templates. `context.Log.Info("Order {OrderId} paid by {Customer}", id, name)` fills the placeholders by position, so the same message works in the console and in `ILogger` (see `ExecutionFlow.Extensions.Logging`). Use `{{` and `}}` for literal braces. For `MinimumLevel`, `Success` counts as `Information`.
+
+A logger that throws never fails the job.
 
 ### Progress Bars
 
@@ -44,3 +57,4 @@ bar.Complete();
 | **ExecutionFlow** | Core abstractions |
 | **ExecutionFlow.Hangfire** | Hangfire integration |
 | **ExecutionFlow.Hangfire.DependencyInjection** | ASP.NET Core DI extensions |
+| **ExecutionFlow.Extensions.Logging** | Sends `context.Log` to `ILogger` |

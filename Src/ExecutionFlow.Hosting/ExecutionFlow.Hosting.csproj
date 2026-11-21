@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net8.0 for TimeProvider; the netstandard2.0 build uses an internal system clock (011 research R-001). -->
+    <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+    <PackageId>ExecutionFlow.Hosting</PackageId>
+    <Description>Runs ExecutionFlow recurring handlers inside the .NET Generic Host, locally and without Hangfire</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ExecutionFlow\ExecutionFlow.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Lowest versions the package needs, so apps on older runtimes aren't forced to upgrade. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" VersionOverride="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Cronos" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExecutionFlow.Hosting.Tests" />
+    <InternalsVisibleTo Include="ExecutionFlow.Hosting.NetStandard.Tests" />
+  </ItemGroup>
+</Project>

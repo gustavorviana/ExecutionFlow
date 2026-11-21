@@ -105,65 +105,6 @@ public class HangfireJobInfoTests
         Assert.Null(handler);
     }
 
-    [Fact]
-    public void EventJobInfo_GetExpectedName_Returns_CustomName_WhenAvailable()
-    {
-        var job = CreateEventJob<TestEvent>("custom-display");
-        var info = new HangfireEventJobInfo(job);
-        var registryInfo = new EventJobRegistryInfo(typeof(TestEventHandler), typeof(TestEvent), "Fallback Name");
-
-        var name = info.GetExpectedName(registryInfo);
-
-        Assert.Equal("custom-display", name);
-    }
-
-    [Fact]
-    public void EventJobInfo_GetExpectedName_Falls_Back_To_DisplayName()
-    {
-        var job = CreateEventJob<TestEvent>(null);
-        var info = new HangfireEventJobInfo(job);
-        var registryInfo = new EventJobRegistryInfo(typeof(TestEventHandler), typeof(TestEvent), "Fallback Name");
-
-        var name = info.GetExpectedName(registryInfo);
-
-        Assert.Equal("Fallback Name", name);
-    }
-
-    [Fact]
-    public void EventJobInfo_GetExpectedName_Falls_Back_To_EventTypeName_WhenHandlerUnknown()
-    {
-        var job = CreateEventJob<TestEvent>(null);
-        var info = new HangfireEventJobInfo(job);
-
-        var name = info.GetExpectedName((IJobRegistryInfo?)null);
-
-        Assert.Equal(nameof(TestEvent), name);
-    }
-
-    [Fact]
-    public void EventJobInfo_GetExpectedName_Uses_EventDisplayNameAttribute_WhenHandlerUnknown()
-    {
-        var job = CreateEventJob<NamedEvent>(null);
-        var info = new HangfireEventJobInfo(job);
-
-        var name = info.GetExpectedName((IJobRegistryInfo?)null);
-
-        Assert.Equal("Pretty Event", name);
-    }
-
-    [Fact]
-    public void EventJobInfo_GetExpectedName_Falls_Back_To_EventTypeName_WhenRegistryEmpty()
-    {
-        var job = CreateEventJob<TestEvent>(null);
-        var info = new HangfireEventJobInfo(job);
-        var registry = Substitute.For<IExecutionFlowRegistry>();
-        registry.EventHandlers.Returns(new Dictionary<Type, EventJobRegistryInfo>());
-
-        var name = info.GetExpectedName(registry);
-
-        Assert.Equal(nameof(TestEvent), name);
-    }
-
     // --- HangfireRecurringJobInfo ---
 
     [Fact]
@@ -205,19 +146,6 @@ public class HangfireJobInfoTests
     }
 
     [Fact]
-    public void RecurringJobInfo_GetExpectedName_Falls_Back_To_HandlerTypeName_WhenRegistryEmpty()
-    {
-        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
-        var info = new HangfireRecurringJobInfo(job);
-        var registry = Substitute.For<IExecutionFlowRegistry>();
-        registry.RecurringHandlers.Returns(new Dictionary<Type, RecurringJobRegistryInfo>());
-
-        var name = info.GetExpectedName(registry);
-
-        Assert.Equal(nameof(TestHandler), name);
-    }
-
-    [Fact]
     public void RecurringJobInfo_GetJobType_Returns_Type_FromArgs()
     {
         var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
@@ -244,33 +172,6 @@ public class HangfireJobInfoTests
         Assert.Equal(typeof(TestEventHandler), handlerType);
     }
 
-    [Fact]
-    public void GetExpectedName_Returns_DisplayName()
-    {
-        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
-        var info = HangfireJobInfo.Create(job);
-        var registry = Substitute.For<IExecutionFlowRegistry>();
-        var handler = new RecurringJobRegistryInfo(typeof(TestHandler), "My Display Name", "* * * * *");
-        var handlers = new Dictionary<Type, RecurringJobRegistryInfo> { { typeof(TestHandler), handler } };
-        registry.RecurringHandlers.Returns((IReadOnlyDictionary<Type, RecurringJobRegistryInfo>)handlers);
-
-        var name = info.GetExpectedName(registry);
-
-        Assert.Equal("My Display Name", name);
-    }
-
-    [Fact]
-    public void GetExpectedName_Falls_Back_To_FullName_WhenDisplayNameEmpty()
-    {
-        var job = JobBuilder.CreateRecurringJob(typeof(TestHandler));
-        var info = HangfireJobInfo.Create(job);
-        var registryInfo = new RecurringJobRegistryInfo(typeof(TestHandler), "", "* * * * *");
-
-        var name = info.GetExpectedName(registryInfo);
-
-        Assert.Equal(typeof(TestHandler).FullName, name);
-    }
-
     // --- Test types ---
 
     public class TestEvent { }
@@ -278,6 +179,7 @@ public class HangfireJobInfoTests
     [System.ComponentModel.DisplayName("Pretty Event")]
     public class NamedEvent { }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestHandler : IHandler
     {
         public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;

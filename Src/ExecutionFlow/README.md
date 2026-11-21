@@ -51,6 +51,14 @@ public class DataSyncHandler : IHandler
 }
 ```
 
+### Interval schedule and overlap control
+
+```csharp
+[RecurringInterval("00:15:00")] // alternative to a cron; prefer [Recurring] on Hangfire
+[NoOverlap(600)]                // a run waits up to 600 s for a running one, then fails
+public class PriceSyncHandler : IHandler { ... }
+```
+
 ## Related Packages
 
 | Package | Description |

@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ExecutionFlow.Tests" />
+    <InternalsVisibleTo Include="ExecutionFlow.Hosting" />
+    <InternalsVisibleTo Include="ExecutionFlow.Hangfire" />
   </ItemGroup>
 
 </Project>

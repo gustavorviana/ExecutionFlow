@@ -32,6 +32,7 @@ public class JobExtensionsTests
 
     public class TestEvent { }
 
+    [ExecutionFlow.Attributes.Recurring("* * * * *")]
     public class TestHandler : ExecutionFlow.Abstractions.IHandler
     {
         public Task HandleAsync(ExecutionFlow.Abstractions.FlowContext context, CancellationToken ct) => Task.CompletedTask;

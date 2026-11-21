@@ -4,6 +4,38 @@ namespace ExecutionFlow.Tests.Abstractions;
 
 public class FlowParametersTests
 {
+    // --- handlers-and-context F-001: read-only keys are protected in any casing ---
+
+    private static FlowParameters WithReadOnly(string key, object value)
+    {
+        var builder = new FlowContextBuilder(new ExecutionLoggerFactory(Array.Empty<IExecutionLoggerFactory>()));
+        builder.AddReadOnly(key, value);
+        return builder.Build().Parameters;
+    }
+
+    [Theory]
+    [InlineData("performcontext")]
+    [InlineData("PERFORMCONTEXT")]
+    [InlineData("PerformContext")]
+    public void ReadOnlyKey_CannotBeModified_InAnyCasing(string key)
+    {
+        var parameters = WithReadOnly("PerformContext", "infra");
+
+        Assert.Throws<InvalidOperationException>(() => parameters[key] = null!);
+        Assert.Equal("infra", parameters["PerformContext"]);
+    }
+
+    [Theory]
+    [InlineData("customname")]
+    [InlineData("CUSTOMNAME")]
+    public void ReadOnlyKey_CannotBeRemoved_InAnyCasing(string key)
+    {
+        var parameters = WithReadOnly("CustomName", "name");
+
+        Assert.Throws<InvalidOperationException>(() => parameters.Remove(key));
+        Assert.True(parameters.ContainsKey("CustomName"));
+    }
+
     [Fact]
     public void Add_NewKey_Succeeds()
     {

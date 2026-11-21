@@ -137,6 +137,96 @@ public class ExecutionFlowOptionsTests
         Assert.True(options.EventHandlers.Count > 0 || options.RecurringHandlers.Count > 0);
     }
 
+    // --- 012-interval-and-overlap FR-004: the plan is registered on the core options ---
+
+    private static ExecutionPlan CreatePlan()
+    {
+        var planner = new ExecutionPlanner();
+        planner.Add<TestHandler>();
+        return planner.Build();
+    }
+
+    [Fact]
+    public void UsePlan_StoresPlan()
+    {
+        var options = new TestOptions();
+        var plan = CreatePlan();
+
+        options.UsePlan(plan);
+
+        Assert.Same(plan, options.Plan);
+    }
+
+    [Fact]
+    public void UsePlan_Throws_WhenCalledTwice()
+    {
+        var options = new TestOptions();
+        options.UsePlan(CreatePlan());
+
+        Assert.Throws<InvalidOperationException>(() => options.UsePlan(CreatePlan()));
+    }
+
+    [Fact]
+    public void UsePlan_Throws_WhenPlanIsNull()
+    {
+        var options = new TestOptions();
+
+        Assert.Throws<ArgumentNullException>(() => options.UsePlan(null!));
+    }
+
+    // --- Recurring ID format (specs/016-id-format-validation FR-004) ---
+
+    // AC-004.2
+    [Fact]
+    public void AddHandler_Throws_WhenRecurringIdIsInvalid()
+    {
+        var options = new TestOptions();
+
+        var ex = Assert.Throws<ArgumentException>(() => options.Add(typeof(InvalidRecurringIdHandler)));
+
+        Assert.Contains(typeof(InvalidRecurringIdHandler).FullName!, ex.Message);
+        Assert.Contains("sync:daily", ex.Message);
+    }
+
+    [Fact]
+    public void AddHandler_Throws_WhenBuilderIdIsInvalid()
+    {
+        var options = new TestOptions();
+        options.Add(typeof(TestHandler));
+
+        var ex = Assert.Throws<ArgumentException>(() => options.GetPlanOf<TestHandler>().Id("sync:daily"));
+
+        Assert.Equal("id", ex.ParamName);
+        Assert.Contains(typeof(TestHandler).FullName!, ex.Message);
+    }
+
+    // AC-004.4
+    [Fact]
+    public void AddHandler_Throws_WhenRecurringIntervalIdIsInvalid()
+    {
+        var options = new TestOptions();
+
+        var ex = Assert.Throws<ArgumentException>(() => options.Add(typeof(InvalidIntervalIdHandler)));
+
+        Assert.Contains(typeof(InvalidIntervalIdHandler).FullName!, ex.Message);
+        Assert.Contains(@"sync daily\n", ex.Message);
+        Assert.DoesNotContain("\n", ex.Message);
+    }
+
+    [Fact]
+    public void AddHandler_Accepts_RecurringIdWithAccents()
+    {
+        var options = new TestOptions();
+
+        options.Add(typeof(AccentedIdHandler));
+
+        Assert.Equal("sincronização-diária", options.RecurringHandlers.Values.Single().Id);
+    }
+
+    [Recurring("* * * * *", Id = "sync:daily")] private abstract class InvalidRecurringIdHandler : TestHandler { }
+    [RecurringInterval("00:00:05", Id = "sync daily\n")] private abstract class InvalidIntervalIdHandler : TestHandler { }
+    [Recurring("* * * * *", Id = "sincronização-diária")] private abstract class AccentedIdHandler : TestHandler { }
+
     // Test types
 
     public class TestEvent { }
