@@ -1,12 +1,12 @@
-name: "CodeQL"
+name: CodeQL
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   schedule:
     - cron: '30 5 * * 1'
+  workflow_call:
+
+permissions:
+  contents: read
 
 jobs:
   analyze:
@@ -18,24 +18,22 @@ jobs:
       contents: read
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: csharp
-        build-mode: manual
+    - uses: actions/checkout@v4
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.0.x
 
-    - name: Build
-      run: |
-        dotnet restore
-        dotnet build --no-restore
+    # Examples and tests take request data on purpose and would report log injection paths the libraries already block.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+        build-mode: none
+        config: |
+          paths:
+            - Src
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
