@@ -1,6 +1,6 @@
 # ExecutionFlow
 
-[![.NET](https://github.com/gustavorviana/ExecutionFlow/actions/workflows/dotnet.yml/badge.svg)](https://github.com/gustavorviana/ExecutionFlow/actions/workflows/dotnet.yml)
+[![CI](https://github.com/gustavorviana/ExecutionFlow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gustavorviana/ExecutionFlow/actions/workflows/ci.yml?query=branch%3Amain)
 [![NuGet](https://img.shields.io/nuget/v/ExecutionFlow.svg)](https://www.nuget.org/packages/ExecutionFlow)
 [![License](https://img.shields.io/github/license/gustavorviana/ExecutionFlow)](https://github.com/gustavorviana/ExecutionFlow/blob/main/LICENSE)
 
