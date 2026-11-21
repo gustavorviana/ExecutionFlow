@@ -16,6 +16,8 @@ namespace ExecutionFlow.Abstractions
         /// </summary>
         /// <param name="jobId">The job identifier to search for.</param>
         /// <returns><c>true</c> if a matching job is processing; otherwise, <c>false</c>.</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format (letters, digits, spaces and <c>_ - . + ` [ ] , =</c>).</exception>
         bool IsRunning(string jobId);
 
         /// <summary>
@@ -31,6 +33,8 @@ namespace ExecutionFlow.Abstractions
         /// </summary>
         /// <param name="jobId">The job identifier to search for.</param>
         /// <returns><c>true</c> if a matching job is pending; otherwise, <c>false</c>.</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format (letters, digits, spaces and <c>_ - . + ` [ ] , =</c>).</exception>
         bool IsPending(string jobId);
 
         /// <summary>
@@ -46,6 +50,8 @@ namespace ExecutionFlow.Abstractions
         /// </summary>
         /// <param name="jobId">The job identifier to cancel.</param>
         /// <returns><c>true</c> if a job was found and deleted; otherwise, <c>false</c>.</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format (letters, digits, spaces and <c>_ - . + ` [ ] , =</c>).</exception>
         bool Cancel(string jobId);
 
         /// <summary>
@@ -61,6 +67,8 @@ namespace ExecutionFlow.Abstractions
         /// </summary>
         /// <param name="jobId">The job identifier to retry.</param>
         /// <returns><c>true</c> if the job was found and re-enqueued; otherwise, <c>false</c>.</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format (letters, digits, spaces and <c>_ - . + ` [ ] , =</c>).</exception>
         bool Retry(string jobId);
 
         /// <summary>

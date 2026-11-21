@@ -1,4 +1,4 @@
-#pragma warning disable CS0618 // Covers the obsolete HangfireAutoRunFilter until it is removed in 2.0.
+#pragma warning disable CS0618 // Covers the obsolete HangfireAutoRunFilter until it is removed in 3.0.
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Abstractions.Events;
 using ExecutionFlow.Hangfire.Infrastructure;
@@ -218,7 +218,7 @@ public class HangfireValidationTests
         var dispatcher = CreateDispatcher();
 
         Assert.Throws<ArgumentNullException>(() => dispatcher.Trigger((string)null!));
-        Assert.Throws<ArgumentNullException>(() => dispatcher.Trigger(""));
+        Assert.Throws<ArgumentException>(() => dispatcher.Trigger(""));   // 016 FR-003: empty is ArgumentException
     }
 
     // --- HangfireOption<T> Validation ---

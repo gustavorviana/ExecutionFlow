@@ -1,4 +1,4 @@
-#pragma warning disable CS0618 // Covers the obsolete HangfireAutoRunFilter until it is removed in 2.0.
+#pragma warning disable CS0618 // Covers the obsolete HangfireAutoRunFilter until it is removed in 3.0.
 using ExecutionFlow.Abstractions;
 using ExecutionFlow.Hangfire.Infrastructure.Filters;
 using ExecutionFlow.Hangfire.Tests.Utils;

@@ -31,10 +31,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// </summary>
         /// <param name="jobId">The job identifier to search for (Hangfire ID or custom ID).</param>
         /// <returns><c>true</c> if a matching job is processing; otherwise, <c>false</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format.</exception>
         public bool IsRunning(string jobId)
         {
-            if (string.IsNullOrEmpty(jobId))
-                return false;
+            IdFormat.Validate(jobId, nameof(jobId));
 
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
@@ -64,10 +65,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// </summary>
         /// <param name="jobId">The job identifier to search for (Hangfire ID or custom ID).</param>
         /// <returns><c>true</c> if a matching job is enqueued; otherwise, <c>false</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format.</exception>
         public bool IsPending(string jobId)
         {
-            if (string.IsNullOrEmpty(jobId))
-                return false;
+            IdFormat.Validate(jobId, nameof(jobId));
 
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
@@ -98,8 +100,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// </summary>
         /// <param name="jobId">The job identifier to cancel (Hangfire ID or custom ID).</param>
         /// <returns><c>true</c> if a job was found and deleted; otherwise, <c>false</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format.</exception>
         public bool Cancel(string jobId)
         {
+            IdFormat.Validate(jobId, nameof(jobId));
             var hangfireJobId = FindActiveJobId(jobId);
             return hangfireJobId != null && _jobClient.Delete(hangfireJobId);
         }
@@ -121,8 +126,12 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// </summary>
         /// <param name="jobId">The job identifier to retry (Hangfire ID or custom ID).</param>
         /// <returns><c>true</c> if the job was found and re-enqueued; otherwise, <c>false</c>.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format.</exception>
         public bool Retry(string jobId)
         {
+            IdFormat.Validate(jobId, nameof(jobId));
+
             var monitoringApi = _jobStorage.GetMonitoringApi();
 
             using (var connection = _jobStorage.GetConnection())

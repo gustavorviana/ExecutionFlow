@@ -8,8 +8,8 @@ public class OrderCreatedEventHandler : IHandler<OrderCreatedEvent>
 {
     public async Task HandleAsync(FlowContext<OrderCreatedEvent> context, CancellationToken cancellationToken)
     {
-        context.Log.Info($"Processing order {context.Event.OrderId} (attempt {context.AttemptNumber})");
+        context.Log.Info("Processing order {OrderId} (attempt {AttemptNumber})", context.Event.OrderId, context.AttemptNumber);
         await Task.Delay(TimeSpan.FromSeconds(20), cancellationToken);
-        context.Log.Info($"Order {context.Event.OrderId} processed");
+        context.Log.Info("Order {OrderId} processed", context.Event.OrderId);
     }
 }

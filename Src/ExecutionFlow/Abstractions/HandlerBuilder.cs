@@ -128,10 +128,12 @@ namespace ExecutionFlow.Abstractions
         }
 
         /// <summary>Sets an explicit, stable recurring job ID.</summary>
-        /// <param name="id">The ID.</param>
+        /// <param name="id">The ID: letters, digits, spaces and <c>_ - . + ` [ ] , =</c>, that doesn't start or end with a space.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="id"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="id"/> is empty, only spaces, or doesn't match the ID format.</exception>
         public HandlerBuilder Id(string id)
         {
-            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("The recurring job ID cannot be empty.", nameof(id));
+            IdFormat.ValidateRecurring(HandlerType, id, nameof(id));
             _owner.ThrowIfBuilt();
             HasExplicitValues = true;
             ConfiguredId = id;

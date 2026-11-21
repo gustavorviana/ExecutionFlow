@@ -52,31 +52,80 @@ public class ExecutionManagerTests
             x => x.DispatchEventAsync<TEvent>(default!, null, null, default));
     }
 
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void IsRunning_ReturnsFalse_WhenIdIsNullOrEmpty_EvenIfJobsWithoutCustomIdAreRunning(string? id)
-    {
-        _monitoringApi.ProcessingJobs(0, 10).Returns(
-            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
-        _connection.GetJobParameter("job-1", ContextConsts.CustomId).Returns((string?)null);
+    // --- ID format (specs/016-id-format-validation FR-003) ---
 
-        Assert.False(_manager.IsRunning(id!));
+    private bool CallQueryMethod(string method, string id)
+    {
+        switch (method)
+        {
+            case nameof(HangfireExecutionManager.IsRunning): return _manager.IsRunning(id);
+            case nameof(HangfireExecutionManager.IsPending): return _manager.IsPending(id);
+            case nameof(HangfireExecutionManager.Cancel): return _manager.Cancel(id);
+            case nameof(HangfireExecutionManager.Retry): return _manager.Retry(id);
+            default: throw new ArgumentOutOfRangeException(nameof(method));
+        }
     }
 
+    // AC-003.1
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void Cancel_DoesNothing_WhenIdIsNullOrEmpty(string? id)
+    [InlineData(nameof(HangfireExecutionManager.IsRunning), "12345", "Processing")]
+    [InlineData(nameof(HangfireExecutionManager.IsRunning), "order-42", "Processing")]
+    [InlineData(nameof(HangfireExecutionManager.IsPending), "12345", "Enqueued")]
+    [InlineData(nameof(HangfireExecutionManager.IsPending), "pedido-ação-42", "Enqueued")]
+    [InlineData(nameof(HangfireExecutionManager.Cancel), "12345", "Enqueued")]
+    [InlineData(nameof(HangfireExecutionManager.Cancel), "order-42", "Enqueued")]
+    public void QueryMethods_BehaveAsBefore_WhenIdIsValid(string method, string id, string stateName)
     {
-        _monitoringApi.ProcessingJobs(0, 10).Returns(
-            ProcessingJobList(new KeyValuePair<string, ProcessingJobDto>("job-1", new ProcessingJobDto())));
-        _monitoringApi.Queues().Returns(new List<QueueWithTopEnqueuedJobsDto>());
-        _connection.GetJobParameter("job-1", ContextConsts.CustomId).Returns((string?)null);
+        SetupReservation(id, "job-1", stateName);
+        _connection.GetStateData(id).Returns(new StateData { Name = stateName });
+        _jobClient.ChangeState(default!, default!, default).ReturnsForAnyArgs(true);
 
-        _manager.Cancel(id!);
+        Assert.True(CallQueryMethod(method, id));
+    }
 
-        _jobClient.DidNotReceiveWithAnyArgs().ChangeState(default!, default!, default!);
+    [Fact]
+    public void Retry_RequeuesFailedJob_WhenIdIsValid()
+    {
+        _monitoringApi.FailedJobs(0, 10).Returns(
+            FailedJobList(new KeyValuePair<string, FailedJobDto>("12345", new FailedJobDto())));
+        _jobClient.ChangeState(default!, default!, default).ReturnsForAnyArgs(true);
+
+        Assert.True(_manager.Retry("12345"));
+    }
+
+    // AC-003.2
+    [Theory]
+    [InlineData(nameof(HangfireExecutionManager.IsRunning), "42\r\nfake")]
+    [InlineData(nameof(HangfireExecutionManager.IsPending), "42\r\nfake")]
+    [InlineData(nameof(HangfireExecutionManager.Cancel), "42\r\nfake")]
+    [InlineData(nameof(HangfireExecutionManager.Retry), "42\r\nfake")]
+    [InlineData(nameof(HangfireExecutionManager.IsRunning), "a:b")]
+    [InlineData(nameof(HangfireExecutionManager.IsPending), "a:b")]
+    [InlineData(nameof(HangfireExecutionManager.Cancel), "a:b")]
+    [InlineData(nameof(HangfireExecutionManager.Retry), "a:b")]
+    public void QueryMethods_Throw_WhenIdIsInvalid(string method, string id)
+    {
+        var ex = Assert.Throws<ArgumentException>(() => CallQueryMethod(method, id));
+
+        Assert.Equal("jobId", ex.ParamName);
+        _storage.DidNotReceive().GetConnection();
+        _storage.DidNotReceive().GetMonitoringApi();
+    }
+
+    // AC-003.3
+    [Theory]
+    [InlineData(nameof(HangfireExecutionManager.IsRunning))]
+    [InlineData(nameof(HangfireExecutionManager.IsPending))]
+    [InlineData(nameof(HangfireExecutionManager.Cancel))]
+    [InlineData(nameof(HangfireExecutionManager.Retry))]
+    public void QueryMethods_Throw_WhenIdIsNullOrWhiteSpace(string method)
+    {
+        Assert.Throws<ArgumentNullException>(() => CallQueryMethod(method, null!));
+        Assert.Throws<ArgumentException>(() => CallQueryMethod(method, ""));
+        Assert.Throws<ArgumentException>(() => CallQueryMethod(method, "   "));
+
+        _storage.DidNotReceive().GetConnection();
+        _storage.DidNotReceive().GetMonitoringApi();
     }
 
     // --- Reservation key fast path (004-custom-id-and-deduplication FR-003) ---

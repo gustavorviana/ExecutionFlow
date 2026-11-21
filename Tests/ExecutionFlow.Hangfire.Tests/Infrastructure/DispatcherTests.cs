@@ -290,7 +290,7 @@ public class DispatcherTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public void Publish_TreatsEmptyCustomIdAsNone(string? customId)
+    public void Publish_CreatesJobWithoutCustomId_WhenCustomIdIsNullOrEmpty(string? customId)
     {
         _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-5");
         var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
@@ -542,6 +542,82 @@ public class DispatcherTests
     public class NoDeduplicationEvent : ICustomIdEvent
     {
         public string CustomId => "attr-2";
+    }
+
+    // --- ID format (specs/016-id-format-validation FR-002, FR-003) ---
+
+    [Fact]
+    public void Publish_CreatesJob_WhenCustomIdIsValid()
+    {
+        _jobClient.Create(default!, default!).ReturnsForAnyArgs("job-7");
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.Disabled });
+
+        var result = dispatcher.Publish(new TestCustomIdEvent("pedido-ação-42"));
+
+        Assert.True(result.Enqueued);
+        Assert.Equal("pedido-ação-42", result.JobId);
+        _jobClient.ReceivedWithAnyArgs(1).Create(default!, default!);
+    }
+
+    [Theory]
+    [InlineData("order-42\r\nfake")]
+    [InlineData("tenant:42")]
+    [InlineData("   ")]
+    public void Publish_Throws_WhenCustomIdIsInvalid(string customId)
+    {
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+
+        var ex = Assert.Throws<ArgumentException>(() => dispatcher.Publish(new TestCustomIdEvent(customId)));
+
+        Assert.Equal("event", ex.ParamName);
+        Assert.DoesNotContain("\n", ex.Message);
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+        _storage.DidNotReceive().GetConnection();
+    }
+
+    [Fact]
+    public void Schedule_Throws_WhenCustomIdIsInvalid()
+    {
+        var dispatcher = CreateDispatcher(new HangfireOptions { DeduplicationBehavior = DeduplicationBehavior.SkipIfExists });
+        var @event = new TestCustomIdEvent("order-42\r\nfake");
+
+        Assert.Throws<ArgumentException>(() => dispatcher.Schedule(@event, TimeSpan.FromMinutes(1)));
+        Assert.Throws<ArgumentException>(() => dispatcher.Schedule(@event, DateTimeOffset.UtcNow.AddMinutes(1)));
+
+        _jobClient.DidNotReceiveWithAnyArgs().Create(default!, default!);
+        _storage.DidNotReceive().GetConnection();
+    }
+
+    // AC-003.4
+    [Theory]
+    [InlineData("sync:daily")]
+    [InlineData("job\r\nfake")]
+    public void Trigger_Throws_WhenIdIsInvalid(string jobId)
+    {
+        var dispatcher = CreateDispatcher();
+
+        var ex = Assert.Throws<ArgumentException>(() => dispatcher.Trigger(jobId));
+
+        Assert.Equal("jobId", ex.ParamName);
+    }
+
+    [Fact]
+    public void Trigger_ThrowsArgumentNull_WhenIdIsNull()
+    {
+        var dispatcher = CreateDispatcher();
+
+        Assert.Throws<ArgumentNullException>(() => dispatcher.Trigger((string)null!));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Trigger_Throws_WhenIdIsEmptyOrWhiteSpace(string jobId)
+    {
+        var dispatcher = CreateDispatcher();
+
+        var ex = Assert.Throws<ArgumentException>(() => dispatcher.Trigger(jobId));
+        Assert.IsNotType<ArgumentNullException>(ex);
     }
 
     // Test types

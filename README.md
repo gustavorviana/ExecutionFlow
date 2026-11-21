@@ -40,7 +40,7 @@ public class SendEmailHandler : IHandler<SendEmailEvent>
     public async Task HandleAsync(FlowContext<SendEmailEvent> context, CancellationToken ct)
     {
         var email = context.Event;
-        context.Log.Info($"Sending email to {email.To}");
+        context.Log.Info("Sending email to {To}", email.To);
         // your logic here
         context.Log.Success("Email sent");
     }
@@ -121,7 +121,7 @@ public class OrderHandler : IHandler<OrderCreatedEvent>
     public async Task HandleAsync(FlowContext<OrderCreatedEvent> context, CancellationToken ct)
     {
         var order = context.Event;
-        context.Log.Info($"Processing order {order.Id}");
+        context.Log.Info("Processing order {OrderId}", order.Id);
     }
 }
 ```
@@ -201,9 +201,19 @@ public class PaymentEvent : ICustomIdEvent
 
 A `null` or empty `CustomId` means the event has no custom ID: `JobId` is the internal job ID and deduplication doesn't apply.
 
+### ID format
+
+Every ID follows the same format: custom IDs, recurring job IDs (`Id = ...`, `HandlerBuilder.Id`, `IJobIdGenerator`) and the IDs given to `IsRunning`, `IsPending`, `Cancel`, `Retry` and `Trigger`. An ID can contain:
+
+- letters and digits of any language, accents included (`pedido-ação-42`, `注文`);
+- the characters ``_ - . + ` [ ] , =`` and the space;
+- no space at the start or end.
+
+Anything else throws `ArgumentException` before anything is stored or read: line breaks and other control characters, invisible characters, and symbols such as `: / \ "` or `{ }`. A `null` ID in a query or `Trigger` throws `ArgumentNullException`. The rule keeps IDs taken from request data from forging lines in logs. Every type's full name (nested `Outer+Inner`, generic, accented) is a valid ID, so default recurring IDs always pass.
+
 The custom ID is stored with the job in the same storage operation, so a job never exists without it. This holds for Hangfire's default `BackgroundJobClient`. A custom `IBackgroundJobClient` that doesn't implement `IBackgroundJobClientV2` falls back to storing it right after the job is created.
 
-> `FlowContext.SetCustomId` is obsolete since 1.2.0 and will be removed in 2.0. Set the custom ID on the event through `ICustomIdEvent`: deduplication only uses the ID given at publish time.
+> `FlowContext.SetCustomId` is obsolete since 1.2.0 and will be removed in 3.0. Set the custom ID on the event through `ICustomIdEvent`: deduplication only uses the ID given at publish time.
 
 Then track by custom ID:
 
@@ -356,7 +366,7 @@ Every `IHandler` needs a schedule, `[Recurring("<cron>")]` or `[RecurringInterva
 public class DailyReportHandler : IHandler { ... }
 ```
 
-- `Id` (optional): a stable recurring job ID. Without it, the ID is the handler's full type name (or your `IJobIdGenerator`), so renaming the class creates a new job. An explicit `Id` always wins over the generator.
+- `Id` (optional): a stable recurring job ID. Without it, the ID is the handler's full type name (or your `IJobIdGenerator`), so renaming the class creates a new job. An explicit `Id` always wins over the generator. It must follow the [ID format](#id-format); an invalid `Id` fails when the handler is registered, naming the handler.
 - `TimeZone` (optional): the time zone the cron is evaluated in. Precedence: `GetPlanOf<T>().TimeZone(...)` > attribute `TimeZone` > `RecurringTimeZone` > UTC. On .NET Framework only Windows time zone IDs exist; unknown IDs fail at `Configure`.
 
 ```csharp
@@ -581,7 +591,7 @@ for (int i = 0; i < total; i++)
 bar.Complete();
 ```
 
-Messages are `ILogger`-style templates (`"Order {OrderId}"` is filled by position; `{{`/`}}` are literal braces). Each logger is isolated: one that throws never fails the job, and registering the same logger twice keeps one.
+Messages are `ILogger`-style templates (`"Order {OrderId}"` is filled by position; `{{`/`}}` are literal braces). Pass values that come from outside (event data, request input) as arguments, never inside the message: `context.Log.Info("Order {OrderId}", order.Id)`, not `context.Log.Info($"Order {order.Id}")`. A value inside the message can break the template (a `{` or `}`) or forge log lines (a line break). Each logger is isolated: one that throws never fails the job, and registering the same logger twice keeps one.
 
 ## Logging to ILogger
 
@@ -593,7 +603,7 @@ options.AddMicrosoftLogging();   // package ExecutionFlow.Extensions.Logging
 
 ## Execution Manager
 
-IDs can be a Hangfire job ID or a custom ID (the Hangfire ID is matched first).
+IDs can be a Hangfire job ID or a custom ID (the Hangfire ID is matched first). An ID outside the [ID format](#id-format), or a `null`, empty or whitespace-only ID, throws instead of returning `false`.
 
 ```csharp
 executionManager.IsRunning("order-123");            // processing?
@@ -662,6 +672,17 @@ Producer-only hosts also get an `IExecutionManager` (registered by `AddExecution
 - the deduplication reservation key of a job cancelled there is released on the next publish of that custom ID (it's detected as stale), not immediately.
 
 Use **either** `AddHangfireToExecutionFlow` (full mode, which also publishes) **or** `AddExecutionFlowDispatcher` (producer-only) in one container. Registering both throws, telling you which one to keep.
+
+## Upgrading to 2.0
+
+2.0.0 changes documented behavior. Check these when you upgrade from 1.x:
+
+- **ID format.** Custom IDs, recurring IDs and the IDs given to the execution manager and `Trigger` must follow the [ID format](#id-format). A custom ID such as `tenant:42` now throws when publishing; use `tenant-42` or `tenant.42`.
+- `IsRunning`, `IsPending`, `Cancel` and `Retry` throw for a `null`, empty or whitespace-only ID instead of returning `false`. `Trigger("")` throws `ArgumentException` instead of `ArgumentNullException`.
+- `DeduplicationBehavior` moved from `ExecutionFlow.Hangfire` to `ExecutionFlow.Abstractions`, and the property moved to `ExecutionFlowOptions`. Add `using ExecutionFlow.Abstractions;`.
+- `FlowContext.SetCustomId` and `HangfireAutoRunFilter` are obsolete and will be removed in 3.0. Deduplication only uses the custom ID given at publish time.
+- Jobs created by 1.x have no deduplication reservation key, so deduplication doesn't see them.
+- A recurring handler without a schedule fails at `Configure` with a clear message.
 
 ## Startup and Configuration Rules
 

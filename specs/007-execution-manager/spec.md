@@ -20,6 +20,7 @@ Application code and admin screens need to ask "is this job running?", cancel or
 
 Related capabilities:
 - [004-custom-id-and-deduplication](../004-custom-id-and-deduplication/spec.md): matching by custom ID, and the reservation-key fast path (FR-003 there).
+  - *Amended by [016](../016-id-format-validation/spec.md) FR-003: the ID must match the ID format, or the method throws `ArgumentException`.*
 - [005-recurring-jobs](../005-recurring-jobs/spec.md): recurring jobs addressed by handler type.
 - [002-setup-and-configuration](../002-setup-and-configuration/spec.md): where `IExecutionManager` is registered.
 
@@ -85,10 +86,12 @@ As an admin UI, I want to list and count jobs by state without loading everythin
 ### Functional Requirements
 
 - **FR-001 Query a job's state by ID or handler**: `IsRunning(string)` checks Processing jobs, and `IsPending(string)` checks Enqueued jobs, matching the Hangfire ID or the custom ID. The `Type` overloads do the same for recurring jobs by handler type. *(Story 1)*
+  - *Amended by [016](../016-id-format-validation/spec.md) FR-003: the ID must match the ID format, or the method throws `ArgumentException`.*
   - **AC-001.1**: **Given** jobs that match by Hangfire ID, custom ID or reservation key, **When** `IsRunning(string)`/`IsPending(string)` is called, **Then** it reports whether a matching Processing/Enqueued job exists, and a null or empty ID never matches. Tests: `ExecutionManagerTests.IsRunning_ReturnsTrue_WhenMatchingByHangfireJobId`, `IsRunning_ReturnsTrue_WhenMatchingByCustomId`, `IsRunning_ReturnsFalse_WhenNoMatchingJob`, `IsRunning_ReturnsFalse_WhenNoProcessingJobs`, `IsPending_ReturnsTrue_WhenMatchingEnqueuedJobFound`, `IsPending_ReturnsFalse_WhenNoMatchingJob`, `IsRunning_ReturnsTrue_FromReservationKey_WithoutScanning`, `IsPending_ReturnsTrue_FromReservationKey_WithoutScanning`, `IsRunning_FallsBackToScan_WhenReservedJobIsNotProcessing`, `IsRunning_ReturnsFalse_WhenIdIsNullOrEmpty_EvenIfJobsWithoutCustomIdAreRunning`
   - **AC-001.2**: **Given** recurring jobs, **When** `IsRunning(Type)`/`IsPending(Type)` is called, **Then** only recurring jobs of that handler type match. Tests: `ExecutionManagerTests.IsRunning_Type_ReturnsTrue_WhenMatchingRecurringJobProcessing`, `IsRunning_Type_ReturnsFalse_WhenDifferentHandlerType`, `IsRunning_Type_ReturnsFalse_WhenNoProcessingJobs`, `IsRunning_Type_ReturnsFalse_WhenJobIsEventNotRecurring`, `IsPending_Type_ReturnsTrue_WhenMatchingRecurringJobEnqueued`, `IsPending_Type_ReturnsFalse_WhenDifferentHandlerType`, `IsPending_Type_ReturnsFalse_WhenNoEnqueuedJobs`
 
 - **FR-002 Cancel**: `Cancel(string)` deletes an active job (Scheduled, Enqueued, Awaiting or Processing) matching the ID and returns `true`, or returns `false` when nothing matched. Lookup order: an exact Hangfire job ID (no scan), then the reservation key, then a scan of Processing, each queue, and Scheduled. `Cancel(Type)` does the same for a recurring handler, scanning Processing, Enqueued and Scheduled. *(Story 2)*
+  - *Amended by [016](../016-id-format-validation/spec.md) FR-003: the ID must match the ID format, or the method throws `ArgumentException`.*
   - **AC-002.1**: **Given** a Processing or Enqueued job that matches, **When** `Cancel` is called, **Then** it is deleted. Tests: `ExecutionManagerTests.Cancel_QueriesProcessingJobs`, `Cancel_DeletesReservedJob_WithoutScanning`, `Cancel_Type_DeletesProcessingRecurringJob`, `Cancel_Type_DeletesEnqueuedRecurringJob_WhenNotProcessing`
   - **AC-002.2**: **Given** a null or empty ID, or nothing that matches, **When** `Cancel` is called, **Then** nothing is deleted and it returns `false`. Tests: `ExecutionManagerTests.Cancel_DoesNothing_WhenIdIsNullOrEmpty`, `Cancel_ReturnsFalse_WhenNothingMatches`, `Cancel_Type_DoesNothing_WhenNoMatchingJob`
   - **AC-002.3**: **Given** the exact Hangfire ID of an active job, including a Scheduled one, **When** `Cancel` is called, **Then** it is deleted without scanning and `true` is returned. Test: `ExecutionManagerTests.Cancel_DeletesExactHangfireId_WithoutScanning_EvenWhenScheduled`

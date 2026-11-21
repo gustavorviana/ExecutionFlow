@@ -40,6 +40,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <param name="event">The event payload.</param>
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="event"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The event's custom ID (<see cref="ICustomIdEvent.CustomId"/>) doesn't match the ID format.</exception>
         public PublishResult Publish<TEvent>(TEvent @event)
         {
             return Dispatch(@event, new EnqueuedState());
@@ -53,6 +54,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <param name="delay">The delay before the job is enqueued.</param>
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="event"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The event's custom ID (<see cref="ICustomIdEvent.CustomId"/>) doesn't match the ID format.</exception>
         public PublishResult Schedule<TEvent>(TEvent @event, TimeSpan delay)
         {
             return Dispatch(@event, new ScheduledState(delay));
@@ -66,6 +68,7 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// <param name="enqueueAt">The date and time when the job should be enqueued.</param>
         /// <returns>A <see cref="PublishResult"/> containing the job ID and whether the job was enqueued.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="event"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException">The event's custom ID (<see cref="ICustomIdEvent.CustomId"/>) doesn't match the ID format.</exception>
         public PublishResult Schedule<TEvent>(TEvent @event, DateTimeOffset enqueueAt)
         {
             return Dispatch(@event, new ScheduledState(enqueueAt.UtcDateTime));
@@ -91,9 +94,11 @@ namespace ExecutionFlow.Hangfire.Infrastructure
         /// Triggers immediate execution of a recurring job by its job ID.
         /// </summary>
         /// <param name="jobId">The recurring job identifier.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="jobId"/> is <c>null</c>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="jobId"/> is empty, only spaces, or doesn't match the ID format.</exception>
         public void Trigger(string jobId)
         {
-            if (string.IsNullOrEmpty(jobId)) throw new ArgumentNullException(nameof(jobId));
+            IdFormat.Validate(jobId, nameof(jobId));
 
             _recurringJobManager.Trigger(jobId);
         }
@@ -107,6 +112,9 @@ namespace ExecutionFlow.Hangfire.Infrastructure
 
             if (!JobParameters.TryGetCustomId(@event, out var customId))
                 return new PublishResult(CreateJob(job, state, null), true);
+
+            // Before any storage access: an invalid custom ID creates no job (specs/016-id-format-validation FR-002).
+            IdFormat.Validate(customId, nameof(@event));
 
             var behavior = GetDeduplicationBehavior(@event);
             if (behavior == DeduplicationBehavior.Disabled)

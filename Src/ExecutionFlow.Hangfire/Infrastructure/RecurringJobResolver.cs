@@ -9,10 +9,18 @@ namespace ExecutionFlow.Hangfire.Infrastructure
     /// </summary>
     internal static class RecurringJobResolver
     {
-        /// <summary>Explicit <see cref="RecurringJobRegistryInfo.Id"/> &gt; <see cref="IJobIdGenerator.GenerateId"/>.</summary>
+        /// <summary>
+        /// Explicit <see cref="RecurringJobRegistryInfo.Id"/> (validated when the handler is registered) &gt;
+        /// <see cref="IJobIdGenerator.GenerateId"/>, whose result must match the ID format (specs/016-id-format-validation FR-004).
+        /// </summary>
         public static string ResolveId(RecurringJobRegistryInfo registration, IJobIdGenerator idGenerator)
         {
-            return registration.Id ?? idGenerator.GenerateId(registration.HandlerType);
+            if (registration.Id != null)
+                return registration.Id;
+
+            var id = idGenerator.GenerateId(registration.HandlerType);
+            IdFormat.ValidateRecurring(registration.HandlerType, id, nameof(idGenerator));
+            return id;
         }
 
         /// <summary>
