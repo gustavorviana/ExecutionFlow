@@ -16,7 +16,7 @@ A string that identifies a job. Kinds:
 ## ID format (FR-001)
 
 - Allowed characters: Unicode letters, combining marks and decimal digits (the identifier categories of C#, without format characters), `_`, `-`, `.`, `+`, `` ` ``, `[`, `]`, `,`, `=`, space (U+0020).
-- At least one character other than the space.
+- Doesn't start or end with a space (so at least one character other than the space).
 - No trimming or normalization.
 
 ## Validation outcomes
@@ -25,6 +25,6 @@ A string that identifies a job. Kinds:
 |-------|-----------|--------------------|--------------|
 | `null` | no custom ID | `ArgumentNullException` | `null` explicit ID = use the generator |
 | `""` | no custom ID | `ArgumentException` | `HandlerBuilder.Id`: `ArgumentException` |
-| only spaces | `ArgumentException` | `ArgumentException` | `ArgumentException` |
+| only spaces, or a leading/trailing space | `ArgumentException` | `ArgumentException` | `ArgumentException` |
 | character outside the format | `ArgumentException` | `ArgumentException` | `ArgumentException` naming the handler |
 | valid | accepted | accepted | accepted |

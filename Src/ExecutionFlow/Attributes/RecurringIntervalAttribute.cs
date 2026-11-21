@@ -31,6 +31,8 @@ namespace ExecutionFlow.Attributes
         /// <summary>
         /// Gets or sets an explicit, stable recurring job ID. When not set, the ID comes from the configured
         /// job ID generator (by default the handler type's full name), so renaming the class changes the ID.
+        /// The ID can only contain letters, digits, spaces and <c>_ - . + ` [ ] , =</c> and can't start or end
+        /// with a space; otherwise registering the handler throws <see cref="System.ArgumentException"/> naming it.
         /// </summary>
         public string Id { get; set; }
 

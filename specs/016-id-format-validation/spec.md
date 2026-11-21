@@ -4,7 +4,7 @@
 
 **Created**: 2026-11-20
 
-**Status**: Draft
+**Status**: Implemented (unreleased)
 
 **Input**: User description: "Define a pattern where IDs and custom IDs can only contain letters and digits, no spaces or special characters (allow `_` and `-`); anything else must throw. Allow `.` and `+` so a custom ID can hold a full class name, and the characters of a generic type's full name. Validate custom IDs, recurring IDs and the IDs passed to query methods."
 
@@ -32,8 +32,9 @@ The format keeps every ID the library generates today valid: type full names (na
 - Q: What happens with an invalid ID in a query method? → A: It throws `ArgumentException`, the same as publishing; it doesn't return `false` (maintainer, 2026-11-20).
 - Q: Is this a breaking change, and in which version? → A: Yes: an ID that was accepted before (e.g. with `:`, `/` or a line break) now throws. The maintainer confirmed it (constitution principle V) (maintainer, 2026-11-20).
 - Q: A `null`, empty or whitespace-only ID in `IsRunning`, `IsPending`, `Cancel`, `Retry` or `Trigger`: throw or keep returning `false`? → A: Throw: `ArgumentNullException` for `null`, `ArgumentException` for empty or whitespace-only. Also a breaking change, accepted by the maintainer (maintainer, 2026-11-20).
-- Q: Is the space allowed in every ID, or only in recurring IDs built from generic types? → A: In every ID: one rule for all IDs. A space can't forge log lines; line breaks stay rejected. Leading and trailing spaces are allowed and kept as is (maintainer, 2026-11-20).
+- Q: Is the space allowed in every ID, or only in recurring IDs built from generic types? → A: In every ID: one rule for all IDs. A space can't forge log lines; line breaks stay rejected. Leading and trailing spaces are allowed and kept as is (maintainer, 2026-11-20). *(Changed on 2026-11-21, see below.)*
 - Q: Letters and digits outside ASCII (e.g. `Criação`, `注文`)? → A: Allowed. C# accepts any Unicode letter in a type name, so a default recurring ID can contain them; the rule accepts the letters, combining marks and digits C# accepts in identifiers. Control characters, invisible format characters (e.g. U+202E, U+200B) and Unicode line separators stay rejected: they're what can forge or disguise log lines (maintainer, 2026-11-20).
+- Q: Can an ID start or end with a space? → A: No. The space and the generic-type characters are allowed only so a C# type's full name is a valid ID; a type's full name never starts or ends with a space. An ID with a leading or trailing space throws `ArgumentException`; the library doesn't trim it (maintainer, 2026-11-21).
 - Q: Which version ships this breaking change? → A: 2.0.0. Principle V requires a major bump; the unreleased 1.2.0 is renumbered 2.0.0, together with its other breaking changes. Amending the constitution to allow breaking changes in a minor was rejected (maintainer, 2026-11-20).
 
 ## User Scenarios & Testing *(mandatory)*
@@ -76,7 +77,7 @@ As a handler author, I want a recurring job ID outside the ID format to fail whe
 
 - A custom ID that is `null` or empty still means "no custom ID" (004 FR-001): it's not validated and doesn't throw. A custom ID made only of spaces is invalid and throws, so every job with a custom ID can be queried by it.
 - A query ID that is `null`, empty or only spaces throws (FR-003). *(Was: returns `false`, and `Trigger` did nothing.)*
-- An ID made only of allowed characters but with leading or trailing spaces (e.g. `" order-42"`) is valid as is: the library doesn't trim IDs.
+- An ID made only of allowed characters but with a leading or trailing space (e.g. `" order-42"`, `"order-42 "`) is invalid and throws: the library doesn't trim IDs.
 - Letters and digits outside ASCII are valid (e.g. `Criação`, `注文`, Arabic-Indic digits), including letters outside the Basic Multilingual Plane (encoded as two `char`s). Invisible format characters are not, even though they can appear in C# identifiers: a type whose full name has one needs an explicit valid ID.
 - A custom ID changed through the obsolete `FlowContext<TEvent>.SetCustomId` isn't used by deduplication (004 FR-002) and isn't validated.
 - Jobs created before this version with a custom ID outside the format stay in the storage; querying them with that ID now throws, and they can still be reached by their Hangfire job ID.
@@ -86,9 +87,9 @@ As a handler author, I want a recurring job ID outside the ID format to fail whe
 
 ### Functional Requirements
 
-- **FR-001 ID format**: a valid ID is a string with at least one character other than the space, whose characters are all in this set: Unicode letters (including accented letters such as `ç`, `ã`, `é` and non-Latin scripts), combining marks, Unicode digits, and `_`, `-`, `.`, `+`, `` ` ``, `[`, `]`, `,`, `=` and the space (U+0020). Any other character makes the ID invalid, in particular control characters, invisible format characters (such as bidirectional overrides and zero-width characters), Unicode line and paragraph separators, other whitespace and other punctuation or symbols. An invalid ID throws `ArgumentException` whose `ParamName` is the parameter that carried the ID and whose message contains the invalid ID with control characters escaped and the list of allowed characters. *(Stories 1–3)*
+- **FR-001 ID format**: a valid ID is a string that doesn't start or end with a space (so it has at least one other character), whose characters are all in this set: Unicode letters (including accented letters such as `ç`, `ã`, `é` and non-Latin scripts), combining marks, Unicode digits, and `_`, `-`, `.`, `+`, `` ` ``, `[`, `]`, `,`, `=` and the space (U+0020). Any other character makes the ID invalid, in particular control characters, invisible format characters (such as bidirectional overrides and zero-width characters), Unicode line and paragraph separators, other whitespace and other punctuation or symbols. An invalid ID throws `ArgumentException` whose `ParamName` is the parameter that carried the ID and whose message contains the invalid ID with control characters escaped and the list of allowed characters. *(Stories 1–3)*
   - **AC-001.1**: **Given** the IDs `order-42`, `ExecutionFlow.Examples.Handlers.Recurring.DataSyncHandler`, `Outer+Inner`, `` Ns.Handler`1[[System.String, System.Private.CoreLib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea5e798]] ``, `12345`, `3f2504e0-4f89-11d3-9a0c-0305e82c3301`, `Pedidos.Criação`, `pedido-ação-42` and `注文`, **Then** all are valid. Test: `IdFormatTests.IsValid_ReturnsTrue_WhenIdHasOnlyAllowedCharacters`
-  - **AC-001.2**: **Given** IDs containing `\r`, `\n`, `\t`, `\0`, `:`, `/`, `\`, `"`, `'`, `{`, `}`, `<`, `>`, `;`, `@`, `#`, U+202E (right-to-left override), U+200B (zero-width space), U+2028 (line separator), U+00A0 (no-break space), **Then** each is invalid. Test: `IdFormatTests.IsValid_ReturnsFalse_WhenIdHasCharacterOutsideFormat`
+  - **AC-001.2**: **Given** IDs containing `\r`, `\n`, `\t`, `\0`, `:`, `/`, `\`, `"`, `'`, `{`, `}`, `<`, `>`, `;`, `@`, `#`, U+202E (right-to-left override), U+200B (zero-width space), U+2028 (line separator), U+00A0 (no-break space), and the IDs `" order-42"` and `"order-42 "`, **Then** each is invalid. Test: `IdFormatTests.IsValid_ReturnsFalse_WhenIdHasCharacterOutsideFormat`
   - **AC-001.3**: **Given** an invalid ID `"a\r\nb"`, **When** it's rejected, **Then** the exception message shows `a\r\nb` escaped, on one line, and `ParamName` names the parameter. Test: `IdFormatTests.Validate_EscapesControlCharactersInMessage_WhenIdIsInvalid`
 - **FR-002 Custom ID at publish time**: `Publish` and `Schedule` validate a non-empty custom ID (`ICustomIdEvent.CustomId`) with FR-001 before any storage access. An invalid custom ID throws and no job is created. A `null` or empty custom ID means "no custom ID", as before. *(Story 1)*
   - *Amends [004](../004-custom-id-and-deduplication/spec.md) FR-001.*

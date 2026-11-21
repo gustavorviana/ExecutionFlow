@@ -133,6 +133,11 @@ namespace ExecutionFlow
                     throw new InvalidOperationException(
                         $"Recurring handler '{handlerType.FullName}' has both [Recurring] and [RecurringInterval]. Use only one schedule.");
 
+                // An explicit ID is checked here, so every provider rejects it (specs/016-id-format-validation FR-004).
+                var explicitId = recurringAttr?.Id ?? intervalAttr?.Id;
+                if (explicitId != null)
+                    IdFormat.ValidateRecurring(handlerType, explicitId, "Id");
+
                 // Re-adding a handler keeps its first position: the automatic plan follows the registration order.
                 if (!_recurringHandlers.ContainsKey(handlerType))
                     _recurringOrder.Add(handlerType);
@@ -141,7 +146,7 @@ namespace ExecutionFlow
                     handlerType: handlerType,
                     displayName: displayName,
                     cron: cron,
-                    id: recurringAttr?.Id ?? intervalAttr?.Id,
+                    id: explicitId,
                     timeZone: recurringAttr?.TimeZone,
                     interval: interval,
                     overlapTimeout: Attributes.NoOverlapAttribute.GetTimeout(handlerType)

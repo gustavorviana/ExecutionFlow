@@ -43,6 +43,38 @@ public class HandlerConfigurationHangfireTests
             return listener.Messages.ToList();
     }
 
+    // --- Generated recurring IDs (specs/016-id-format-validation FR-004) ---
+
+    // AC-004.1
+    [Theory]
+    [InlineData(typeof(IdFormatOuter.InnerHandler))]
+    [InlineData(typeof(IdFormatGenericHandler<string>))]
+    [InlineData(typeof(CriaçãoHandler))]
+    public void Build_AcceptsDefaultId_WhenHandlerIsNestedOrGeneric(Type handlerType)
+    {
+        var setup = Configure(o => o.Add(handlerType));
+        var registration = setup.RecurringHandlers[handlerType];
+
+        Assert.Equal(handlerType.FullName, RecurringJobResolver.ResolveId(registration, new DefaultRecurringServiceIdGenerator()));
+    }
+
+    // AC-004.3
+    [Fact]
+    public void Build_Throws_WhenGeneratedIdIsInvalid()
+    {
+        var setup = Configure(o => o.Add(typeof(CronHandler)));
+        var registration = setup.RecurringHandlers[typeof(CronHandler)];
+
+        var ex = Assert.Throws<ArgumentException>(() => RecurringJobResolver.ResolveId(registration, new SlashIdGenerator()));
+
+        Assert.Contains(typeof(CronHandler).FullName!, ex.Message);
+        Assert.Contains("a/b", ex.Message);
+    }
+
+    private sealed class SlashIdGenerator : IJobIdGenerator
+    {
+        public string GenerateId(Type type) => "a/b";
+    }
     // --- FR-001 ---
 
     [Fact]
@@ -246,4 +278,25 @@ public class HandlerConfigurationHangfireTests
                 Messages.Add(message ?? string.Empty);
         }
     }
+}
+
+public static class IdFormatOuter
+{
+    [Recurring("* * * * *")]
+    public abstract class InnerHandler : IHandler
+    {
+        public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+}
+
+[Recurring("* * * * *")]
+public abstract class IdFormatGenericHandler<T> : IHandler
+{
+    public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
+[Recurring("* * * * *")]
+public abstract class CriaçãoHandler : IHandler
+{
+    public Task HandleAsync(FlowContext context, CancellationToken cancellationToken) => Task.CompletedTask;
 }

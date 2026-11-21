@@ -218,7 +218,7 @@ public class HangfireValidationTests
         var dispatcher = CreateDispatcher();
 
         Assert.Throws<ArgumentNullException>(() => dispatcher.Trigger((string)null!));
-        Assert.Throws<ArgumentNullException>(() => dispatcher.Trigger(""));
+        Assert.Throws<ArgumentException>(() => dispatcher.Trigger(""));   // 016 FR-003: empty is ArgumentException
     }
 
     // --- HangfireOption<T> Validation ---
