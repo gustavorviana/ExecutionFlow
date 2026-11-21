@@ -146,6 +146,7 @@ From [010-execution-plan](../010-execution-plan/spec.md) User Stories 1 and 3: d
   - **AC-003.4**: **Given** any setup, **When** `Build()` runs, **Then** the obsolete `HangfireAutoRunFilter` is not registered. Test: `RecurringRegistrationTests.Build_DoesNotRegisterAutoRunFilter`
 
 - **FR-004 Manual trigger**: `IRecurringTrigger.Trigger(Type)` and `Trigger(string jobId)` run a recurring job now, whether or not it auto-runs. *(Story 3)*
+  - *Amended by [016](../016-id-format-validation/spec.md) FR-003: `Trigger(string)` validates its ID with the ID format.*
   - **AC-004.1**: **Given** a registered recurring handler, **When** `Trigger(Type)` is called, **Then** the job is triggered with the handler's resolved ID (FR-007); **Given** a null or unregistered type, **Then** it throws. Tests: `RecurringRegistrationTests.Trigger_UsesExplicitId`, `HangfireValidationTests.HangfireDispatcher_Trigger_Throws_ForNullType`, `HangfireValidationTests.HangfireDispatcher_Trigger_Throws_ForUnregisteredType`
   - **AC-004.2**: **Given** a null or empty ID, **When** `Trigger(string)` is called, **Then** `ArgumentNullException` is thrown. Any other ID is passed to Hangfire unchecked. Test: `HangfireValidationTests.HangfireDispatcher_TriggerById_Throws_ForNullOrEmptyId`
   - ~~**AC-004.3**~~ (deprecated: manual triggers are no longer detected by text, because disabled handlers never fire automatically. See FR-003 and F-004. 2026-09-30)
@@ -158,6 +159,7 @@ From [010-execution-plan](../010-execution-plan/spec.md) User Stories 1 and 3: d
   - **AC-006.2**: **Given** the option off (default), **When** `Build()` runs, **Then** nothing is removed. Tests: `RecurringRegistrationTests.Build_KeepsOrphans_WhenOptionIsOff`, `HangfireOptionsTests.RemoveOrphanRecurringJobs_DefaultsToFalse`
 
 - **FR-007 Recurring job ID**: the ID is `[Recurring(Id = "...")]` if set, otherwise `IJobIdGenerator.GenerateId(handlerType)` (by default `handlerType.FullName`). `IJobIdGenerator` is only used for recurring jobs. One resolver serves both registration and `Trigger(Type)`. *(Story 5)*
+  - *Amended by [016](../016-id-format-validation/spec.md) FR-004: the resolved recurring ID must match the ID format, or registration throws.*
   - **AC-007.1**: **Given** `Id` set, **When** `Build()` runs, **Then** it is used, even when a custom `IJobIdGenerator` is configured. Test: `RecurringRegistrationTests.Build_UsesExplicitId_OverIdGenerator`
   - **AC-007.2**: **Given** no `Id`, **When** `Build()` runs, **Then** the configured generator is used. Tests: `RecurringRegistrationTests.Build_UsesIdGenerator_WhenNoExplicitId`, `RecurringRegistrationTests.Build_UsesFullNameAsId_WhenNoExplicitId`, `DefaultRecurringServiceIdGeneratorTests.GenerateId_ReturnsFullName`
   - **AC-007.3**: **Given** two handlers that resolve to the same ID, **When** `Build()` runs, **Then** `InvalidOperationException` is thrown. Test: `RecurringRegistrationTests.Build_Throws_WhenTwoHandlersResolveToTheSameId`

@@ -97,6 +97,7 @@ As a producer app, I want different event types to use different deduplication b
 ### Functional Requirements
 
 - **FR-001 Custom ID from the event**: an event that implements `ICustomIdEvent` with a non-empty `CustomId` gets that value stored with its job, in the `CustomId` job parameter. *(Story 1)*
+  - *Amended by [016](../016-id-format-validation/spec.md) FR-002: a non-empty custom ID must match the ID format, or publishing throws.*
   - **AC-001.1**: **Given** an `ICustomIdEvent` with a non-empty `CustomId`, **When** it is published or scheduled, **Then** the value is stored as the job's custom ID. Tests: `DispatcherTests.Publish_SetsCustomId_WhenEventImplementsICustomIdEvent`, `Publish_CreatesJobWithCustomIdParameterAtomically_WhenClientSupportsV2`
   - **AC-001.2**: **Given** an event that doesn't implement `ICustomIdEvent`, or whose `CustomId` is null or empty, **When** it is published, **Then** no custom ID is stored. Tests: `DispatcherTests.Publish_DoesNotSetCustomId_WhenEventDoesNotImplementICustomIdEvent`, `Publish_TreatsEmptyCustomIdAsNone`
 
@@ -106,6 +107,7 @@ As a producer app, I want different event types to use different deduplication b
   - **AC-002.3**: **Given** a running handler, **When** it calls `SetCustomId(null)`, **Then** the stored custom ID is cleared. Test: `HangfireJobDispatcherTests.WithoutDI_DispatchEventAsync_ClearsCustomId_WhenHandlerSetsNull`
 
 - **FR-003 Find jobs by custom ID**: `IExecutionManager.IsRunning/IsPending/Cancel/Retry(string id)` accept either a Hangfire job ID or a custom ID. When a reservation key exists (FR-007), it's used first. Otherwise the Monitoring API is scanned, which covers jobs published without deduplication or before 1.2.0. *(Story 1)*
+  - *Amended by [016](../016-id-format-validation/spec.md) FR-003: the ID must match the ID format, or the method throws `ArgumentException`.*
   - **AC-003.1**: **Given** a Processing job with that Hangfire ID or custom ID, **When** `IsRunning(id)` is called, **Then** it returns `true`. Tests: `ExecutionManagerTests.IsRunning_ReturnsTrue_WhenMatchingByHangfireJobId`, `IsRunning_ReturnsTrue_WhenMatchingByCustomId`, `IsRunning_ReturnsTrue_FromReservationKey_WithoutScanning`, `IsRunning_FallsBackToScan_WhenReservedJobIsNotProcessing`
   - **AC-003.2**: **Given** a matching Enqueued job, **When** `IsPending(id)` is called, **Then** it returns `true`. (`IsPending` means "in a queue". Scheduled jobs aren't pending.) Tests: `ExecutionManagerTests.IsPending_ReturnsTrue_WhenMatchingEnqueuedJobFound`, `IsPending_ReturnsTrue_FromReservationKey_WithoutScanning`
   - **AC-003.3**: **Given** a null or empty ID, **When** a lookup is made, **Then** no job is matched. Tests: `ExecutionManagerTests.IsRunning_ReturnsFalse_WhenIdIsNullOrEmpty_EvenIfJobsWithoutCustomIdAreRunning`, `Cancel_DoesNothing_WhenIdIsNullOrEmpty`

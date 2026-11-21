@@ -40,7 +40,7 @@ public class SendEmailHandler : IHandler<SendEmailEvent>
     public async Task HandleAsync(FlowContext<SendEmailEvent> context, CancellationToken ct)
     {
         var email = context.Event;
-        context.Log.Info($"Sending email to {email.To}");
+        context.Log.Info("Sending email to {To}", email.To);
         // your logic here
         context.Log.Success("Email sent");
     }
@@ -121,7 +121,7 @@ public class OrderHandler : IHandler<OrderCreatedEvent>
     public async Task HandleAsync(FlowContext<OrderCreatedEvent> context, CancellationToken ct)
     {
         var order = context.Event;
-        context.Log.Info($"Processing order {order.Id}");
+        context.Log.Info("Processing order {OrderId}", order.Id);
     }
 }
 ```
@@ -203,7 +203,7 @@ A `null` or empty `CustomId` means the event has no custom ID: `JobId` is the in
 
 The custom ID is stored with the job in the same storage operation, so a job never exists without it. This holds for Hangfire's default `BackgroundJobClient`. A custom `IBackgroundJobClient` that doesn't implement `IBackgroundJobClientV2` falls back to storing it right after the job is created.
 
-> `FlowContext.SetCustomId` is obsolete since 1.2.0 and will be removed in 2.0. Set the custom ID on the event through `ICustomIdEvent`: deduplication only uses the ID given at publish time.
+> `FlowContext.SetCustomId` is obsolete since 1.2.0 and will be removed in 3.0. Set the custom ID on the event through `ICustomIdEvent`: deduplication only uses the ID given at publish time.
 
 Then track by custom ID:
 
@@ -581,7 +581,7 @@ for (int i = 0; i < total; i++)
 bar.Complete();
 ```
 
-Messages are `ILogger`-style templates (`"Order {OrderId}"` is filled by position; `{{`/`}}` are literal braces). Each logger is isolated: one that throws never fails the job, and registering the same logger twice keeps one.
+Messages are `ILogger`-style templates (`"Order {OrderId}"` is filled by position; `{{`/`}}` are literal braces). Pass values that come from outside (event data, request input) as arguments, never inside the message: `context.Log.Info("Order {OrderId}", order.Id)`, not `context.Log.Info($"Order {order.Id}")`. A value inside the message can break the template (a `{` or `}`) or forge log lines (a line break). Each logger is isolated: one that throws never fails the job, and registering the same logger twice keeps one.
 
 ## Logging to ILogger
 

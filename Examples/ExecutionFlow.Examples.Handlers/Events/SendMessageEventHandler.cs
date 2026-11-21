@@ -8,8 +8,8 @@ public class SendMessageEventHandler(IEventDispatcher dispatcher) : IHandler<Sen
     public Task HandleAsync(FlowContext<SendMessageEvent> context, CancellationToken cancellationToken)
     {
         var msg = context.Event;
-        context.Log.Info($"Message received from '{msg.From}' at {msg.SentAt:HH:mm:ss}:");
-        context.Log.Success(msg.Content);
+        context.Log.Info("Message received from '{From}' at {SentAt:HH:mm:ss}:", msg.From, msg.SentAt);
+        context.Log.Success("{Content}", msg.Content);
         dispatcher.Publish(new MessageProcessedEvent { From = context.Event.From });
         return Task.CompletedTask;
     }

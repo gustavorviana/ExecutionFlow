@@ -38,9 +38,9 @@ namespace ExecutionFlow.Abstractions
         /// <param name="id">The custom identifier value.</param>
         /// <remarks>
         /// Obsolete: deduplication only reserves the custom ID given at publish time (<see cref="ICustomIdEvent"/>),
-        /// so an ID changed here isn't deduplicated against. Will be removed in 2.0.
+        /// so an ID changed here isn't deduplicated against. Will be removed in 3.0.
         /// </remarks>
-        [Obsolete("Set the custom ID on the event through ICustomIdEvent. Deduplication only uses the ID given at publish time. SetCustomId will be removed in 2.0.")]
+        [Obsolete("Set the custom ID on the event through ICustomIdEvent. Deduplication only uses the ID given at publish time. SetCustomId will be removed in 3.0.")]
         public void SetCustomId(string id)
         {
             CustomId = id;
